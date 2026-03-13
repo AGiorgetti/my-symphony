@@ -1,10 +1,12 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Symphony.Application.Configuration;
+using Symphony.Application.DependencyInjection;
+using Symphony.Application.Polling;
 using Symphony.Abstractions.Processes;
 using Symphony.Abstractions.Workflows;
-using Symphony.Infrastructure.DependencyInjection;
 using Symphony.Infrastructure.Configuration;
+using Symphony.Infrastructure.DependencyInjection;
 using Symphony.Infrastructure.Processes;
 using Symphony.Infrastructure.Workflows;
 
@@ -17,6 +19,7 @@ public class InfrastructureServiceCollectionExtensionsTests
     {
         var services = new ServiceCollection();
         services.AddLogging();
+        services.AddSymphonyApplication();
 
         services.AddSymphonyInfrastructure();
 
@@ -24,10 +27,12 @@ public class InfrastructureServiceCollectionExtensionsTests
 
         Assert.NotNull(serviceProvider.GetService<InfrastructureServiceMarker>());
         Assert.IsType<WorkflowOptionsResolver>(serviceProvider.GetRequiredService<IWorkflowOptionsResolver>());
+        Assert.IsType<WorkflowOptionsProvider>(serviceProvider.GetRequiredService<IWorkflowOptionsProvider>());
         Assert.IsType<YamlWorkflowLoader>(serviceProvider.GetRequiredService<IWorkflowLoader>());
         Assert.IsType<ProcessRunner>(serviceProvider.GetRequiredService<IProcessRunner>());
         var hostedServices = serviceProvider.GetServices<IHostedService>().ToArray();
 
         Assert.Contains(hostedServices, service => service is WorkflowStartupValidationHostedService);
+        Assert.Contains(hostedServices, service => service is PollingBackgroundService);
     }
 }
