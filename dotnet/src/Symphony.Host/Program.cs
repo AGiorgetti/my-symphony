@@ -1,4 +1,14 @@
+using Symphony.Application.DependencyInjection;
+using Symphony.Host.Composition;
+using Symphony.Infrastructure.DependencyInjection;
+
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Services
+    .AddSymphonyApplication()
+    .AddSymphonyInfrastructure()
+    .AddConfiguredTrackerAdapter(builder.Configuration);
+
 var app = builder.Build();
 
 app.MapGet("/", () => "Hello World!");
