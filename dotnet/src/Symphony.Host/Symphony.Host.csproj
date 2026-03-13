@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <ItemGroup>
+    <ProjectReference Include="..\Symphony.Application\Symphony.Application.csproj" />
+    <ProjectReference Include="..\Symphony.Infrastructure\Symphony.Infrastructure.csproj" />
+    <ProjectReference Include="..\Symphony.Tracker.GitHub\Symphony.Tracker.GitHub.csproj" />
+    <ProjectReference Include="..\Symphony.Tracker.AzureDevOps\Symphony.Tracker.AzureDevOps.csproj" />
+    <ProjectReference Include="..\Symphony.Tracker.Linear\Symphony.Tracker.Linear.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+</Project>
