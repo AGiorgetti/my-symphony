@@ -115,18 +115,24 @@ This protocol ensures work is resumable even when runs stop unexpectedly.
 
 All implementation activity must keep explicit authorship attribution.
 
+Author/co-author convention:
+
+1. Author must be the currently logged-in GitHub user.
+2. Co-author must be the agent:
+   - `Co-authored-by: Agent <agent@github.com>`
+
 Commit rules:
 
 1. Every implementation commit must include a `Co-authored-by:` trailer.
 2. Preferred format:
-   - `Co-authored-by: <name> <<email>>`
+   - `Co-authored-by: Agent <agent@github.com>`
 3. If multiple contributors/agents are involved, include one trailer per contributor.
 
 Issue comment rules:
 
 1. Progress comments (including `## Agent Work Log`) must include an attribution line at the end.
 2. Preferred format:
-   - `Co-authored-by: <name> <<email>>`
+   - `Co-authored-by: Agent <agent@github.com>`
 3. If exact identity/email is unavailable, use the agreed project alias consistently.
 
 ## Global Definition Of Done
@@ -505,7 +511,7 @@ Copy this into each GitHub story issue body:
 
 - Keep a single comment titled: ## Agent Work Log
 - Update it with: Current Step, Completed, Next Action, Changed Files, Validation Evidence, Blockers
-- End each update with: Co-authored-by: <name> <<email>>
+- End each update with: Co-authored-by: Agent <agent@github.com>
 
 ## Validation
 
