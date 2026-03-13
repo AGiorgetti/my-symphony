@@ -1,7 +1,8 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="YamlDotNet" Version="16.3.0" />
     <ProjectReference Include="..\Symphony.Application\Symphony.Application.csproj" />
     <ProjectReference Include="..\Symphony.Abstractions\Symphony.Abstractions.csproj" />
     <ProjectReference Include="..\Symphony.Domain\Symphony.Domain.csproj" />
