@@ -7,27 +7,26 @@ on:
 jobs:
   validate-pr-description:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: elixir
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up mise tools
-        uses: jdx/mise-action@v3
-        with:
-          install: true
-          cache: true
-          working_directory: elixir
-
       - name: Validate PR description format
         env:
           PR_BODY_JSON: ${{ toJson(github.event.pull_request.body) }}
         run: |
-          mix local.hex --force
-          mix local.rebar --force
-          mix deps.get
-          printf '%s' "$PR_BODY_JSON" | jq -r '.' > /tmp/pr_body.md
-          mix pr_body.check --file /tmp/pr_body.md
+          echo "$PR_BODY_JSON" | jq -r '.' > /tmp/pr_body.md
+
+          missing=0
+          for heading in '#### Context' '#### TL;DR' '#### Summary' '#### Test Plan'; do
+            if ! grep -qF "$heading" /tmp/pr_body.md; then
+              echo "Missing required heading: $heading" >&2
+              missing=1
+            fi
+          done
+
+          if [ "$missing" -ne 0 ]; then
+            echo "PR body must include all required headings. Refer to .github/pull_request_template.md" >&2
+            exit 1
+          fi

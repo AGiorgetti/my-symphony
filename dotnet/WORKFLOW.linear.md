@@ -22,11 +22,11 @@ workspace:
 hooks:
   after_create: |
     git clone --depth 1 https://github.com/openai/symphony .
-    if command -v mise >/dev/null 2>&1; then
-      cd elixir && mise trust && mise exec -- mix deps.get
+    if command -v dotnet >/dev/null 2>&1; then
+      cd dotnet && dotnet restore
     fi
   before_remove: |
-    cd elixir && mise exec -- mix workspace.before_remove
+    cd dotnet && dotnet clean -c Release
 agent:
   max_concurrent_agents: 10
   max_turns: 20

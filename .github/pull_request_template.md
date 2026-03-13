@@ -18,5 +18,5 @@
 
 #### Test Plan
 
-- [ ] `make -C elixir all`
+- [ ] `dotnet format --verify-no-changes && dotnet build -c Release && dotnet test -c Release`
 - [ ] <!-- Additional targeted checks (list below) -->
