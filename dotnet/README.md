@@ -232,6 +232,7 @@ When enabled via service configuration (for example `server.port`), Symphony exp
 ## Project Layout
 
 - `ARCHITECTURE.md`: implementation architecture and technology decisions
+- `IMPLEMENTATIONPLAN.github.md`: GitHub issue implementation plan for agent-led execution
 - `WORKFLOW.github.md`: GitHub workflow template
 - `WORKFLOW.azure-devops.md`: Azure DevOps workflow template
 - `WORKFLOW.linear.md`: Linear workflow template
