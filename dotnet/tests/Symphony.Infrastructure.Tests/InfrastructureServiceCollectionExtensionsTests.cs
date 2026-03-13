@@ -1,7 +1,9 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Symphony.Application.Configuration;
 using Symphony.Abstractions.Workflows;
 using Symphony.Infrastructure.DependencyInjection;
+using Symphony.Infrastructure.Configuration;
 using Symphony.Infrastructure.Workflows;
 
 namespace Symphony.Infrastructure.Tests;
@@ -19,6 +21,7 @@ public class InfrastructureServiceCollectionExtensionsTests
         using var serviceProvider = services.BuildServiceProvider();
 
         Assert.NotNull(serviceProvider.GetService<InfrastructureServiceMarker>());
+        Assert.IsType<WorkflowOptionsResolver>(serviceProvider.GetRequiredService<IWorkflowOptionsResolver>());
         Assert.IsType<YamlWorkflowLoader>(serviceProvider.GetRequiredService<IWorkflowLoader>());
 
         var hostedServices = serviceProvider.GetServices<IHostedService>().ToArray();
