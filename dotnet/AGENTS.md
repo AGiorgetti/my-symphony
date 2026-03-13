@@ -12,6 +12,7 @@ This directory contains the .NET 10 ASP.NET Core implementation of Symphony: an 
 ## Codebase-Specific Conventions
 
 - Runtime configuration is sourced from `WORKFLOW.md` front matter and mapped through typed options.
+- Treat `ARCHITECTURE.md` as the implementation architecture guideline for project structure, DI/composition boundaries, and pluggable adapter patterns.
 - Keep the implementation aligned with `../SPEC.md` where practical.
   - The implementation may be a superset of the spec.
   - The implementation must not conflict with the spec.
@@ -65,4 +66,5 @@ If behavior/config changes, update docs in the same PR:
 
 - `../README.md` for project concept and goals.
 - `README.md` for .NET implementation and run instructions.
+- `ARCHITECTURE.md` for .NET architectural guidance and project layout decisions.
 - `WORKFLOW.md` for workflow/config contract changes.
