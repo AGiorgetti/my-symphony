@@ -1,6 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <ProjectReference Include="..\Symphony.Domain\Symphony.Domain.csproj" />
     <ProjectReference Include="..\Symphony.Abstractions\Symphony.Abstractions.csproj" />
   </ItemGroup>
