@@ -118,6 +118,43 @@ public sealed class PollingBackgroundServiceTests
             entry => entry.Message.Contains("polling_service completed", StringComparison.Ordinal));
     }
 
+    [Fact]
+    public async Task StartAsync_uses_reloaded_poll_interval_for_future_ticks()
+    {
+        var firstTick = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var secondTick = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var invocationCount = 0;
+        var service = new PollingBackgroundService(
+            new SequencedWorkflowOptionsProvider(
+                CreateWorkflowOptions(intervalMs: 200),
+                CreateWorkflowOptions(intervalMs: 40)),
+            new DelegatePollingIterationHandler(
+                (workflowOptions, _) =>
+                {
+                    var currentCount = Interlocked.Increment(ref invocationCount);
+
+                    if (currentCount == 1)
+                    {
+                        firstTick.TrySetResult(workflowOptions.Polling.IntervalMs);
+                    }
+                    else if (currentCount == 2)
+                    {
+                        secondTick.TrySetResult(workflowOptions.Polling.IntervalMs);
+                    }
+
+                    return Task.CompletedTask;
+                }),
+            TimeProvider.System,
+            NullLogger<PollingBackgroundService>.Instance);
+
+        await service.StartAsync(CancellationToken.None);
+
+        Assert.Equal(200, await firstTick.Task.WaitAsync(TimeSpan.FromSeconds(2)));
+        Assert.Equal(40, await secondTick.Task.WaitAsync(TimeSpan.FromSeconds(2)));
+
+        await service.StopAsync(CancellationToken.None);
+    }
+
     private static WorkflowServiceOptions CreateWorkflowOptions(int intervalMs)
     {
         return new WorkflowServiceOptions(
@@ -159,6 +196,18 @@ public sealed class PollingBackgroundServiceTests
         public Task<WorkflowServiceOptions> GetCurrentAsync(CancellationToken cancellationToken = default)
         {
             return Task.FromResult(workflowOptions);
+        }
+    }
+
+    private sealed class SequencedWorkflowOptionsProvider(params WorkflowServiceOptions[] workflowOptions) : IWorkflowOptionsProvider
+    {
+        private readonly WorkflowServiceOptions[] _workflowOptions = workflowOptions;
+        private int _nextIndex;
+
+        public Task<WorkflowServiceOptions> GetCurrentAsync(CancellationToken cancellationToken = default)
+        {
+            var index = Math.Min(Interlocked.Increment(ref _nextIndex) - 1, _workflowOptions.Length - 1);
+            return Task.FromResult(_workflowOptions[index]);
         }
     }
 

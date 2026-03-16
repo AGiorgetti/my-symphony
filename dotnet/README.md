@@ -244,8 +244,9 @@ Notes:
 - `tracker.active_states` and `tracker.terminal_states` should be explicitly set for your tracker
   workflow.
 - If `WORKFLOW.md` is missing or has invalid YAML at startup, Symphony does not boot.
-- If a later reload fails, Symphony keeps running with the last known good workflow settings,
-  including the last valid poll interval, and logs the reload error until the file is fixed.
+- If a later reload fails, Symphony keeps running with the last known good workflow settings and
+  prompt template for future runs, including the last valid poll interval, and logs the reload
+  error until the file is fixed.
 
 ## Web dashboard
 

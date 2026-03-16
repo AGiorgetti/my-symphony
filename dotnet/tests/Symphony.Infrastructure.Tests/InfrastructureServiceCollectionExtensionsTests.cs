@@ -33,6 +33,10 @@ public class InfrastructureServiceCollectionExtensionsTests
         Assert.NotNull(serviceProvider.GetService<InfrastructureServiceMarker>());
         Assert.IsType<WorkflowOptionsResolver>(serviceProvider.GetRequiredService<IWorkflowOptionsResolver>());
         Assert.IsType<WorkflowOptionsProvider>(serviceProvider.GetRequiredService<IWorkflowOptionsProvider>());
+        Assert.IsType<WorkflowOptionsProvider>(serviceProvider.GetRequiredService<IWorkflowDefinitionProvider>());
+        Assert.Same(
+            serviceProvider.GetRequiredService<IWorkflowOptionsProvider>(),
+            serviceProvider.GetRequiredService<IWorkflowDefinitionProvider>());
         Assert.IsType<TrackerClientOptionsProvider>(serviceProvider.GetRequiredService<ITrackerClientOptionsProvider>());
         Assert.IsType<YamlWorkflowLoader>(serviceProvider.GetRequiredService<IWorkflowLoader>());
         Assert.IsType<ProcessRunner>(serviceProvider.GetRequiredService<IProcessRunner>());
