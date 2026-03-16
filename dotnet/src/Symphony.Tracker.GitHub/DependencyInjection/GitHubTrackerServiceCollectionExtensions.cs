@@ -9,6 +9,10 @@ public static class GitHubTrackerServiceCollectionExtensions
     {
         ArgumentNullException.ThrowIfNull(services);
 
+        services.AddHttpClient<IIssueTrackerClient, GitHubIssueTrackerClient>(client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(30);
+        });
         services.AddSingleton(new TrackerAdapterRegistration(TrackerAdapterKinds.GitHub));
 
         return services;

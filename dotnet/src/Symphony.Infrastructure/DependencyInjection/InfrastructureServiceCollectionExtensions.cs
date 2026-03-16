@@ -4,6 +4,7 @@ using Symphony.Application.Polling;
 using Symphony.Abstractions.Processes;
 using Symphony.Abstractions.Workflows;
 using Symphony.Abstractions.Workspaces;
+using Symphony.Abstractions.Trackers;
 using Symphony.Infrastructure.Configuration;
 using Symphony.Infrastructure.Processes;
 using Symphony.Infrastructure.Workflows;
@@ -20,6 +21,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddSingleton<InfrastructureServiceMarker>();
         services.AddSingleton<IWorkflowOptionsResolver, WorkflowOptionsResolver>();
         services.AddSingleton<IWorkflowOptionsProvider, WorkflowOptionsProvider>();
+        services.AddSingleton<ITrackerClientOptionsProvider, TrackerClientOptionsProvider>();
         services.AddSingleton<IWorkflowLoader, YamlWorkflowLoader>();
         services.AddHostedService<WorkflowStartupValidationHostedService>();
         services.AddHostedService<PollingBackgroundService>();
