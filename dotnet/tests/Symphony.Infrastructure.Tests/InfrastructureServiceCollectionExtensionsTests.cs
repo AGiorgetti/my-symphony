@@ -7,7 +7,9 @@ using Symphony.Abstractions.Processes;
 using Symphony.Abstractions.Trackers;
 using Symphony.Abstractions.Workflows;
 using Symphony.Abstractions.Workspaces;
+using Symphony.Application.Orchestration;
 using Symphony.Infrastructure.Configuration;
+using Symphony.Infrastructure.Orchestration;
 using Symphony.Infrastructure.DependencyInjection;
 using Symphony.Infrastructure.Processes;
 using Symphony.Infrastructure.Workflows;
@@ -35,6 +37,7 @@ public class InfrastructureServiceCollectionExtensionsTests
         Assert.IsType<YamlWorkflowLoader>(serviceProvider.GetRequiredService<IWorkflowLoader>());
         Assert.IsType<ProcessRunner>(serviceProvider.GetRequiredService<IProcessRunner>());
         Assert.IsType<WorkspaceManager>(serviceProvider.GetRequiredService<IWorkspaceManager>());
+        Assert.IsType<CodexQueuedIssueWorker>(serviceProvider.GetRequiredService<IQueuedIssueWorker>());
         var hostedServices = serviceProvider.GetServices<IHostedService>().ToArray();
 
         Assert.Contains(hostedServices, service => service is WorkflowStartupValidationHostedService);

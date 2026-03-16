@@ -81,7 +81,11 @@ public sealed class WorkflowOptionsResolverTests
             {
                 ["approval_policy"] = "on-request",
                 ["thread_sandbox"] = "workspace-write",
-                ["turn_sandbox_policy"] = "read-only",
+                ["turn_sandbox_policy"] = new Dictionary<string, object?>
+                {
+                    ["type"] = "workspaceWrite",
+                    ["writableRoots"] = new object[] { "." }
+                },
                 ["stall_timeout_ms"] = 0
             }
         });
@@ -97,7 +101,9 @@ public sealed class WorkflowOptionsResolverTests
         Assert.DoesNotContain("broken", options.Agent.MaxConcurrentAgentsByState.Keys);
         Assert.Equal("on-request", options.Codex.ApprovalPolicy);
         Assert.Equal("workspace-write", options.Codex.ThreadSandbox);
-        Assert.Equal("read-only", options.Codex.TurnSandboxPolicy);
+        Assert.NotNull(options.Codex.TurnSandboxPolicy);
+        Assert.Equal("workspaceWrite", options.Codex.TurnSandboxPolicy!["type"]);
+        Assert.Equal(["."], Assert.IsType<object[]>(options.Codex.TurnSandboxPolicy["writableRoots"]));
         Assert.Equal(0, options.Codex.StallTimeoutMs);
     }
 

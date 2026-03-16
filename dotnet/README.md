@@ -230,6 +230,11 @@ Notes:
   surfaced through the in-memory retry snapshot.
 - Active sessions are tracked in-memory by normalized issue id, can expose live session metadata,
   and support targeted reconciliation cancellation without affecting unrelated executions.
+- Worker attempts now create a validated workspace, optionally run `hooks.before_run`, launch Codex
+  through `bash -lc <codex.command>`, send the `initialize` / `thread/start` / `turn/start`
+  handshake, then run `hooks.after_run` as a best-effort cleanup step after the attempt ends.
+- `codex.turn_sandbox_policy` is treated as a structured object and is forwarded to Codex in the
+  `turn/start` payload instead of being flattened into a string.
 - Per-issue workspaces live under `workspace.root` using a sanitized issue identifier that keeps
   only letters, digits, `.`, `_`, and `-`.
 - Workspace paths that resolve outside the configured `workspace.root` are rejected before any

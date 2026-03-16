@@ -4,6 +4,7 @@ using Symphony.Abstractions.Processes;
 using Symphony.Abstractions.Workspaces;
 using Symphony.Application.Configuration;
 using Symphony.Domain.Workspaces;
+using Symphony.Infrastructure.Processes;
 
 namespace Symphony.Infrastructure.Workspaces;
 
@@ -178,17 +179,7 @@ public sealed class WorkspaceManager(
 
     private static ProcessRunRequest CreateHookRequest(string script, string workspacePath, int timeoutMs)
     {
-        return OperatingSystem.IsWindows()
-            ? new ProcessRunRequest(
-                fileName: "pwsh",
-                arguments: ["-NoProfile", "-NonInteractive", "-Command", script],
-                workingDirectory: workspacePath,
-                timeout: TimeSpan.FromMilliseconds(timeoutMs))
-            : new ProcessRunRequest(
-                fileName: "sh",
-                arguments: ["-lc", script],
-                workingDirectory: workspacePath,
-                timeout: TimeSpan.FromMilliseconds(timeoutMs));
+        return ShellCommandRequestFactory.Create(script, workspacePath, timeoutMs);
     }
 
     private static WorkspacePathInfo ResolveWorkspacePath(string issueIdentifier, string workspaceRoot)
