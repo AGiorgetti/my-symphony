@@ -1,24 +1,24 @@
 using Microsoft.Extensions.DependencyInjection;
 using Symphony.Abstractions.Trackers;
-using Symphony.Tracker.GitHub.DependencyInjection;
+using Symphony.Tracker.Linear.DependencyInjection;
 
-namespace Symphony.Tracker.GitHub.Tests;
+namespace Symphony.Tracker.Linear.Tests;
 
-public sealed class GitHubTrackerServiceCollectionExtensionsTests
+public sealed class LinearTrackerServiceCollectionExtensionsTests
 {
     [Fact]
-    public void AddGitHubTrackerAdapter_registers_tracker_services()
+    public void AddLinearTrackerAdapter_registers_tracker_services()
     {
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddSingleton<ITrackerClientOptionsProvider>(new StubTrackerClientOptionsProvider());
 
-        services.AddGitHubTrackerAdapter();
+        services.AddLinearTrackerAdapter();
 
         using var serviceProvider = services.BuildServiceProvider();
 
-        Assert.IsType<GitHubIssueTrackerClient>(serviceProvider.GetRequiredService<GitHubIssueTrackerClient>());
-        Assert.Equal(TrackerAdapterKinds.GitHub, serviceProvider.GetRequiredService<TrackerAdapterRegistration>().Kind);
+        Assert.IsType<LinearIssueTrackerClient>(serviceProvider.GetRequiredService<LinearIssueTrackerClient>());
+        Assert.Equal(TrackerAdapterKinds.Linear, serviceProvider.GetRequiredService<TrackerAdapterRegistration>().Kind);
     }
 
     private sealed class StubTrackerClientOptionsProvider : ITrackerClientOptionsProvider
@@ -27,15 +27,15 @@ public sealed class GitHubTrackerServiceCollectionExtensionsTests
         {
             return Task.FromResult(
                 new TrackerClientOptions(
-                    TrackerAdapterKinds.GitHub,
-                    "https://api.github.com",
+                    TrackerAdapterKinds.Linear,
+                    "https://api.linear.app/graphql",
                     "token",
-                    "AGiorgetti/my-symphony",
+                    null,
+                    "symphony",
                     null,
                     null,
-                    null,
-                    ["open"],
-                    ["closed"]));
+                    ["Todo"],
+                    ["Done"]));
         }
     }
 }

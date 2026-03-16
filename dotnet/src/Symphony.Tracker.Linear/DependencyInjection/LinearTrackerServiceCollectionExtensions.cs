@@ -9,6 +9,10 @@ public static class LinearTrackerServiceCollectionExtensions
     {
         ArgumentNullException.ThrowIfNull(services);
 
+        services.AddHttpClient<LinearIssueTrackerClient>(client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(30);
+        });
         services.AddSingleton(new TrackerAdapterRegistration(TrackerAdapterKinds.Linear));
 
         return services;

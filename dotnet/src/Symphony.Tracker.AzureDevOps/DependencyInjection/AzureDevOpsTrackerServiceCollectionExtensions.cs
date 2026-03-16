@@ -9,6 +9,10 @@ public static class AzureDevOpsTrackerServiceCollectionExtensions
     {
         ArgumentNullException.ThrowIfNull(services);
 
+        services.AddHttpClient<AzureDevOpsIssueTrackerClient>(client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(30);
+        });
         services.AddSingleton(new TrackerAdapterRegistration(TrackerAdapterKinds.AzureDevOps));
 
         return services;

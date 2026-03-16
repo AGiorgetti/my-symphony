@@ -24,6 +24,9 @@ cleans up matching workspaces.
 Per [`SPEC.md`](../SPEC.md), Symphony uses pluggable issue tracker adapters selected by
 `tracker.kind`.
 
+The active adapter is resolved from the current `WORKFLOW.md` definition. Host `appsettings*.json`
+does not override workflow tracker selection.
+
 Supported kinds:
 
 - `github`
