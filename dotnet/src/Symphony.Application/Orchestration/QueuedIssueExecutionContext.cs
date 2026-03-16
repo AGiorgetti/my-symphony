@@ -29,9 +29,14 @@ public sealed class QueuedIssueExecutionContext
 
     public CancellationToken CancellationToken { get; }
 
+    public LiveSessionMetadata? Session { get; private set; }
+
+    public string? SessionId => Session?.SessionId;
+
     public void UpdateSession(LiveSessionMetadata session)
     {
         ArgumentNullException.ThrowIfNull(session);
+        Session = session;
         _updateSession(session);
     }
 

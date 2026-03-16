@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Symphony.Abstractions.Orchestration;
 using Symphony.Application.Configuration;
 using Symphony.Application.Orchestration;
+using Symphony.Application.Tests.Logging;
 using Symphony.Domain.Issues;
 using Symphony.Domain.Runs;
 
@@ -143,9 +144,59 @@ public sealed class OrchestratorDispatchQueueTests
     }
 
     [Fact]
+    public async Task QueueAsync_logs_issue_identifiers_for_enqueue_execution_and_retry()
+    {
+        var logger = new TestLogger<OrchestratorDispatchQueue>();
+        var queue = CreateQueue(new StaticWorkflowOptionsProvider(CreateWorkflowOptions(maxConcurrentAgents: 1)), logger: logger);
+        var registry = CreateRegistry();
+        var worker = new BlockingQueuedIssueWorker();
+        var hostedService = CreateHostedService(queue, registry, worker);
+        var issue = CreateIssue("123", "ABC-123");
+
+        await hostedService.StartAsync(CancellationToken.None);
+        await queue.QueueAsync(issue);
+        await worker.ExecutionStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+        var enqueueEntry = Assert.Single(
+            logger.Entries,
+            entry => entry.Message.Contains("dispatch_enqueue completed", StringComparison.Ordinal));
+        var startEntry = Assert.Single(
+            logger.Entries,
+            entry => entry.Message.Contains("dispatch_execution started", StringComparison.Ordinal));
+
+        Assert.Equal("123", Assert.IsType<string>(enqueueEntry.State["issue_id"]));
+        Assert.Equal("ABC-123", Assert.IsType<string>(enqueueEntry.State["issue_identifier"]));
+        Assert.Equal("123", Assert.IsType<string>(startEntry.State["issue_id"]));
+        Assert.Equal("ABC-123", Assert.IsType<string>(startEntry.State["issue_identifier"]));
+
+        worker.AllowCompletion("ABC-123");
+        await worker.WaitForCompletionAsync("ABC-123", TimeSpan.FromSeconds(2));
+        await WaitForConditionAsync(() => queue.GetSnapshot().Retrying.Count == 1, TimeSpan.FromSeconds(2));
+        await hostedService.StopAsync(CancellationToken.None);
+
+        var retryEntry = Assert.Single(
+            logger.Entries,
+            entry => entry.Message.Contains("dispatch_retry scheduled", StringComparison.Ordinal));
+        var completedEntry = Assert.Single(
+            logger.Entries,
+            entry => entry.Message.Contains("dispatch_execution completed", StringComparison.Ordinal));
+
+        Assert.Equal("123", Assert.IsType<string>(retryEntry.State["issue_id"]));
+        Assert.Equal("ABC-123", Assert.IsType<string>(retryEntry.State["issue_identifier"]));
+        Assert.Equal(1, Assert.IsType<int>(retryEntry.State["attempt"]));
+        Assert.Equal("continuation", Assert.IsType<string>(retryEntry.State["reason"]));
+        Assert.Null(retryEntry.State["error"]);
+        Assert.Equal("123", Assert.IsType<string>(completedEntry.State["issue_id"]));
+        Assert.Equal("ABC-123", Assert.IsType<string>(completedEntry.State["issue_identifier"]));
+    }
+
+    [Fact]
     public async Task DispatchWorker_schedules_failure_retry_for_transient_exception()
     {
-        var queue = CreateQueue(maxConcurrentAgents: 1);
+        var logger = new TestLogger<OrchestratorDispatchQueue>();
+        var queue = CreateQueue(
+            new StaticWorkflowOptionsProvider(CreateWorkflowOptions(maxConcurrentAgents: 1)),
+            logger: logger);
         var registry = CreateRegistry();
         var worker = new ThrowingQueuedIssueWorker(new InvalidOperationException("transient failure"));
         var hostedService = CreateHostedService(queue, registry, worker);
@@ -157,11 +208,18 @@ public sealed class OrchestratorDispatchQueueTests
         await hostedService.StopAsync(CancellationToken.None);
 
         var retry = Assert.Single(queue.GetSnapshot().Retrying);
+        var retryEntry = Assert.Single(
+            logger.Entries,
+            entry => entry.Message.Contains("dispatch_retry scheduled", StringComparison.Ordinal)
+                && string.Equals(entry.State["reason"] as string, "failure", StringComparison.Ordinal));
 
         Assert.Equal(1, retry.Attempt);
         Assert.Equal("ABC-1", retry.IssueIdentifier);
         Assert.Equal("transient failure", retry.Error);
         Assert.Equal(1, queue.GetSnapshot().AvailableSlots);
+        Assert.Equal("1", Assert.IsType<string>(retryEntry.State["issue_id"]));
+        Assert.Equal("ABC-1", Assert.IsType<string>(retryEntry.State["issue_identifier"]));
+        Assert.Equal("transient failure", Assert.IsType<string>(retryEntry.State["error"]));
     }
 
     [Fact]
@@ -210,6 +268,18 @@ public sealed class OrchestratorDispatchQueueTests
     private static OrchestratorDispatchQueue CreateQueue(int maxConcurrentAgents)
     {
         return CreateQueue(new StaticWorkflowOptionsProvider(CreateWorkflowOptions(maxConcurrentAgents)));
+    }
+
+    private static OrchestratorDispatchQueue CreateQueue(IWorkflowOptionsProvider workflowOptionsProvider)
+    {
+        return CreateQueue(workflowOptionsProvider, retryDelayPlanner: null, timeProvider: null, logger: null);
+    }
+
+    private static OrchestratorDispatchQueue CreateQueue(
+        IWorkflowOptionsProvider workflowOptionsProvider,
+        ILogger<OrchestratorDispatchQueue> logger)
+    {
+        return CreateQueue(workflowOptionsProvider, retryDelayPlanner: null, timeProvider: null, logger: logger);
     }
 
     private static OrchestratorDispatchQueue CreateQueue(

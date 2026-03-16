@@ -46,7 +46,7 @@ public sealed class ActiveSessionRegistry(
         }
 
         logger.LogInformation(
-            "session_cancellation requested issue_id={IssueId} issue_identifier={IssueIdentifier} session_id={SessionId} tracker_state={TrackerState} outcome=completed",
+            "session_cancellation completed issue_id={issue_id} issue_identifier={issue_identifier} session_id={session_id} tracker_state={tracker_state} outcome=canceled",
             entry.Issue.Id,
             entry.Issue.Identifier,
             entry.Session?.SessionId,
@@ -79,10 +79,11 @@ public sealed class ActiveSessionRegistry(
         }
 
         logger.LogInformation(
-            "session_tracking started issue_id={IssueId} issue_identifier={IssueIdentifier} session_id={SessionId} outcome=started",
+            "session_tracking started issue_id={issue_id} issue_identifier={issue_identifier} session_id={session_id} attempt={attempt} outcome=started",
             issue.Id,
             issue.Identifier,
-            (string?)null);
+            (string?)null,
+            attempt);
 
         return new TrackedActiveSession(this, normalizedIssueId, entry);
     }
@@ -95,7 +96,7 @@ public sealed class ActiveSessionRegistry(
         }
 
         logger.LogInformation(
-            "session_tracking updated issue_id={IssueId} issue_identifier={IssueIdentifier} session_id={SessionId} outcome=completed",
+            "session_tracking updated issue_id={issue_id} issue_identifier={issue_identifier} session_id={session_id} outcome=completed",
             entry.Issue.Id,
             entry.Issue.Identifier,
             session.SessionId);
@@ -110,11 +111,12 @@ public sealed class ActiveSessionRegistry(
         }
 
         logger.LogInformation(
-            "session_status changed issue_id={IssueId} issue_identifier={IssueIdentifier} session_id={SessionId} status={Status} outcome=completed",
+            "session_status completed issue_id={issue_id} issue_identifier={issue_identifier} session_id={session_id} status={status} error={error} outcome=completed",
             entry.Issue.Id,
             entry.Issue.Identifier,
             entry.Session?.SessionId,
-            status);
+            status,
+            entry.Error ?? string.Empty);
     }
 
     private bool WasCanceledByReconciliation(ActiveSessionEntry entry)
@@ -133,7 +135,7 @@ public sealed class ActiveSessionRegistry(
         }
 
         logger.LogInformation(
-            "session_tracking completed issue_id={IssueId} issue_identifier={IssueIdentifier} session_id={SessionId} status={Status} outcome=completed",
+            "session_tracking completed issue_id={issue_id} issue_identifier={issue_identifier} session_id={session_id} status={status} outcome=completed",
             entry.Issue.Id,
             entry.Issue.Identifier,
             entry.Session?.SessionId,

@@ -147,11 +147,11 @@ public sealed class GitHubIssueTrackerClient(
             var payload = await ReadPayloadAsync(response, cancellationToken).ConfigureAwait(false);
 
             logger.LogDebug(
-                "Fetched GitHub issues page {Page} for {Owner}/{Repository} with state filter {StateFilter}. Count: {Count}",
-                page,
+                "tracker_fetch completed tracker_kind=github owner={owner} repository={repository} state_filter={state_filter} page={page} issue_count={issue_count} outcome=completed",
                 repository.Owner,
                 repository.Name,
                 stateFilter,
+                page,
                 payload.Count);
 
             if (payload.Count == 0)

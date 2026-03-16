@@ -21,10 +21,16 @@ public sealed class WorkflowStartupValidationHostedService : IHostedService
     public async Task StartAsync(CancellationToken cancellationToken)
     {
         var workflowPath = Path.Combine(Directory.GetCurrentDirectory(), "WORKFLOW.md");
+        _logger.LogInformation(
+            "startup_validation started workflow_path={workflow_path} outcome=started",
+            workflowPath);
 
         try
         {
             await _workflowOptionsProvider.GetCurrentAsync(cancellationToken).ConfigureAwait(false);
+            _logger.LogInformation(
+                "startup_validation completed workflow_path={workflow_path} outcome=completed",
+                workflowPath);
         }
         catch (WorkflowLoadException exception)
         {
@@ -48,7 +54,7 @@ public sealed class WorkflowStartupValidationHostedService : IHostedService
     {
         _logger.LogError(
             exception,
-            "Failed to validate workflow file '{WorkflowPath}' ({ErrorCode}). Fix WORKFLOW.md before starting Symphony.",
+            "startup_validation failed workflow_path={workflow_path} error_code={error_code} outcome=failed",
             workflowPath,
             errorCode);
 

@@ -26,44 +26,61 @@ public sealed class PollingBackgroundService : BackgroundService
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         var currentOptions = await _workflowOptionsProvider.GetCurrentAsync(stoppingToken).ConfigureAwait(false);
+        _logger.LogInformation(
+            "polling_service started poll_interval_ms={poll_interval_ms} outcome=started",
+            currentOptions.Polling.IntervalMs);
 
-        while (!stoppingToken.IsCancellationRequested)
+        try
         {
-            try
+            while (!stoppingToken.IsCancellationRequested)
             {
-                await _pollingIterationHandler.ExecuteAsync(currentOptions, stoppingToken).ConfigureAwait(false);
-            }
-            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-            {
-                break;
-            }
-            catch (Exception exception)
-            {
-                _logger.LogError(
-                    exception,
-                    "Polling iteration failed. Continuing after {PollingIntervalMs}ms.",
+                _logger.LogInformation(
+                    "poll_tick started poll_interval_ms={poll_interval_ms} outcome=started",
                     currentOptions.Polling.IntervalMs);
-            }
 
-            if (stoppingToken.IsCancellationRequested)
-            {
-                break;
-            }
+                try
+                {
+                    await _pollingIterationHandler.ExecuteAsync(currentOptions, stoppingToken).ConfigureAwait(false);
+                    _logger.LogInformation(
+                        "poll_tick completed poll_interval_ms={poll_interval_ms} outcome=completed",
+                        currentOptions.Polling.IntervalMs);
+                }
+                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+                {
+                    break;
+                }
+                catch (Exception exception)
+                {
+                    _logger.LogError(
+                        exception,
+                        "poll_tick failed poll_interval_ms={poll_interval_ms} outcome=failed",
+                        currentOptions.Polling.IntervalMs);
+                }
 
-            currentOptions = await TryRefreshWorkflowOptionsAsync(currentOptions, stoppingToken).ConfigureAwait(false);
+                if (stoppingToken.IsCancellationRequested)
+                {
+                    break;
+                }
 
-            try
-            {
-                await Task.Delay(
-                        TimeSpan.FromMilliseconds(currentOptions.Polling.IntervalMs),
-                        _timeProvider,
-                        stoppingToken)
-                    .ConfigureAwait(false);
+                currentOptions = await TryRefreshWorkflowOptionsAsync(currentOptions, stoppingToken).ConfigureAwait(false);
+
+                try
+                {
+                    await Task.Delay(
+                            TimeSpan.FromMilliseconds(currentOptions.Polling.IntervalMs),
+                            _timeProvider,
+                            stoppingToken)
+                        .ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+                {
+                    break;
+                }
             }
-            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-            {
-                break;
-            }
+        }
+        finally
+        {
+            _logger.LogInformation("polling_service completed outcome=completed");
         }
     }
 
@@ -83,7 +100,7 @@ public sealed class PollingBackgroundService : BackgroundService
         {
             _logger.LogError(
                 exception,
-                "Failed to re-apply workflow configuration. Continuing with previous polling interval {PollingIntervalMs}ms.",
+                "workflow_reload failed poll_interval_ms={poll_interval_ms} outcome=failed",
                 currentOptions.Polling.IntervalMs);
 
             return currentOptions;

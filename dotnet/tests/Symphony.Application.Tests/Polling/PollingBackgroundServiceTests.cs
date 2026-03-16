@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Symphony.Application.Configuration;
 using Symphony.Application.Polling;
+using Symphony.Application.Tests.Logging;
 
 namespace Symphony.Application.Tests.Polling;
 
@@ -81,6 +82,40 @@ public sealed class PollingBackgroundServiceTests
         await cancellationObserved.Task.WaitAsync(TimeSpan.FromSeconds(1));
 
         Assert.True(capturedToken.CanBeCanceled);
+    }
+
+    [Fact]
+    public async Task StartAsync_logs_polling_lifecycle_with_structured_interval()
+    {
+        var firstInvocation = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var logger = new TestLogger<PollingBackgroundService>();
+        var service = new PollingBackgroundService(
+            new StaticWorkflowOptionsProvider(CreateWorkflowOptions(intervalMs: 75)),
+            new DelegatePollingIterationHandler(
+                (_, _) =>
+                {
+                    firstInvocation.TrySetResult();
+                    return Task.CompletedTask;
+                }),
+            TimeProvider.System,
+            logger);
+
+        await service.StartAsync(CancellationToken.None);
+        await firstInvocation.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        await service.StopAsync(CancellationToken.None);
+
+        var startEntry = Assert.Single(
+            logger.Entries,
+            entry => entry.Message.Contains("poll_tick started", StringComparison.Ordinal));
+        var completedEntry = Assert.Single(
+            logger.Entries,
+            entry => entry.Message.Contains("poll_tick completed", StringComparison.Ordinal));
+
+        Assert.Equal(75, Assert.IsType<int>(startEntry.State["poll_interval_ms"]));
+        Assert.Equal(75, Assert.IsType<int>(completedEntry.State["poll_interval_ms"]));
+        Assert.Contains(
+            logger.Entries,
+            entry => entry.Message.Contains("polling_service completed", StringComparison.Ordinal));
     }
 
     private static WorkflowServiceOptions CreateWorkflowOptions(int intervalMs)
