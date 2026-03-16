@@ -33,6 +33,7 @@ public sealed class PollingBackgroundServiceTests
                     return Task.CompletedTask;
                 }),
             new PollingRefreshTrigger(TimeProvider.System),
+            new PollingStatusTracker(),
             TimeProvider.System,
             NullLogger<PollingBackgroundService>.Instance);
 
@@ -73,6 +74,7 @@ public sealed class PollingBackgroundServiceTests
                     }
                 }),
             new PollingRefreshTrigger(TimeProvider.System),
+            new PollingStatusTracker(),
             TimeProvider.System,
             NullLogger<PollingBackgroundService>.Instance);
 
@@ -91,6 +93,7 @@ public sealed class PollingBackgroundServiceTests
     {
         var firstInvocation = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var logger = new TestLogger<PollingBackgroundService>();
+        var pollingStatusTracker = new PollingStatusTracker();
         var service = new PollingBackgroundService(
             new StaticWorkflowOptionsProvider(CreateWorkflowOptions(intervalMs: 75)),
             new DelegatePollingIterationHandler(
@@ -100,6 +103,7 @@ public sealed class PollingBackgroundServiceTests
                     return Task.CompletedTask;
                 }),
             new PollingRefreshTrigger(TimeProvider.System),
+            pollingStatusTracker,
             TimeProvider.System,
             logger);
 
@@ -119,6 +123,69 @@ public sealed class PollingBackgroundServiceTests
         Assert.Contains(
             logger.Entries,
             entry => entry.Message.Contains("polling_service completed", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task StartAsync_records_completed_tick_in_polling_status_tracker()
+    {
+        var firstInvocation = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var timeProvider = new FakeTimeProvider(new DateTimeOffset(2026, 3, 16, 15, 0, 0, TimeSpan.Zero));
+        var pollingStatusTracker = new PollingStatusTracker();
+        var service = new PollingBackgroundService(
+            new StaticWorkflowOptionsProvider(CreateWorkflowOptions(intervalMs: 1_000)),
+            new DelegatePollingIterationHandler(
+                (_, _) =>
+                {
+                    firstInvocation.TrySetResult();
+                    return Task.CompletedTask;
+                }),
+            new PollingRefreshTrigger(timeProvider),
+            pollingStatusTracker,
+            timeProvider,
+            NullLogger<PollingBackgroundService>.Instance);
+
+        await service.StartAsync(CancellationToken.None);
+        await firstInvocation.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        await service.StopAsync(CancellationToken.None);
+
+        var snapshot = pollingStatusTracker.GetSnapshot();
+
+        Assert.Equal(timeProvider.GetUtcNow(), snapshot.LastStartedAt);
+        Assert.Equal(timeProvider.GetUtcNow(), snapshot.LastCompletedAt);
+        Assert.Equal(timeProvider.GetUtcNow(), snapshot.LastSuccessfulTickAt);
+        Assert.Null(snapshot.LastError);
+    }
+
+    [Fact]
+    public async Task StartAsync_records_failed_tick_in_polling_status_tracker()
+    {
+        var firstInvocation = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var timeProvider = new FakeTimeProvider(new DateTimeOffset(2026, 3, 16, 15, 30, 0, TimeSpan.Zero));
+        var pollingStatusTracker = new PollingStatusTracker();
+        var service = new PollingBackgroundService(
+            new StaticWorkflowOptionsProvider(CreateWorkflowOptions(intervalMs: 1_000)),
+            new DelegatePollingIterationHandler(
+                (_, _) =>
+                {
+                    firstInvocation.TrySetResult();
+                    throw new InvalidOperationException("poll failed");
+                }),
+            new PollingRefreshTrigger(timeProvider),
+            pollingStatusTracker,
+            timeProvider,
+            NullLogger<PollingBackgroundService>.Instance);
+
+        await service.StartAsync(CancellationToken.None);
+        await firstInvocation.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        await service.StopAsync(CancellationToken.None);
+
+        var snapshot = pollingStatusTracker.GetSnapshot();
+
+        Assert.Equal(timeProvider.GetUtcNow(), snapshot.LastStartedAt);
+        Assert.Equal(timeProvider.GetUtcNow(), snapshot.LastCompletedAt);
+        Assert.Null(snapshot.LastSuccessfulTickAt);
+        Assert.Equal(timeProvider.GetUtcNow(), snapshot.LastFailedAt);
+        Assert.Equal("poll failed", snapshot.LastError);
     }
 
     [Fact]
@@ -146,6 +213,7 @@ public sealed class PollingBackgroundServiceTests
                     return Task.CompletedTask;
                 }),
             refreshTrigger,
+            new PollingStatusTracker(),
             TimeProvider.System,
             NullLogger<PollingBackgroundService>.Instance);
 
@@ -186,6 +254,7 @@ public sealed class PollingBackgroundServiceTests
                     return Task.CompletedTask;
                 }),
             new PollingRefreshTrigger(TimeProvider.System),
+            new PollingStatusTracker(),
             TimeProvider.System,
             NullLogger<PollingBackgroundService>.Instance);
 
@@ -259,6 +328,14 @@ public sealed class PollingBackgroundServiceTests
         public Task ExecuteAsync(WorkflowServiceOptions workflowOptions, CancellationToken cancellationToken)
         {
             return onExecuteAsync(workflowOptions, cancellationToken);
+        }
+    }
+
+    private sealed class FakeTimeProvider(DateTimeOffset currentTime) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow()
+        {
+            return currentTime;
         }
     }
 }
