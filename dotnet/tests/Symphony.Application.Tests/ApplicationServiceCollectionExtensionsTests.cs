@@ -1,10 +1,14 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Symphony.Abstractions.Orchestration;
+using Symphony.Abstractions.Trackers;
+using Symphony.Abstractions.Workspaces;
 using Symphony.Application.Configuration;
 using Symphony.Application.Polling;
 using Symphony.Application.DependencyInjection;
 using Symphony.Application.Orchestration;
+using Symphony.Domain.Issues;
+using Symphony.Domain.Workspaces;
 
 namespace Symphony.Application.Tests;
 
@@ -49,6 +53,8 @@ public class ApplicationServiceCollectionExtensionsTests
                         3_600_000,
                         5_000,
                         300_000))));
+        services.AddSingleton<IIssueTrackerClient, StubIssueTrackerClient>();
+        services.AddSingleton<IWorkspaceManager, StubWorkspaceManager>();
 
         services.AddSymphonyApplication();
 
@@ -60,7 +66,7 @@ public class ApplicationServiceCollectionExtensionsTests
         Assert.IsType<OrchestratorDispatchQueue>(serviceProvider.GetRequiredService<IOrchestratorDispatchQueue>());
         Assert.IsType<OrchestratorDispatchQueue>(serviceProvider.GetRequiredService<IOrchestratorDispatchStatusReader>());
         Assert.IsType<NoOpQueuedIssueWorker>(serviceProvider.GetRequiredService<IQueuedIssueWorker>());
-        Assert.IsType<NoOpPollingIterationHandler>(serviceProvider.GetRequiredService<IPollingIterationHandler>());
+        Assert.IsType<OrchestratorPollingIterationHandler>(serviceProvider.GetRequiredService<IPollingIterationHandler>());
         Assert.Same(TimeProvider.System, serviceProvider.GetRequiredService<TimeProvider>());
         Assert.Contains(
             serviceProvider.GetServices<IHostedService>(),
@@ -75,6 +81,41 @@ public class ApplicationServiceCollectionExtensionsTests
         public Task<WorkflowServiceOptions> GetCurrentAsync(CancellationToken cancellationToken = default)
         {
             return Task.FromResult(workflowOptions);
+        }
+    }
+
+    private sealed class StubIssueTrackerClient : IIssueTrackerClient
+    {
+        public Task<IReadOnlyList<Issue>> FetchCandidateIssuesAsync(CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<IReadOnlyList<Issue>>(Array.Empty<Issue>());
+        }
+
+        public Task<IReadOnlyList<Issue>> FetchIssuesByStatesAsync(
+            IReadOnlyCollection<string> stateNames,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<IReadOnlyList<Issue>>(Array.Empty<Issue>());
+        }
+
+        public Task<IReadOnlyList<Issue>> FetchIssueStatesByIdsAsync(
+            IReadOnlyCollection<string> issueIds,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<IReadOnlyList<Issue>>(Array.Empty<Issue>());
+        }
+    }
+
+    private sealed class StubWorkspaceManager : IWorkspaceManager
+    {
+        public Task<Workspace> CreateForIssueAsync(string issueIdentifier, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(new Workspace(Path.Combine(Path.GetTempPath(), issueIdentifier), issueIdentifier, createdNow: true));
+        }
+
+        public Task DeleteForIssueAsync(string issueIdentifier, CancellationToken cancellationToken = default)
+        {
+            return Task.CompletedTask;
         }
     }
 }

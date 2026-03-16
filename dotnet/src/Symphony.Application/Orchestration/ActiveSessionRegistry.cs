@@ -28,31 +28,47 @@ public sealed class ActiveSessionRegistry(
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(issueId);
 
-        ActiveSessionEntry? entry;
+        var entry = TryMarkCanceledForReconciliation(issueId, trackerState);
+        return entry is not null;
+    }
+
+    public async Task<bool> TryCancelAndWaitForReconciliationAsync(
+        string issueId,
+        string? trackerState = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(issueId);
+
+        var entry = TryMarkCanceledForReconciliation(issueId, trackerState);
+        if (entry is null)
+        {
+            return false;
+        }
+
+        await entry.Completion.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+        return true;
+    }
+
+    public bool TryRefreshIssue(Issue issue)
+    {
+        ArgumentNullException.ThrowIfNull(issue);
+
         lock (_stateLock)
         {
-            _activeSessions.TryGetValue(NormalizeIssueId(issueId), out entry);
-
-            if (entry is null)
+            if (!_activeSessions.TryGetValue(NormalizeIssueId(issue.Id), out var entry))
             {
                 return false;
             }
 
-            entry.Status = RunAttemptStatus.CanceledByReconciliation;
-            entry.Error = trackerState is null
-                ? "Session canceled after reconciliation determined the issue is no longer eligible."
-                : $"Session canceled after reconciliation transitioned the issue to '{trackerState}'.";
-            entry.CanceledByReconciliation = true;
+            entry.Issue = issue;
         }
 
         logger.LogInformation(
-            "session_cancellation completed issue_id={issue_id} issue_identifier={issue_identifier} session_id={session_id} tracker_state={tracker_state} outcome=canceled",
-            entry.Issue.Id,
-            entry.Issue.Identifier,
-            entry.Session?.SessionId,
-            trackerState ?? "unknown");
-
-        entry.CancellationTokenSource.Cancel();
+            "session_tracking refreshed issue_id={issue_id} issue_identifier={issue_identifier} session_id={session_id} issue_state={issue_state} outcome=completed",
+            issue.Id,
+            issue.Identifier,
+            (string?)null,
+            issue.State);
         return true;
     }
 
@@ -134,6 +150,8 @@ public sealed class ActiveSessionRegistry(
             _activeSessions.Remove(normalizedIssueId);
         }
 
+        entry.Completion.TrySetResult();
+
         logger.LogInformation(
             "session_tracking completed issue_id={issue_id} issue_identifier={issue_identifier} session_id={session_id} status={status} outcome=completed",
             entry.Issue.Id,
@@ -142,6 +160,36 @@ public sealed class ActiveSessionRegistry(
             entry.Status);
 
         entry.CancellationTokenSource.Dispose();
+    }
+
+    private ActiveSessionEntry? TryMarkCanceledForReconciliation(string issueId, string? trackerState)
+    {
+        ActiveSessionEntry? entry;
+        lock (_stateLock)
+        {
+            _activeSessions.TryGetValue(NormalizeIssueId(issueId), out entry);
+
+            if (entry is null)
+            {
+                return null;
+            }
+
+            entry.Status = RunAttemptStatus.CanceledByReconciliation;
+            entry.Error = trackerState is null
+                ? "Session canceled after reconciliation determined the issue is no longer eligible."
+                : $"Session canceled after reconciliation transitioned the issue to '{trackerState}'.";
+            entry.CanceledByReconciliation = true;
+        }
+
+        logger.LogInformation(
+            "session_cancellation completed issue_id={issue_id} issue_identifier={issue_identifier} session_id={session_id} tracker_state={tracker_state} outcome=canceled",
+            entry.Issue.Id,
+            entry.Issue.Identifier,
+            entry.Session?.SessionId,
+            trackerState ?? "unknown");
+
+        entry.CancellationTokenSource.Cancel();
+        return entry;
     }
 
     private static ActiveSessionSnapshot CreateSnapshot(ActiveSessionEntry entry)
@@ -210,7 +258,7 @@ public sealed class ActiveSessionRegistry(
         DateTimeOffset startedAt,
         CancellationTokenSource cancellationTokenSource)
     {
-        public Issue Issue { get; } = issue;
+        public Issue Issue { get; set; } = issue;
 
         public int? Attempt { get; } = attempt;
 
@@ -225,5 +273,7 @@ public sealed class ActiveSessionRegistry(
         public LiveSessionMetadata? Session { get; set; }
 
         public bool CanceledByReconciliation { get; set; }
+
+        public TaskCompletionSource Completion { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
     }
 }

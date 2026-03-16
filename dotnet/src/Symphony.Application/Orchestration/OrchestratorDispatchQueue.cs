@@ -192,6 +192,28 @@ public sealed class OrchestratorDispatchQueue(
         return _retrySignal.WaitAsync(cancellationToken);
     }
 
+    internal bool TryRefreshRunningIssue(Issue issue)
+    {
+        ArgumentNullException.ThrowIfNull(issue);
+
+        lock (_stateLock)
+        {
+            if (!_running.TryGetValue(issue.Id, out var entry))
+            {
+                return false;
+            }
+
+            _running[issue.Id] = entry with { Issue = issue };
+        }
+
+        logger.LogInformation(
+            "dispatch_execution refreshed issue_id={issue_id} issue_identifier={issue_identifier} issue_state={issue_state} outcome=completed",
+            issue.Id,
+            issue.Identifier,
+            issue.State);
+        return true;
+    }
+
     internal async Task ProcessDueRetriesAsync(CancellationToken cancellationToken)
     {
         RetryDispatchEntry[] dueEntries;

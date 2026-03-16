@@ -22,7 +22,7 @@ public static class ApplicationServiceCollectionExtensions
         services.TryAddSingleton<ActiveSessionRegistry>();
         services.TryAddSingleton<IActiveSessionRegistry>(serviceProvider => serviceProvider.GetRequiredService<ActiveSessionRegistry>());
         services.TryAddSingleton<IQueuedIssueWorker, NoOpQueuedIssueWorker>();
-        services.TryAddSingleton<IPollingIterationHandler, NoOpPollingIterationHandler>();
+        services.TryAddSingleton<IPollingIterationHandler, OrchestratorPollingIterationHandler>();
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, DispatchWorkerBackgroundService>());
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, RetryDispatchBackgroundService>());
 
