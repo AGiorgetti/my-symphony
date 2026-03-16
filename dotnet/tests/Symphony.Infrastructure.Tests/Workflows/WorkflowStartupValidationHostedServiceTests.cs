@@ -1,4 +1,6 @@
 using Microsoft.Extensions.Logging;
+using Symphony.Application.Configuration;
+using Symphony.Infrastructure.Configuration;
 using Symphony.Infrastructure.Workflows;
 
 namespace Symphony.Infrastructure.Tests.Workflows;
@@ -25,7 +27,7 @@ public sealed class WorkflowStartupValidationHostedServiceTests
         var loggerProvider = new TestLoggerProvider();
         using var loggerFactory = LoggerFactory.Create(builder => builder.AddProvider(loggerProvider));
         var service = new WorkflowStartupValidationHostedService(
-            new YamlWorkflowLoader(),
+            new WorkflowOptionsProvider(new YamlWorkflowLoader(), new WorkflowOptionsResolver()),
             loggerFactory.CreateLogger<WorkflowStartupValidationHostedService>());
 
         await CurrentDirectoryGate.WaitAsync();
@@ -40,6 +42,56 @@ public sealed class WorkflowStartupValidationHostedServiceTests
                 var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => service.StartAsync(CancellationToken.None));
 
                 Assert.Contains("workflow_parse_error", exception.Message);
+                Assert.Contains("WORKFLOW.md", exception.Message);
+                Assert.Contains(
+                    loggerProvider.Messages,
+                    message => message.Contains("Fix WORKFLOW.md before starting Symphony.", StringComparison.Ordinal));
+            }
+            finally
+            {
+                Directory.SetCurrentDirectory(previousDirectory);
+            }
+        }
+        finally
+        {
+            CurrentDirectoryGate.Release();
+        }
+    }
+
+    [Fact]
+    public async Task StartAsync_invalid_typed_config_logs_actionable_error_and_throws()
+    {
+        var tempDirectory = Path.Combine(Path.GetTempPath(), $"symphony-startup-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDirectory);
+        await File.WriteAllTextAsync(
+            Path.Combine(tempDirectory, "WORKFLOW.md"),
+            """
+            ---
+            tracker:
+              kind: github
+              repository: owner/repo
+            ---
+            Prompt
+            """);
+
+        var loggerProvider = new TestLoggerProvider();
+        using var loggerFactory = LoggerFactory.Create(builder => builder.AddProvider(loggerProvider));
+        var service = new WorkflowStartupValidationHostedService(
+            new WorkflowOptionsProvider(new YamlWorkflowLoader(), new WorkflowOptionsResolver()),
+            loggerFactory.CreateLogger<WorkflowStartupValidationHostedService>());
+
+        await CurrentDirectoryGate.WaitAsync();
+
+        try
+        {
+            var previousDirectory = Directory.GetCurrentDirectory();
+
+            try
+            {
+                Directory.SetCurrentDirectory(tempDirectory);
+                var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => service.StartAsync(CancellationToken.None));
+
+                Assert.Contains("missing_tracker_api_key", exception.Message);
                 Assert.Contains("WORKFLOW.md", exception.Message);
                 Assert.Contains(
                     loggerProvider.Messages,

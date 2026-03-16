@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Symphony.Application.Configuration;
+using Symphony.Application.Polling;
 using Symphony.Abstractions.Processes;
 using Symphony.Abstractions.Workflows;
 using Symphony.Infrastructure.Configuration;
@@ -16,8 +17,10 @@ public static class InfrastructureServiceCollectionExtensions
 
         services.AddSingleton<InfrastructureServiceMarker>();
         services.AddSingleton<IWorkflowOptionsResolver, WorkflowOptionsResolver>();
+        services.AddSingleton<IWorkflowOptionsProvider, WorkflowOptionsProvider>();
         services.AddSingleton<IWorkflowLoader, YamlWorkflowLoader>();
         services.AddHostedService<WorkflowStartupValidationHostedService>();
+        services.AddHostedService<PollingBackgroundService>();
         services.AddSingleton<IProcessRunner, ProcessRunner>();
 
         return services;

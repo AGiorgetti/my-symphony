@@ -1,19 +1,20 @@
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Symphony.Abstractions.Workflows;
+using Symphony.Application.Configuration;
 
 namespace Symphony.Infrastructure.Workflows;
 
 public sealed class WorkflowStartupValidationHostedService : IHostedService
 {
     private readonly ILogger<WorkflowStartupValidationHostedService> _logger;
-    private readonly IWorkflowLoader _workflowLoader;
+    private readonly IWorkflowOptionsProvider _workflowOptionsProvider;
 
     public WorkflowStartupValidationHostedService(
-        IWorkflowLoader workflowLoader,
+        IWorkflowOptionsProvider workflowOptionsProvider,
         ILogger<WorkflowStartupValidationHostedService> logger)
     {
-        _workflowLoader = workflowLoader;
+        _workflowOptionsProvider = workflowOptionsProvider;
         _logger = logger;
     }
 
@@ -23,24 +24,36 @@ public sealed class WorkflowStartupValidationHostedService : IHostedService
 
         try
         {
-            await _workflowLoader.LoadAsync(workflowPath, cancellationToken).ConfigureAwait(false);
+            await _workflowOptionsProvider.GetCurrentAsync(cancellationToken).ConfigureAwait(false);
         }
         catch (WorkflowLoadException exception)
         {
-            _logger.LogError(
-                exception,
-                "Failed to load workflow file '{WorkflowPath}' ({ErrorCode}). Fix WORKFLOW.md before starting Symphony.",
-                exception.WorkflowPath,
-                exception.Code);
-
-            throw new InvalidOperationException(
-                $"Failed to load workflow file '{exception.WorkflowPath}' ({exception.Code}). {exception.Message}",
-                exception);
+            throw CreateStartupValidationFailure(exception, exception.Code, workflowPath);
+        }
+        catch (WorkflowConfigurationException exception)
+        {
+            throw CreateStartupValidationFailure(exception, exception.Code, workflowPath);
         }
     }
 
     public Task StopAsync(CancellationToken cancellationToken)
     {
         return Task.CompletedTask;
+    }
+
+    private InvalidOperationException CreateStartupValidationFailure(
+        Exception exception,
+        string errorCode,
+        string workflowPath)
+    {
+        _logger.LogError(
+            exception,
+            "Failed to validate workflow file '{WorkflowPath}' ({ErrorCode}). Fix WORKFLOW.md before starting Symphony.",
+            workflowPath,
+            errorCode);
+
+        return new InvalidOperationException(
+            $"Failed to validate workflow file '{workflowPath}' ({errorCode}). {exception.Message}",
+            exception);
     }
 }
