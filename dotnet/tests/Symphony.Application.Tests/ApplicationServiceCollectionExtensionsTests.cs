@@ -55,6 +55,7 @@ public class ApplicationServiceCollectionExtensionsTests
         using var serviceProvider = services.BuildServiceProvider();
 
         Assert.NotNull(serviceProvider.GetService<ApplicationServiceMarker>());
+        Assert.IsType<ActiveSessionRegistry>(serviceProvider.GetRequiredService<IActiveSessionRegistry>());
         Assert.IsType<OrchestratorDispatchQueue>(serviceProvider.GetRequiredService<IOrchestratorDispatchQueue>());
         Assert.IsType<OrchestratorDispatchQueue>(serviceProvider.GetRequiredService<IOrchestratorDispatchStatusReader>());
         Assert.IsType<NoOpQueuedIssueWorker>(serviceProvider.GetRequiredService<IQueuedIssueWorker>());

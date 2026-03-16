@@ -1,12 +1,10 @@
-using Symphony.Domain.Issues;
-
 namespace Symphony.Application.Orchestration;
 
 public sealed class NoOpQueuedIssueWorker : IQueuedIssueWorker
 {
-    public Task ExecuteAsync(Issue issue, int? attempt, CancellationToken cancellationToken)
+    public Task ExecuteAsync(QueuedIssueExecutionContext context)
     {
-        ArgumentNullException.ThrowIfNull(issue);
+        ArgumentNullException.ThrowIfNull(context);
 
         return Task.CompletedTask;
     }
