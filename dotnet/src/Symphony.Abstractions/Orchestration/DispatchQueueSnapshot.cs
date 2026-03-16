@@ -3,6 +3,7 @@ namespace Symphony.Abstractions.Orchestration;
 public sealed record DispatchQueueSnapshot(
     IReadOnlyList<QueuedDispatchSnapshot> Queued,
     IReadOnlyList<RunningDispatchSnapshot> Running,
+    IReadOnlyList<RetryDispatchSnapshot> Retrying,
     int MaxConcurrentAgents,
     int AvailableSlots);
 
@@ -19,3 +20,10 @@ public sealed record RunningDispatchSnapshot(
     string IssueState,
     int? Attempt,
     DateTimeOffset StartedAt);
+
+public sealed record RetryDispatchSnapshot(
+    string IssueId,
+    string IssueIdentifier,
+    int Attempt,
+    DateTimeOffset DueAt,
+    string? Error);

@@ -225,6 +225,9 @@ Notes:
 - The application layer keeps dispatch staging in a bounded in-memory channel and enforces
   `agent.max_concurrent_agents` with a semaphore-backed execution gate. Status consumers can read
   queued and running work directly from the in-memory dispatch snapshot.
+- Successful worker exits schedule a one-second continuation retry. Failed worker exits are retried
+  with exponential backoff starting at 10 seconds, capped by `agent.max_retry_backoff_ms`, and are
+  surfaced through the in-memory retry snapshot.
 - Active sessions are tracked in-memory by normalized issue id, can expose live session metadata,
   and support targeted reconciliation cancellation without affecting unrelated executions.
 - Per-issue workspaces live under `workspace.root` using a sanitized issue identifier that keeps

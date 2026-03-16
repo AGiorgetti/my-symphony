@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="Polly.Core" Version="8.6.5" />
     <ProjectReference Include="..\Symphony.Domain\Symphony.Domain.csproj" />
     <ProjectReference Include="..\Symphony.Abstractions\Symphony.Abstractions.csproj" />
   </ItemGroup>

@@ -15,6 +15,7 @@ public static class ApplicationServiceCollectionExtensions
 
         services.AddSingleton<ApplicationServiceMarker>();
         services.TryAddSingleton(TimeProvider.System);
+        services.TryAddSingleton<RetryDelayPlanner>();
         services.TryAddSingleton<OrchestratorDispatchQueue>();
         services.TryAddSingleton<IOrchestratorDispatchQueue>(serviceProvider => serviceProvider.GetRequiredService<OrchestratorDispatchQueue>());
         services.TryAddSingleton<IOrchestratorDispatchStatusReader>(serviceProvider => serviceProvider.GetRequiredService<OrchestratorDispatchQueue>());
@@ -23,6 +24,7 @@ public static class ApplicationServiceCollectionExtensions
         services.TryAddSingleton<IQueuedIssueWorker, NoOpQueuedIssueWorker>();
         services.TryAddSingleton<IPollingIterationHandler, NoOpPollingIterationHandler>();
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, DispatchWorkerBackgroundService>());
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, RetryDispatchBackgroundService>());
 
         return services;
     }

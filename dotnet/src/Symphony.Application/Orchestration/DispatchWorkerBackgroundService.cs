@@ -69,6 +69,8 @@ public sealed class DispatchWorkerBackgroundService(
         {
             await queuedIssueWorker.ExecuteAsync(executionContext).ConfigureAwait(false);
             executionContext.UpdateStatus(RunAttemptStatus.Succeeded);
+            await dispatchQueue.ScheduleContinuationRetryAsync(workItem, cancellationToken).ConfigureAwait(false);
+            executionLease.PreserveClaimForRetry();
         }
         catch (OperationCanceledException) when (activeSession.WasCanceledByReconciliation)
         {
@@ -89,6 +91,16 @@ public sealed class DispatchWorkerBackgroundService(
                 workItem.Issue.Identifier,
                 executionContext.SessionId);
         }
+        catch (NonTransientIssueExecutionException exception)
+        {
+            executionContext.UpdateStatus(RunAttemptStatus.Failed, exception.Message);
+            logger.LogWarning(
+                exception,
+                "dispatch_execution failed issue_id={issue_id} issue_identifier={issue_identifier} session_id={session_id} reason=non_transient outcome=failed_no_retry",
+                workItem.Issue.Id,
+                workItem.Issue.Identifier,
+                executionContext.SessionId);
+        }
         catch (Exception exception)
         {
             executionContext.UpdateStatus(RunAttemptStatus.Failed, exception.Message);
@@ -98,6 +110,8 @@ public sealed class DispatchWorkerBackgroundService(
                 workItem.Issue.Id,
                 workItem.Issue.Identifier,
                 executionContext.SessionId);
+            await dispatchQueue.ScheduleFailureRetryAsync(workItem, exception, cancellationToken).ConfigureAwait(false);
+            executionLease.PreserveClaimForRetry();
         }
     }
 }
