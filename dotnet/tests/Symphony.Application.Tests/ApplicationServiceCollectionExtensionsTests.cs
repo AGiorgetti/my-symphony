@@ -55,6 +55,7 @@ public class ApplicationServiceCollectionExtensionsTests
         using var serviceProvider = services.BuildServiceProvider();
 
         Assert.NotNull(serviceProvider.GetService<ApplicationServiceMarker>());
+        Assert.NotNull(serviceProvider.GetService<RetryDelayPlanner>());
         Assert.IsType<ActiveSessionRegistry>(serviceProvider.GetRequiredService<IActiveSessionRegistry>());
         Assert.IsType<OrchestratorDispatchQueue>(serviceProvider.GetRequiredService<IOrchestratorDispatchQueue>());
         Assert.IsType<OrchestratorDispatchQueue>(serviceProvider.GetRequiredService<IOrchestratorDispatchStatusReader>());
@@ -64,6 +65,9 @@ public class ApplicationServiceCollectionExtensionsTests
         Assert.Contains(
             serviceProvider.GetServices<IHostedService>(),
             hostedService => hostedService is DispatchWorkerBackgroundService);
+        Assert.Contains(
+            serviceProvider.GetServices<IHostedService>(),
+            hostedService => hostedService is RetryDispatchBackgroundService);
     }
 
     private sealed class StaticWorkflowOptionsProvider(WorkflowServiceOptions workflowOptions) : IWorkflowOptionsProvider

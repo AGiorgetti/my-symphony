@@ -1,3 +1,6 @@
+using System.Collections.Concurrent;
+using System.Diagnostics;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Symphony.Abstractions.Orchestration;
 using Symphony.Application.Configuration;
@@ -10,7 +13,7 @@ namespace Symphony.Application.Tests.Orchestration;
 public sealed class OrchestratorDispatchQueueTests
 {
     [Fact]
-    public async Task QueueAsync_tracks_queued_and_running_state_for_status_readers()
+    public async Task QueueAsync_tracks_queued_running_and_retry_state_for_status_readers()
     {
         var queue = CreateQueue(maxConcurrentAgents: 1);
         var worker = new BlockingQueuedIssueWorker();
@@ -33,13 +36,18 @@ public sealed class OrchestratorDispatchQueueTests
         Assert.Equal("ABC-1", runningSnapshot.Running[0].IssueIdentifier);
 
         worker.AllowCompletion("ABC-1");
-        await worker.ExecutionCompleted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        await worker.WaitForCompletionAsync("ABC-1", TimeSpan.FromSeconds(2));
+        await WaitForConditionAsync(() => queue.GetSnapshot().Retrying.Count == 1, TimeSpan.FromSeconds(2));
         await hostedService.StopAsync(CancellationToken.None);
 
         var completedSnapshot = queue.GetSnapshot();
+        var retry = Assert.Single(completedSnapshot.Retrying);
 
         Assert.Empty(completedSnapshot.Queued);
         Assert.Empty(completedSnapshot.Running);
+        Assert.Equal(1, retry.Attempt);
+        Assert.Equal("ABC-1", retry.IssueIdentifier);
+        Assert.Null(retry.Error);
         Assert.Equal(1, completedSnapshot.MaxConcurrentAgents);
         Assert.Equal(1, completedSnapshot.AvailableSlots);
     }
@@ -63,7 +71,7 @@ public sealed class OrchestratorDispatchQueueTests
         Assert.Equal(0, queue.GetSnapshot().AvailableSlots);
 
         worker.AllowCompletion("ABC-1");
-        await worker.ExecutionCompleted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        await worker.WaitForCompletionAsync("ABC-1", TimeSpan.FromSeconds(2));
         await hostedService.StopAsync(CancellationToken.None);
     }
 
@@ -88,7 +96,7 @@ public sealed class OrchestratorDispatchQueueTests
         Assert.Equal(2, queue.GetSnapshot().MaxConcurrentAgents);
 
         firstWorker.AllowCompletion("ABC-1");
-        await firstWorker.ExecutionCompleted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        await firstWorker.WaitForCompletionAsync("ABC-1", TimeSpan.FromSeconds(2));
         await firstHostedService.StopAsync(CancellationToken.None);
     }
 
@@ -134,17 +142,87 @@ public sealed class OrchestratorDispatchQueueTests
         Assert.Empty(registry.GetActiveSessions());
     }
 
+    [Fact]
+    public async Task DispatchWorker_schedules_failure_retry_for_transient_exception()
+    {
+        var queue = CreateQueue(maxConcurrentAgents: 1);
+        var registry = CreateRegistry();
+        var worker = new ThrowingQueuedIssueWorker(new InvalidOperationException("transient failure"));
+        var hostedService = CreateHostedService(queue, registry, worker);
+
+        await hostedService.StartAsync(CancellationToken.None);
+        await queue.QueueAsync(CreateIssue("1", "ABC-1"));
+        await worker.ExecutionAttempted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        await WaitForConditionAsync(() => queue.GetSnapshot().Retrying.Count == 1, TimeSpan.FromSeconds(2));
+        await hostedService.StopAsync(CancellationToken.None);
+
+        var retry = Assert.Single(queue.GetSnapshot().Retrying);
+
+        Assert.Equal(1, retry.Attempt);
+        Assert.Equal("ABC-1", retry.IssueIdentifier);
+        Assert.Equal("transient failure", retry.Error);
+        Assert.Equal(1, queue.GetSnapshot().AvailableSlots);
+    }
+
+    [Fact]
+    public async Task DispatchWorker_releases_claim_after_non_transient_failure()
+    {
+        var queue = CreateQueue(maxConcurrentAgents: 1);
+        var registry = CreateRegistry();
+        var worker = new ThrowingQueuedIssueWorker(new NonTransientIssueExecutionException("do not retry"));
+        var hostedService = CreateHostedService(queue, registry, worker);
+        var issue = CreateIssue("1", "ABC-1");
+
+        await hostedService.StartAsync(CancellationToken.None);
+        await queue.QueueAsync(issue);
+        await worker.ExecutionAttempted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        await hostedService.StopAsync(CancellationToken.None);
+
+        var enqueueResult = await queue.QueueAsync(issue);
+
+        Assert.Equal(DispatchEnqueueResult.Enqueued, enqueueResult);
+        Assert.Single(queue.GetSnapshot().Queued);
+    }
+
+    [Fact]
+    public async Task RetryDispatchBackgroundService_dispatches_due_retry_attempts()
+    {
+        var timeProvider = TimeProvider.System;
+        var queue = CreateQueue(
+            new StaticWorkflowOptionsProvider(CreateWorkflowOptions(maxConcurrentAgents: 1, maxRetryBackoffMs: 25)),
+            new RetryDelayPlanner(() => 1d),
+            timeProvider);
+        var registry = CreateRegistry(timeProvider);
+        var worker = new FailOnceQueuedIssueWorker();
+        var dispatchHostedService = CreateHostedService(queue, registry, worker);
+        var retryHostedService = CreateRetryHostedService(queue, timeProvider);
+
+        await dispatchHostedService.StartAsync(CancellationToken.None);
+        await retryHostedService.StartAsync(CancellationToken.None);
+        await queue.QueueAsync(CreateIssue("1", "ABC-1"));
+        await worker.RetryExecutionCompleted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        await retryHostedService.StopAsync(CancellationToken.None);
+        await dispatchHostedService.StopAsync(CancellationToken.None);
+
+        Assert.Equal(new int?[] { null, 1 }, worker.Attempts.ToArray());
+    }
+
     private static OrchestratorDispatchQueue CreateQueue(int maxConcurrentAgents)
     {
         return CreateQueue(new StaticWorkflowOptionsProvider(CreateWorkflowOptions(maxConcurrentAgents)));
     }
 
-    private static OrchestratorDispatchQueue CreateQueue(IWorkflowOptionsProvider workflowOptionsProvider)
+    private static OrchestratorDispatchQueue CreateQueue(
+        IWorkflowOptionsProvider workflowOptionsProvider,
+        RetryDelayPlanner? retryDelayPlanner = null,
+        TimeProvider? timeProvider = null,
+        ILogger<OrchestratorDispatchQueue>? logger = null)
     {
         return new OrchestratorDispatchQueue(
             workflowOptionsProvider,
-            TimeProvider.System,
-            NullLogger<OrchestratorDispatchQueue>.Instance);
+            retryDelayPlanner ?? new RetryDelayPlanner(() => 1d),
+            timeProvider ?? TimeProvider.System,
+            logger ?? NullLogger<OrchestratorDispatchQueue>.Instance);
     }
 
     private static DispatchWorkerBackgroundService CreateHostedService(
@@ -159,12 +237,26 @@ public sealed class OrchestratorDispatchQueueTests
             NullLogger<DispatchWorkerBackgroundService>.Instance);
     }
 
-    private static ActiveSessionRegistry CreateRegistry()
+    private static RetryDispatchBackgroundService CreateRetryHostedService(
+        OrchestratorDispatchQueue queue,
+        TimeProvider? timeProvider = null)
     {
-        return new ActiveSessionRegistry(TimeProvider.System, NullLogger<ActiveSessionRegistry>.Instance);
+        return new RetryDispatchBackgroundService(
+            queue,
+            timeProvider ?? TimeProvider.System,
+            NullLogger<RetryDispatchBackgroundService>.Instance);
     }
 
-    private static WorkflowServiceOptions CreateWorkflowOptions(int maxConcurrentAgents)
+    private static ActiveSessionRegistry CreateRegistry(TimeProvider? timeProvider = null)
+    {
+        return new ActiveSessionRegistry(
+            timeProvider ?? TimeProvider.System,
+            NullLogger<ActiveSessionRegistry>.Instance);
+    }
+
+    private static WorkflowServiceOptions CreateWorkflowOptions(
+        int maxConcurrentAgents,
+        int maxRetryBackoffMs = 300_000)
     {
         return new WorkflowServiceOptions(
             new WorkflowTrackerOptions(
@@ -188,7 +280,7 @@ public sealed class OrchestratorDispatchQueueTests
             new WorkflowAgentOptions(
                 maxConcurrentAgents,
                 20,
-                300_000,
+                maxRetryBackoffMs,
                 new Dictionary<string, int>(StringComparer.Ordinal)),
             new WorkflowCodexOptions(
                 "codex app-server",
@@ -209,6 +301,22 @@ public sealed class OrchestratorDispatchQueueTests
             description: "Dispatch queue test",
             state: "Todo",
             createdAt: DateTimeOffset.UtcNow);
+    }
+
+    private static async Task WaitForConditionAsync(Func<bool> condition, TimeSpan timeout)
+    {
+        var stopwatch = Stopwatch.StartNew();
+        while (stopwatch.Elapsed < timeout)
+        {
+            if (condition())
+            {
+                return;
+            }
+
+            await Task.Delay(20);
+        }
+
+        Assert.True(condition(), "Timed out waiting for the expected condition.");
     }
 
     private sealed class StaticWorkflowOptionsProvider(WorkflowServiceOptions workflowOptions) : IWorkflowOptionsProvider
@@ -242,8 +350,6 @@ public sealed class OrchestratorDispatchQueueTests
 
         public TaskCompletionSource ExecutionStarted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        public TaskCompletionSource ExecutionCompleted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
-
         public async Task ExecuteAsync(QueuedIssueExecutionContext context)
         {
             ArgumentNullException.ThrowIfNull(context);
@@ -266,7 +372,6 @@ public sealed class OrchestratorDispatchQueueTests
             {
                 await GetAllowCompletion(context.Issue.Identifier).Task.WaitAsync(context.CancellationToken);
                 GetCompletion(context.Issue.Identifier).TrySetResult();
-                ExecutionCompleted.TrySetResult();
             }
             catch (OperationCanceledException) when (context.CancellationToken.IsCancellationRequested)
             {
@@ -324,6 +429,43 @@ public sealed class OrchestratorDispatchQueueTests
             {
                 return _cancellationByIssue[issueIdentifier];
             }
+        }
+    }
+
+    private sealed class ThrowingQueuedIssueWorker(Exception exception) : IQueuedIssueWorker
+    {
+        public TaskCompletionSource ExecutionAttempted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public Task ExecuteAsync(QueuedIssueExecutionContext context)
+        {
+            ArgumentNullException.ThrowIfNull(context);
+
+            ExecutionAttempted.TrySetResult();
+            return Task.FromException(exception);
+        }
+    }
+
+    private sealed class FailOnceQueuedIssueWorker : IQueuedIssueWorker
+    {
+        private int _executionCount;
+
+        public ConcurrentQueue<int?> Attempts { get; } = new();
+
+        public TaskCompletionSource RetryExecutionCompleted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public Task ExecuteAsync(QueuedIssueExecutionContext context)
+        {
+            ArgumentNullException.ThrowIfNull(context);
+
+            Attempts.Enqueue(context.Attempt);
+
+            if (Interlocked.Increment(ref _executionCount) == 1)
+            {
+                return Task.FromException(new InvalidOperationException("transient failure"));
+            }
+
+            RetryExecutionCompleted.TrySetResult();
+            return Task.CompletedTask;
         }
     }
 }
