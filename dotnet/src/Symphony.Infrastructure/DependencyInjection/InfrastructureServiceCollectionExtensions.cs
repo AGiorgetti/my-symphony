@@ -23,7 +23,9 @@ public static class InfrastructureServiceCollectionExtensions
 
         services.AddSingleton<InfrastructureServiceMarker>();
         services.AddSingleton<IWorkflowOptionsResolver, WorkflowOptionsResolver>();
-        services.AddSingleton<IWorkflowOptionsProvider, WorkflowOptionsProvider>();
+        services.AddSingleton<WorkflowOptionsProvider>();
+        services.AddSingleton<IWorkflowOptionsProvider>(serviceProvider => serviceProvider.GetRequiredService<WorkflowOptionsProvider>());
+        services.AddSingleton<IWorkflowDefinitionProvider>(serviceProvider => serviceProvider.GetRequiredService<WorkflowOptionsProvider>());
         services.AddSingleton<ITrackerClientOptionsProvider, TrackerClientOptionsProvider>();
         services.AddSingleton<IWorkflowLoader, YamlWorkflowLoader>();
         services.AddHostedService<WorkflowStartupValidationHostedService>();

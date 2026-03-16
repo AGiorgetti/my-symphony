@@ -2,7 +2,6 @@ using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Symphony.Abstractions.Processes;
-using Symphony.Abstractions.Workflows;
 using Symphony.Abstractions.Workspaces;
 using Symphony.Application.Configuration;
 using Symphony.Application.Orchestration;
@@ -65,7 +64,7 @@ public sealed class CodexQueuedIssueWorkerTests
             var processRunner = new RecordingProcessRunner();
             var worker = new CodexQueuedIssueWorker(
                 new StaticWorkflowOptionsProvider(CreateWorkflowOptions()),
-                new StaticWorkflowLoader(workflowDefinition),
+                new StaticWorkflowDefinitionProvider(workflowDefinition),
                 new StaticWorkspaceManager(new Workspace(workspacePath, "GH-21", createdNow: true)),
                 processRunner,
                 new WorkflowPromptRenderer(),
@@ -126,7 +125,7 @@ public sealed class CodexQueuedIssueWorkerTests
             var sessionFactory = new TestCodexProcessSessionFactory();
             var worker = new CodexQueuedIssueWorker(
                 new StaticWorkflowOptionsProvider(CreateWorkflowOptions()),
-                new StaticWorkflowLoader(new WorkflowDefinition(null, "Prompt")),
+                new StaticWorkflowDefinitionProvider(new WorkflowDefinition(null, "Prompt")),
                 new StaticWorkspaceManager(new Workspace(workspacePath, "GH-21", createdNow: true)),
                 new RecordingProcessRunner(exitCodes: [1]),
                 new WorkflowPromptRenderer(),
@@ -205,9 +204,9 @@ public sealed class CodexQueuedIssueWorkerTests
         }
     }
 
-    private sealed class StaticWorkflowLoader(WorkflowDefinition definition) : IWorkflowLoader
+    private sealed class StaticWorkflowDefinitionProvider(WorkflowDefinition definition) : IWorkflowDefinitionProvider
     {
-        public Task<WorkflowDefinition> LoadAsync(string workflowPath, CancellationToken cancellationToken = default)
+        public Task<WorkflowDefinition> GetCurrentDefinitionAsync(CancellationToken cancellationToken = default)
         {
             return Task.FromResult(definition);
         }

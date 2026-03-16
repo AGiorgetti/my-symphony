@@ -1,6 +1,5 @@
 using Microsoft.Extensions.Logging;
 using Symphony.Abstractions.Processes;
-using Symphony.Abstractions.Workflows;
 using Symphony.Abstractions.Workspaces;
 using Symphony.Application.Configuration;
 using Symphony.Application.Orchestration;
@@ -13,7 +12,7 @@ namespace Symphony.Infrastructure.Orchestration;
 
 internal sealed class CodexQueuedIssueWorker(
     IWorkflowOptionsProvider workflowOptionsProvider,
-    IWorkflowLoader workflowLoader,
+    IWorkflowDefinitionProvider workflowDefinitionProvider,
     IWorkspaceManager workspaceManager,
     IProcessRunner processRunner,
     WorkflowPromptRenderer workflowPromptRenderer,
@@ -47,7 +46,7 @@ internal sealed class CodexQueuedIssueWorker(
             shouldRunAfterRunHook = true;
 
             context.UpdateStatus(RunAttemptStatus.BuildingPrompt);
-            var workflowDefinition = await workflowLoader.LoadAsync(GetWorkflowPath(), context.CancellationToken).ConfigureAwait(false);
+            var workflowDefinition = await workflowDefinitionProvider.GetCurrentDefinitionAsync(context.CancellationToken).ConfigureAwait(false);
             var prompt = workflowPromptRenderer.Render(workflowDefinition, context.Issue, context.Attempt);
 
             context.UpdateStatus(RunAttemptStatus.LaunchingAgentProcess);
@@ -150,10 +149,5 @@ internal sealed class CodexQueuedIssueWorker(
                 ShellCommandRequestFactory.Create(command, workspacePath, timeoutMs),
                 cancellationToken)
             .ConfigureAwait(false);
-    }
-
-    private static string GetWorkflowPath()
-    {
-        return Path.Combine(Directory.GetCurrentDirectory(), "WORKFLOW.md");
     }
 }
