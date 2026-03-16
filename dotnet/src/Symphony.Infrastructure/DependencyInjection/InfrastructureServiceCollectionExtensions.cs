@@ -5,7 +5,10 @@ using Symphony.Abstractions.Processes;
 using Symphony.Abstractions.Workflows;
 using Symphony.Abstractions.Workspaces;
 using Symphony.Abstractions.Trackers;
+using Symphony.Application.Orchestration;
 using Symphony.Infrastructure.Configuration;
+using Symphony.Infrastructure.Codex;
+using Symphony.Infrastructure.Orchestration;
 using Symphony.Infrastructure.Processes;
 using Symphony.Infrastructure.Workflows;
 using Symphony.Infrastructure.Workspaces;
@@ -27,6 +30,10 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddHostedService<PollingBackgroundService>();
         services.AddSingleton<IProcessRunner, ProcessRunner>();
         services.AddSingleton<IWorkspaceManager, WorkspaceManager>();
+        services.AddSingleton<WorkflowPromptRenderer>();
+        services.AddSingleton<ICodexProcessSessionFactory, ProcessCodexProcessSessionFactory>();
+        services.AddSingleton<CodexAppServerClient>();
+        services.AddSingleton<IQueuedIssueWorker, CodexQueuedIssueWorker>();
 
         return services;
     }

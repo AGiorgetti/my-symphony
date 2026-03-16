@@ -40,7 +40,7 @@ public sealed record WorkflowCodexOptions(
     string Command,
     string? ApprovalPolicy,
     string? ThreadSandbox,
-    string? TurnSandboxPolicy,
+    IReadOnlyDictionary<string, object?>? TurnSandboxPolicy,
     int TurnTimeoutMs,
     int ReadTimeoutMs,
     int StallTimeoutMs);

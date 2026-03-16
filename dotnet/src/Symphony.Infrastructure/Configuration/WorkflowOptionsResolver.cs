@@ -114,7 +114,7 @@ public sealed class WorkflowOptionsResolver : IWorkflowOptionsResolver
             command,
             GetOptionalString(codexSection, "approval_policy", "codex.approval_policy"),
             GetOptionalString(codexSection, "thread_sandbox", "codex.thread_sandbox"),
-            GetOptionalString(codexSection, "turn_sandbox_policy", "codex.turn_sandbox_policy"),
+            GetOptionalObjectMap(codexSection, "turn_sandbox_policy", "codex.turn_sandbox_policy"),
             GetPositiveIntOrDefault(codexSection, "turn_timeout_ms", DefaultTurnTimeoutMs, "codex.turn_timeout_ms"),
             GetPositiveIntOrDefault(codexSection, "read_timeout_ms", DefaultReadTimeoutMs, "codex.read_timeout_ms"),
             GetIntOrDefault(codexSection, "stall_timeout_ms", DefaultStallTimeoutMs, "codex.stall_timeout_ms"));
@@ -390,6 +390,69 @@ public sealed class WorkflowOptionsResolver : IWorkflowOptionsResolver
 
         var trimmed = stringValue.Trim();
         return trimmed.Length == 0 ? null : trimmed;
+    }
+
+    private static IReadOnlyDictionary<string, object?>? GetOptionalObjectMap(
+        IReadOnlyDictionary<string, object?> section,
+        string key,
+        string fieldName)
+    {
+        if (!section.TryGetValue(key, out var value) || value is null)
+        {
+            return null;
+        }
+
+        return value switch
+        {
+            IReadOnlyDictionary<string, object?> readOnlyDictionary => CloneObjectMap(readOnlyDictionary, fieldName),
+            IDictionary<string, object?> dictionary => CloneObjectMap((IReadOnlyDictionary<string, object?>)dictionary, fieldName),
+            IDictionary<object, object?> dictionary => CloneObjectMap(dictionary, fieldName),
+            _ => throw InvalidConfiguration($"{fieldName} must be an object.")
+        };
+    }
+
+    private static IReadOnlyDictionary<string, object?> CloneObjectMap(
+        IReadOnlyDictionary<string, object?> source,
+        string fieldName)
+    {
+        return new ReadOnlyDictionary<string, object?>(
+            source.ToDictionary(
+                pair => pair.Key,
+                pair => NormalizeObjectValue(pair.Value, fieldName),
+                StringComparer.Ordinal));
+    }
+
+    private static IReadOnlyDictionary<string, object?> CloneObjectMap(
+        IDictionary<object, object?> source,
+        string fieldName)
+    {
+        var normalized = new Dictionary<string, object?>(StringComparer.Ordinal);
+
+        foreach (var (rawKey, rawValue) in source)
+        {
+            if (rawKey is not string key || string.IsNullOrWhiteSpace(key))
+            {
+                throw InvalidConfiguration($"{fieldName} must contain only string keys.");
+            }
+
+            normalized[key.Trim()] = NormalizeObjectValue(rawValue, fieldName);
+        }
+
+        return new ReadOnlyDictionary<string, object?>(normalized);
+    }
+
+    private static object? NormalizeObjectValue(object? value, string fieldName)
+    {
+        return value switch
+        {
+            null => null,
+            string or bool or char or byte or sbyte or short or ushort or int or uint or long or ulong or float or double or decimal => value,
+            IReadOnlyDictionary<string, object?> readOnlyDictionary => CloneObjectMap(readOnlyDictionary, fieldName),
+            IDictionary<string, object?> dictionary => CloneObjectMap((IReadOnlyDictionary<string, object?>)dictionary, fieldName),
+            IDictionary<object, object?> dictionary => CloneObjectMap(dictionary, fieldName),
+            IEnumerable<object?> enumerable => enumerable.Select(item => NormalizeObjectValue(item, fieldName)).ToArray(),
+            _ => throw InvalidConfiguration($"{fieldName} contains unsupported value type '{value.GetType().Name}'.")
+        };
     }
 
     private static string GetRequiredStringValue(object? value, string fieldName)
