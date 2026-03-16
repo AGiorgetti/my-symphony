@@ -7,6 +7,7 @@ namespace Symphony.Application.Polling;
 public sealed class PollingBackgroundService : BackgroundService
 {
     private readonly IPollingIterationHandler _pollingIterationHandler;
+    private readonly PollingRefreshTrigger _pollingRefreshTrigger;
     private readonly ILogger<PollingBackgroundService> _logger;
     private readonly TimeProvider _timeProvider;
     private readonly IWorkflowOptionsProvider _workflowOptionsProvider;
@@ -14,11 +15,13 @@ public sealed class PollingBackgroundService : BackgroundService
     public PollingBackgroundService(
         IWorkflowOptionsProvider workflowOptionsProvider,
         IPollingIterationHandler pollingIterationHandler,
+        PollingRefreshTrigger pollingRefreshTrigger,
         TimeProvider timeProvider,
         ILogger<PollingBackgroundService> logger)
     {
         _workflowOptionsProvider = workflowOptionsProvider;
         _pollingIterationHandler = pollingIterationHandler;
+        _pollingRefreshTrigger = pollingRefreshTrigger;
         _timeProvider = timeProvider;
         _logger = logger;
     }
@@ -66,11 +69,7 @@ public sealed class PollingBackgroundService : BackgroundService
 
                 try
                 {
-                    await Task.Delay(
-                            TimeSpan.FromMilliseconds(currentOptions.Polling.IntervalMs),
-                            _timeProvider,
-                            stoppingToken)
-                        .ConfigureAwait(false);
+                    await WaitForNextTickAsync(currentOptions.Polling.IntervalMs, stoppingToken).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
                 {
@@ -104,6 +103,27 @@ public sealed class PollingBackgroundService : BackgroundService
                 currentOptions.Polling.IntervalMs);
 
             return currentOptions;
+        }
+    }
+
+    private async Task WaitForNextTickAsync(int intervalMs, CancellationToken cancellationToken)
+    {
+        using var waitCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var refreshSignalTask = _pollingRefreshTrigger.WaitForRefreshAsync(waitCancellation.Token);
+        var delayTask = Task.Delay(
+            TimeSpan.FromMilliseconds(intervalMs),
+            _timeProvider,
+            waitCancellation.Token);
+        var completedTask = await Task.WhenAny(refreshSignalTask, delayTask).ConfigureAwait(false);
+
+        waitCancellation.Cancel();
+
+        try
+        {
+            await completedTask.ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
         }
     }
 }

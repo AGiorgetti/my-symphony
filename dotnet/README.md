@@ -253,6 +253,9 @@ When enabled via service configuration (for example `server.port`), Symphony exp
 
 - Dashboard at `/`
 - JSON APIs under `/api/v1/*`
+- `GET /api/v1/state` for the current running/retrying snapshot, live token totals, and runtime counts
+- `GET /api/v1/{issueIdentifier}` for issue-specific runtime details with a `404` JSON error envelope when the issue is not tracked
+- `POST /api/v1/refresh` to queue an immediate poll-and-reconcile cycle; repeated requests coalesce while one is already pending
 
 ## Project Layout
 

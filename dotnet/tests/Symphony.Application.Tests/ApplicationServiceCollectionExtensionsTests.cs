@@ -5,6 +5,7 @@ using Symphony.Application.Configuration;
 using Symphony.Application.Polling;
 using Symphony.Application.DependencyInjection;
 using Symphony.Application.Orchestration;
+using Symphony.Application.Runtime;
 
 namespace Symphony.Application.Tests;
 
@@ -55,10 +56,12 @@ public class ApplicationServiceCollectionExtensionsTests
         using var serviceProvider = services.BuildServiceProvider();
 
         Assert.NotNull(serviceProvider.GetService<ApplicationServiceMarker>());
+        Assert.NotNull(serviceProvider.GetService<PollingRefreshTrigger>());
         Assert.NotNull(serviceProvider.GetService<RetryDelayPlanner>());
         Assert.IsType<ActiveSessionRegistry>(serviceProvider.GetRequiredService<IActiveSessionRegistry>());
         Assert.IsType<OrchestratorDispatchQueue>(serviceProvider.GetRequiredService<IOrchestratorDispatchQueue>());
         Assert.IsType<OrchestratorDispatchQueue>(serviceProvider.GetRequiredService<IOrchestratorDispatchStatusReader>());
+        Assert.IsType<OrchestratorRuntimeService>(serviceProvider.GetRequiredService<IOrchestratorRuntimeService>());
         Assert.IsType<NoOpQueuedIssueWorker>(serviceProvider.GetRequiredService<IQueuedIssueWorker>());
         Assert.IsType<NoOpPollingIterationHandler>(serviceProvider.GetRequiredService<IPollingIterationHandler>());
         Assert.Same(TimeProvider.System, serviceProvider.GetRequiredService<TimeProvider>());
