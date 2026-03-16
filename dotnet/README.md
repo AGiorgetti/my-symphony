@@ -220,6 +220,9 @@ Notes:
 - If a value is missing, defaults are used where defined by the implementation/spec.
 - `polling.interval_ms` controls the delay between poll ticks. After startup validation succeeds,
   Symphony runs an immediate tick and then continues on the configured interval.
+- The application layer keeps dispatch staging in a bounded in-memory channel and enforces
+  `agent.max_concurrent_agents` with a semaphore-backed execution gate. Status consumers can read
+  queued and running work directly from the in-memory dispatch snapshot.
 - Per-issue workspaces live under `workspace.root` using a sanitized issue identifier that keeps
   only letters, digits, `.`, `_`, and `-`.
 - Workspace paths that resolve outside the configured `workspace.root` are rejected before any
