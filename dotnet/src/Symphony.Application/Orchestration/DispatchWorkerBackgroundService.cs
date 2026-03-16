@@ -63,6 +63,8 @@ public sealed class DispatchWorkerBackgroundService(
         {
             await queuedIssueWorker.ExecuteAsync(executionContext).ConfigureAwait(false);
             executionContext.UpdateStatus(RunAttemptStatus.Succeeded);
+            await dispatchQueue.ScheduleContinuationRetryAsync(workItem, cancellationToken).ConfigureAwait(false);
+            executionLease.PreserveClaimForRetry();
         }
         catch (OperationCanceledException) when (activeSession.WasCanceledByReconciliation)
         {
@@ -76,6 +78,14 @@ public sealed class DispatchWorkerBackgroundService(
                 "Queued execution for issue {IssueIdentifier} was canceled during shutdown.",
                 workItem.Issue.Identifier);
         }
+        catch (NonTransientIssueExecutionException exception)
+        {
+            executionContext.UpdateStatus(RunAttemptStatus.Failed, exception.Message);
+            logger.LogWarning(
+                exception,
+                "Queued execution for issue {IssueIdentifier} failed with a non-transient error and will not be retried.",
+                workItem.Issue.Identifier);
+        }
         catch (Exception exception)
         {
             executionContext.UpdateStatus(RunAttemptStatus.Failed, exception.Message);
@@ -83,6 +93,8 @@ public sealed class DispatchWorkerBackgroundService(
                 exception,
                 "Queued execution for issue {IssueIdentifier} failed.",
                 workItem.Issue.Identifier);
+            await dispatchQueue.ScheduleFailureRetryAsync(workItem, exception, cancellationToken).ConfigureAwait(false);
+            executionLease.PreserveClaimForRetry();
         }
     }
 }

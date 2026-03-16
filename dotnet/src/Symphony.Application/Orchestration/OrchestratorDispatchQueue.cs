@@ -8,6 +8,7 @@ namespace Symphony.Application.Orchestration;
 
 public sealed class OrchestratorDispatchQueue(
     IWorkflowOptionsProvider workflowOptionsProvider,
+    RetryDelayPlanner retryDelayPlanner,
     TimeProvider timeProvider,
     ILogger<OrchestratorDispatchQueue> logger) : IOrchestratorDispatchQueue, IOrchestratorDispatchStatusReader
 {
@@ -25,7 +26,9 @@ public sealed class OrchestratorDispatchQueue(
     private readonly Lock _stateLock = new();
     private readonly Dictionary<string, QueuedDispatchEntry> _queued = new(StringComparer.Ordinal);
     private readonly Dictionary<string, RunningDispatchEntry> _running = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, RetryDispatchEntry> _retrying = new(StringComparer.Ordinal);
     private readonly HashSet<string> _claimed = new(StringComparer.Ordinal);
+    private readonly SemaphoreSlim _retrySignal = new(0, int.MaxValue);
 
     private SemaphoreSlim? _concurrencyGate;
     private int _configuredConcurrency;
@@ -43,16 +46,233 @@ public sealed class OrchestratorDispatchQueue(
             throw new ArgumentOutOfRangeException(nameof(attempt), attempt, "Attempt must be null or greater than zero.");
         }
 
+        return await QueueInternalAsync(issue, attempt, claimRequired: true, cancellationToken).ConfigureAwait(false);
+    }
+
+    public DispatchQueueSnapshot GetSnapshot()
+    {
+        lock (_stateLock)
+        {
+            return new DispatchQueueSnapshot(
+                _queued.Values
+                    .OrderBy(entry => entry.QueuedAt)
+                    .Select(
+                        entry => new QueuedDispatchSnapshot(
+                            entry.Issue.Id,
+                            entry.Issue.Identifier,
+                            entry.Issue.State,
+                            entry.Attempt,
+                            entry.QueuedAt))
+                    .ToArray(),
+                _running.Values
+                    .OrderBy(entry => entry.StartedAt)
+                    .Select(
+                        entry => new RunningDispatchSnapshot(
+                            entry.Issue.Id,
+                            entry.Issue.Identifier,
+                            entry.Issue.State,
+                            entry.Attempt,
+                            entry.StartedAt))
+                    .ToArray(),
+                _retrying.Values
+                    .OrderBy(entry => entry.DueAt)
+                    .Select(
+                        entry => new RetryDispatchSnapshot(
+                            entry.Issue.Id,
+                            entry.Issue.Identifier,
+                            entry.Attempt,
+                            entry.DueAt,
+                            entry.Error))
+                    .ToArray(),
+                _configuredConcurrency,
+                Math.Max(_configuredConcurrency - _queued.Count - _running.Count, 0));
+        }
+    }
+
+    internal IAsyncEnumerable<DispatchQueueWorkItem> ReadAllAsync(CancellationToken cancellationToken)
+    {
+        return _dispatchChannel.Reader.ReadAllAsync(cancellationToken);
+    }
+
+    internal ExecutionLease BeginExecution(DispatchQueueWorkItem workItem)
+    {
+        ArgumentNullException.ThrowIfNull(workItem);
+
+        var startedAt = timeProvider.GetUtcNow();
+
+        lock (_stateLock)
+        {
+            _queued.Remove(workItem.Issue.Id);
+            _running[workItem.Issue.Id] = new RunningDispatchEntry(workItem.Issue, workItem.Attempt, startedAt);
+        }
+
+        logger.LogInformation(
+            "Started queued execution for issue {IssueIdentifier} at {StartedAt}.",
+            workItem.Issue.Identifier,
+            startedAt);
+
+        return new ExecutionLease(this, workItem.Issue);
+    }
+
+    internal async Task ScheduleContinuationRetryAsync(
+        DispatchQueueWorkItem workItem,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(workItem);
+
+        var delay = retryDelayPlanner.GetContinuationDelay();
+        await ScheduleRetryInternalAsync(
+                workItem.Issue,
+                attempt: 1,
+                dueAt: timeProvider.GetUtcNow().Add(delay),
+                error: null,
+                logReason: "continuation",
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    internal async Task ScheduleFailureRetryAsync(
+        DispatchQueueWorkItem workItem,
+        Exception exception,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(workItem);
+        ArgumentNullException.ThrowIfNull(exception);
+
+        var nextAttempt = workItem.Attempt is null
+            ? 1
+            : workItem.Attempt.Value + 1;
+        var workflowOptions = await workflowOptionsProvider.GetCurrentAsync(cancellationToken).ConfigureAwait(false);
+        var delay = await retryDelayPlanner.GetFailureDelayAsync(
+                nextAttempt,
+                workflowOptions.Agent.MaxRetryBackoffMs,
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        await ScheduleRetryInternalAsync(
+                workItem.Issue,
+                nextAttempt,
+                timeProvider.GetUtcNow().Add(delay),
+                exception.Message,
+                "failure",
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    internal void ReleaseClaim(string issueId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(issueId);
+
+        lock (_stateLock)
+        {
+            _retrying.Remove(issueId);
+            _claimed.Remove(issueId);
+        }
+    }
+
+    internal TimeSpan? GetTimeUntilNextRetry()
+    {
+        lock (_stateLock)
+        {
+            if (_retrying.Count == 0)
+            {
+                return null;
+            }
+
+            var now = timeProvider.GetUtcNow();
+            var nextDueAt = _retrying.Values.Min(entry => entry.DueAt);
+            return nextDueAt <= now ? TimeSpan.Zero : nextDueAt - now;
+        }
+    }
+
+    internal Task WaitForRetrySignalAsync(CancellationToken cancellationToken)
+    {
+        return _retrySignal.WaitAsync(cancellationToken);
+    }
+
+    internal async Task ProcessDueRetriesAsync(CancellationToken cancellationToken)
+    {
+        RetryDispatchEntry[] dueEntries;
+        lock (_stateLock)
+        {
+            var now = timeProvider.GetUtcNow();
+            dueEntries = _retrying.Values
+                .Where(entry => entry.DueAt <= now)
+                .OrderBy(entry => entry.DueAt)
+                .ToArray();
+
+            foreach (var dueEntry in dueEntries)
+            {
+                _retrying.Remove(dueEntry.Issue.Id);
+            }
+        }
+
+        foreach (var dueEntry in dueEntries)
+        {
+            var enqueueResult = await QueueInternalAsync(
+                    dueEntry.Issue,
+                    dueEntry.Attempt,
+                    claimRequired: false,
+                    cancellationToken)
+                .ConfigureAwait(false);
+
+            if (enqueueResult == DispatchEnqueueResult.Enqueued)
+            {
+                logger.LogInformation(
+                    "Scheduled retry attempt {Attempt} for issue {IssueIdentifier} became ready for dispatch.",
+                    dueEntry.Attempt,
+                    dueEntry.Issue.Identifier);
+                continue;
+            }
+
+            if (enqueueResult == DispatchEnqueueResult.NoCapacity)
+            {
+                var workflowOptions = await workflowOptionsProvider.GetCurrentAsync(cancellationToken).ConfigureAwait(false);
+                var nextAttempt = dueEntry.Attempt + 1;
+                var delay = await retryDelayPlanner.GetFailureDelayAsync(
+                        nextAttempt,
+                        workflowOptions.Agent.MaxRetryBackoffMs,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+
+                await ScheduleRetryInternalAsync(
+                        dueEntry.Issue,
+                        nextAttempt,
+                        timeProvider.GetUtcNow().Add(delay),
+                        "no available orchestrator slots",
+                        "capacity",
+                        cancellationToken)
+                    .ConfigureAwait(false);
+                continue;
+            }
+
+            ReleaseClaim(dueEntry.Issue.Id);
+        }
+    }
+
+    private async ValueTask<DispatchEnqueueResult> QueueInternalAsync(
+        Issue issue,
+        int? attempt,
+        bool claimRequired,
+        CancellationToken cancellationToken)
+    {
         await RefreshConcurrencyGateAsync(cancellationToken).ConfigureAwait(false);
 
         lock (_stateLock)
         {
-            if (_claimed.Contains(issue.Id))
+            if (claimRequired)
             {
-                logger.LogDebug(
-                    "Issue {IssueIdentifier} is already claimed and will not be enqueued again.",
-                    issue.Identifier);
+                if (_claimed.Contains(issue.Id))
+                {
+                    logger.LogDebug(
+                        "Issue {IssueIdentifier} is already claimed and will not be enqueued again.",
+                        issue.Identifier);
 
+                    return DispatchEnqueueResult.AlreadyClaimed;
+                }
+            }
+            else if (_queued.ContainsKey(issue.Id) || _running.ContainsKey(issue.Id) || _retrying.ContainsKey(issue.Id))
+            {
                 return DispatchEnqueueResult.AlreadyClaimed;
             }
         }
@@ -72,7 +292,7 @@ public sealed class OrchestratorDispatchQueue(
 
         lock (_stateLock)
         {
-            if (!_claimed.Add(issue.Id))
+            if (claimRequired && !_claimed.Add(issue.Id))
             {
                 ReleaseExecutionSlot();
 
@@ -110,59 +330,34 @@ public sealed class OrchestratorDispatchQueue(
         }
     }
 
-    public DispatchQueueSnapshot GetSnapshot()
+    private Task ScheduleRetryInternalAsync(
+        Issue issue,
+        int attempt,
+        DateTimeOffset dueAt,
+        string? error,
+        string logReason,
+        CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         lock (_stateLock)
         {
-            return new DispatchQueueSnapshot(
-                _queued.Values
-                    .OrderBy(entry => entry.QueuedAt)
-                    .Select(
-                        entry => new QueuedDispatchSnapshot(
-                            entry.Issue.Id,
-                            entry.Issue.Identifier,
-                            entry.Issue.State,
-                            entry.Attempt,
-                            entry.QueuedAt))
-                    .ToArray(),
-                _running.Values
-                    .OrderBy(entry => entry.StartedAt)
-                    .Select(
-                        entry => new RunningDispatchSnapshot(
-                            entry.Issue.Id,
-                            entry.Issue.Identifier,
-                            entry.Issue.State,
-                            entry.Attempt,
-                            entry.StartedAt))
-                    .ToArray(),
-                _configuredConcurrency,
-                Math.Max(_configuredConcurrency - _queued.Count - _running.Count, 0));
+            _retrying[issue.Id] = new RetryDispatchEntry(issue, attempt, dueAt, string.IsNullOrWhiteSpace(error) ? null : error.Trim());
         }
-    }
 
-    internal IAsyncEnumerable<DispatchQueueWorkItem> ReadAllAsync(CancellationToken cancellationToken)
-    {
-        return _dispatchChannel.Reader.ReadAllAsync(cancellationToken);
-    }
-
-    internal IDisposable BeginExecution(DispatchQueueWorkItem workItem)
-    {
-        ArgumentNullException.ThrowIfNull(workItem);
-
-        var startedAt = timeProvider.GetUtcNow();
-
-        lock (_stateLock)
+        if (_retrySignal.CurrentCount == 0)
         {
-            _queued.Remove(workItem.Issue.Id);
-            _running[workItem.Issue.Id] = new RunningDispatchEntry(workItem.Issue, workItem.Attempt, startedAt);
+            _retrySignal.Release();
         }
 
         logger.LogInformation(
-            "Started queued execution for issue {IssueIdentifier} at {StartedAt}.",
-            workItem.Issue.Identifier,
-            startedAt);
+            "Scheduled retry attempt {Attempt} for issue {IssueIdentifier} due at {DueAt} ({Reason}).",
+            attempt,
+            issue.Identifier,
+            dueAt,
+            logReason);
 
-        return new ExecutionLease(this, workItem.Issue);
+        return Task.CompletedTask;
     }
 
     private async Task RefreshConcurrencyGateAsync(CancellationToken cancellationToken)
@@ -223,12 +418,15 @@ public sealed class OrchestratorDispatchQueue(
         }
     }
 
-    private void CompleteExecution(Issue issue)
+    private void CompleteExecution(Issue issue, bool releaseClaim)
     {
         lock (_stateLock)
         {
             _running.Remove(issue.Id);
-            _claimed.Remove(issue.Id);
+            if (releaseClaim)
+            {
+                _claimed.Remove(issue.Id);
+            }
         }
 
         ReleaseExecutionSlot();
@@ -263,9 +461,17 @@ public sealed class OrchestratorDispatchQueue(
 
     private sealed record RunningDispatchEntry(Issue Issue, int? Attempt, DateTimeOffset StartedAt);
 
-    private sealed class ExecutionLease(OrchestratorDispatchQueue owner, Issue issue) : IDisposable
+    private sealed record RetryDispatchEntry(Issue Issue, int Attempt, DateTimeOffset DueAt, string? Error);
+
+    internal sealed class ExecutionLease(OrchestratorDispatchQueue owner, Issue issue) : IDisposable
     {
         private int _disposed;
+        private bool _releaseClaim = true;
+
+        public void PreserveClaimForRetry()
+        {
+            _releaseClaim = false;
+        }
 
         public void Dispose()
         {
@@ -274,7 +480,7 @@ public sealed class OrchestratorDispatchQueue(
                 return;
             }
 
-            owner.CompleteExecution(issue);
+            owner.CompleteExecution(issue, _releaseClaim);
         }
     }
 }
