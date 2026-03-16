@@ -223,6 +223,8 @@ Notes:
 - The application layer keeps dispatch staging in a bounded in-memory channel and enforces
   `agent.max_concurrent_agents` with a semaphore-backed execution gate. Status consumers can read
   queued and running work directly from the in-memory dispatch snapshot.
+- Active sessions are tracked in-memory by normalized issue id, can expose live session metadata,
+  and support targeted reconciliation cancellation without affecting unrelated executions.
 - Per-issue workspaces live under `workspace.root` using a sanitized issue identifier that keeps
   only letters, digits, `.`, `_`, and `-`.
 - Workspace paths that resolve outside the configured `workspace.root` are rejected before any

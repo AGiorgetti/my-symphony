@@ -1,10 +1,12 @@
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Symphony.Domain.Runs;
 
 namespace Symphony.Application.Orchestration;
 
 public sealed class DispatchWorkerBackgroundService(
     OrchestratorDispatchQueue dispatchQueue,
+    ActiveSessionRegistry activeSessionRegistry,
     IQueuedIssueWorker queuedIssueWorker,
     ILogger<DispatchWorkerBackgroundService> logger) : BackgroundService
 {
@@ -54,10 +56,19 @@ public sealed class DispatchWorkerBackgroundService(
         CancellationToken cancellationToken)
     {
         using var executionLease = dispatchQueue.BeginExecution(workItem);
+        using var activeSession = activeSessionRegistry.BeginSession(workItem.Issue, workItem.Attempt, cancellationToken);
+        var executionContext = activeSession.CreateExecutionContext();
 
         try
         {
-            await queuedIssueWorker.ExecuteAsync(workItem.Issue, workItem.Attempt, cancellationToken).ConfigureAwait(false);
+            await queuedIssueWorker.ExecuteAsync(executionContext).ConfigureAwait(false);
+            executionContext.UpdateStatus(RunAttemptStatus.Succeeded);
+        }
+        catch (OperationCanceledException) when (activeSession.WasCanceledByReconciliation)
+        {
+            executionContext.UpdateStatus(
+                RunAttemptStatus.CanceledByReconciliation,
+                "Execution canceled after reconciliation marked the issue ineligible.");
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -67,6 +78,7 @@ public sealed class DispatchWorkerBackgroundService(
         }
         catch (Exception exception)
         {
+            executionContext.UpdateStatus(RunAttemptStatus.Failed, exception.Message);
             logger.LogError(
                 exception,
                 "Queued execution for issue {IssueIdentifier} failed.",
