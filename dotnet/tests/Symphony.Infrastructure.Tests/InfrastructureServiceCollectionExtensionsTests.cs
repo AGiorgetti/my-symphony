@@ -4,6 +4,7 @@ using Symphony.Application.Configuration;
 using Symphony.Application.DependencyInjection;
 using Symphony.Application.Polling;
 using Symphony.Abstractions.Processes;
+using Symphony.Abstractions.Trackers;
 using Symphony.Abstractions.Workflows;
 using Symphony.Abstractions.Workspaces;
 using Symphony.Infrastructure.Configuration;
@@ -30,6 +31,7 @@ public class InfrastructureServiceCollectionExtensionsTests
         Assert.NotNull(serviceProvider.GetService<InfrastructureServiceMarker>());
         Assert.IsType<WorkflowOptionsResolver>(serviceProvider.GetRequiredService<IWorkflowOptionsResolver>());
         Assert.IsType<WorkflowOptionsProvider>(serviceProvider.GetRequiredService<IWorkflowOptionsProvider>());
+        Assert.IsType<TrackerClientOptionsProvider>(serviceProvider.GetRequiredService<ITrackerClientOptionsProvider>());
         Assert.IsType<YamlWorkflowLoader>(serviceProvider.GetRequiredService<IWorkflowLoader>());
         Assert.IsType<ProcessRunner>(serviceProvider.GetRequiredService<IProcessRunner>());
         Assert.IsType<WorkspaceManager>(serviceProvider.GetRequiredService<IWorkspaceManager>());

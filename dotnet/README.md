@@ -65,6 +65,8 @@ Canonical API key environment variables:
   labels while issue state remains `open`.
   - Common label stages in the provided workflow: `backlog`, `todo`, `in-progress`,
     `human-review`, `merging`, `rework`, `done`.
+- The built-in GitHub adapter pages repository issue reads and excludes pull requests from
+  candidate issue results.
 - Start from [`WORKFLOW.github.md`](./WORKFLOW.github.md) and adapt labels/status flow for your
   repo process.
 
