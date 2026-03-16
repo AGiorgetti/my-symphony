@@ -218,6 +218,12 @@ Notes:
 - If a value is missing, defaults are used where defined by the implementation/spec.
 - `polling.interval_ms` controls the delay between poll ticks. After startup validation succeeds,
   Symphony runs an immediate tick and then continues on the configured interval.
+- Per-issue workspaces live under `workspace.root` using a sanitized issue identifier that keeps
+  only letters, digits, `.`, `_`, and `-`.
+- Workspace paths that resolve outside the configured `workspace.root` are rejected before any
+  directory creation or cleanup occurs.
+- `hooks.after_create` runs only when a workspace directory is newly created. `hooks.before_remove`
+  is best-effort during cleanup and does not block deletion.
 - `tracker.active_states` and `tracker.terminal_states` should be explicitly set for your tracker
   workflow.
 - If `WORKFLOW.md` is missing or has invalid YAML at startup, Symphony does not boot.
