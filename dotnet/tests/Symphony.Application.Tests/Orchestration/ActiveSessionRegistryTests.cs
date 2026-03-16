@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Symphony.Application.Orchestration;
+using Symphony.Application.Tests.Logging;
 using Symphony.Domain.Issues;
 using Symphony.Domain.Runs;
 using Symphony.Domain.Sessions;
@@ -69,6 +70,39 @@ public sealed class ActiveSessionRegistryTests
         Assert.NotNull(snapshot.Session);
         Assert.Equal("thread-9-turn-1", snapshot.Session!.SessionId);
         Assert.Equal(1, snapshot.Session.TurnCount);
+    }
+
+    [Fact]
+    public void ExecutionContext_logs_issue_and_session_fields_with_spec_names()
+    {
+        var logger = new TestLogger<ActiveSessionRegistry>();
+        var registry = new ActiveSessionRegistry(TimeProvider.System, logger);
+        using var trackedSession = registry.BeginSession(CreateIssue("ABC-10", "ABC-10"), attempt: 3, CancellationToken.None);
+        var context = trackedSession.CreateExecutionContext();
+
+        context.UpdateSession(
+            new LiveSessionMetadata(
+                "thread-10",
+                "turn-2",
+                codexAppServerPid: "5678",
+                lastCodexEvent: "turn_started",
+                lastCodexTimestamp: DateTimeOffset.UtcNow,
+                lastCodexMessage: "streaming",
+                codexInputTokens: 11,
+                codexOutputTokens: 12,
+                codexTotalTokens: 23,
+                lastReportedInputTokens: 11,
+                lastReportedOutputTokens: 12,
+                lastReportedTotalTokens: 23,
+                turnCount: 2));
+
+        var updateEntry = Assert.Single(
+            logger.Entries,
+            entry => entry.Message.Contains("session_tracking updated", StringComparison.Ordinal));
+
+        Assert.Equal("ABC-10", Assert.IsType<string>(updateEntry.State["issue_id"]));
+        Assert.Equal("ABC-10", Assert.IsType<string>(updateEntry.State["issue_identifier"]));
+        Assert.Equal("thread-10-turn-2", Assert.IsType<string>(updateEntry.State["session_id"]));
     }
 
     private static ActiveSessionRegistry CreateRegistry()

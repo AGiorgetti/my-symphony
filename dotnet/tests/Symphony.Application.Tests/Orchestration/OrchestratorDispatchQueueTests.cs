@@ -1,7 +1,9 @@
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Logging;
 using Symphony.Abstractions.Orchestration;
 using Symphony.Application.Configuration;
 using Symphony.Application.Orchestration;
+using Symphony.Application.Tests.Logging;
 using Symphony.Domain.Issues;
 using Symphony.Domain.Runs;
 
@@ -134,6 +136,43 @@ public sealed class OrchestratorDispatchQueueTests
         Assert.Empty(registry.GetActiveSessions());
     }
 
+    [Fact]
+    public async Task QueueAsync_logs_issue_identifiers_for_enqueue_and_execution()
+    {
+        var logger = new TestLogger<OrchestratorDispatchQueue>();
+        var queue = CreateQueue(new StaticWorkflowOptionsProvider(CreateWorkflowOptions(maxConcurrentAgents: 1)), logger);
+        var registry = CreateRegistry();
+        var worker = new BlockingQueuedIssueWorker();
+        var hostedService = CreateHostedService(queue, registry, worker);
+        var issue = CreateIssue("123", "ABC-123");
+
+        await hostedService.StartAsync(CancellationToken.None);
+        await queue.QueueAsync(issue);
+        await worker.ExecutionStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+        var enqueueEntry = Assert.Single(
+            logger.Entries,
+            entry => entry.Message.Contains("dispatch_enqueue completed", StringComparison.Ordinal));
+        var startEntry = Assert.Single(
+            logger.Entries,
+            entry => entry.Message.Contains("dispatch_execution started", StringComparison.Ordinal));
+
+        Assert.Equal("123", Assert.IsType<string>(enqueueEntry.State["issue_id"]));
+        Assert.Equal("ABC-123", Assert.IsType<string>(enqueueEntry.State["issue_identifier"]));
+        Assert.Equal("123", Assert.IsType<string>(startEntry.State["issue_id"]));
+        Assert.Equal("ABC-123", Assert.IsType<string>(startEntry.State["issue_identifier"]));
+
+        worker.AllowCompletion("ABC-123");
+        await worker.WaitForCompletionAsync("ABC-123", TimeSpan.FromSeconds(2));
+        await hostedService.StopAsync(CancellationToken.None);
+
+        var completedEntry = Assert.Single(
+            logger.Entries,
+            entry => entry.Message.Contains("dispatch_execution completed", StringComparison.Ordinal));
+        Assert.Equal("123", Assert.IsType<string>(completedEntry.State["issue_id"]));
+        Assert.Equal("ABC-123", Assert.IsType<string>(completedEntry.State["issue_identifier"]));
+    }
+
     private static OrchestratorDispatchQueue CreateQueue(int maxConcurrentAgents)
     {
         return CreateQueue(new StaticWorkflowOptionsProvider(CreateWorkflowOptions(maxConcurrentAgents)));
@@ -141,10 +180,17 @@ public sealed class OrchestratorDispatchQueueTests
 
     private static OrchestratorDispatchQueue CreateQueue(IWorkflowOptionsProvider workflowOptionsProvider)
     {
+        return CreateQueue(workflowOptionsProvider, NullLogger<OrchestratorDispatchQueue>.Instance);
+    }
+
+    private static OrchestratorDispatchQueue CreateQueue(
+        IWorkflowOptionsProvider workflowOptionsProvider,
+        ILogger<OrchestratorDispatchQueue> logger)
+    {
         return new OrchestratorDispatchQueue(
             workflowOptionsProvider,
             TimeProvider.System,
-            NullLogger<OrchestratorDispatchQueue>.Instance);
+            logger);
     }
 
     private static DispatchWorkerBackgroundService CreateHostedService(

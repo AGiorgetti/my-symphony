@@ -37,6 +37,7 @@ public sealed class WorkspaceManager(
                 await RunRequiredHookAsync(
                         "after_create",
                         options.Hooks.AfterCreate,
+                        issueIdentifier,
                         workspacePathInfo.WorkspacePath,
                         options.Hooks.TimeoutMs,
                         cancellationToken)
@@ -53,6 +54,12 @@ public sealed class WorkspaceManager(
             throw;
         }
 
+        logger.LogInformation(
+            "workspace_create completed issue_identifier={issue_identifier} workspace_key={workspace_key} workspace_path={workspace_path} created_now={created_now} outcome=completed",
+            issueIdentifier,
+            workspacePathInfo.WorkspaceKey,
+            workspacePathInfo.WorkspacePath,
+            createdNow);
         return new Workspace(workspacePathInfo.WorkspacePath, workspacePathInfo.WorkspaceKey, createdNow);
     }
 
@@ -68,6 +75,7 @@ public sealed class WorkspaceManager(
                 await RunBestEffortHookAsync(
                         "before_remove",
                         options.Hooks.BeforeRemove,
+                        issueIdentifier,
                         workspacePathInfo.WorkspacePath,
                         options.Hooks.TimeoutMs,
                         cancellationToken)
@@ -75,23 +83,34 @@ public sealed class WorkspaceManager(
             }
 
             Directory.Delete(workspacePathInfo.WorkspacePath, recursive: true);
+            logger.LogInformation(
+                "workspace_cleanup completed issue_identifier={issue_identifier} workspace_key={workspace_key} workspace_path={workspace_path} outcome=completed",
+                issueIdentifier,
+                workspacePathInfo.WorkspaceKey,
+                workspacePathInfo.WorkspacePath);
             return;
         }
 
         if (File.Exists(workspacePathInfo.WorkspacePath))
         {
             File.Delete(workspacePathInfo.WorkspacePath);
+            logger.LogInformation(
+                "workspace_cleanup completed issue_identifier={issue_identifier} workspace_key={workspace_key} workspace_path={workspace_path} outcome=completed",
+                issueIdentifier,
+                workspacePathInfo.WorkspaceKey,
+                workspacePathInfo.WorkspacePath);
         }
     }
 
     private async Task RunRequiredHookAsync(
         string hookName,
         string script,
+        string issueIdentifier,
         string workspacePath,
         int timeoutMs,
         CancellationToken cancellationToken)
     {
-        var result = await RunHookAsync(hookName, script, workspacePath, timeoutMs, cancellationToken).ConfigureAwait(false);
+        var result = await RunHookAsync(hookName, script, issueIdentifier, workspacePath, timeoutMs, cancellationToken).ConfigureAwait(false);
 
         if (result.ExitCode != 0)
         {
@@ -103,17 +122,19 @@ public sealed class WorkspaceManager(
     private async Task RunBestEffortHookAsync(
         string hookName,
         string script,
+        string issueIdentifier,
         string workspacePath,
         int timeoutMs,
         CancellationToken cancellationToken)
     {
         try
         {
-            var result = await RunHookAsync(hookName, script, workspacePath, timeoutMs, cancellationToken).ConfigureAwait(false);
+            var result = await RunHookAsync(hookName, script, issueIdentifier, workspacePath, timeoutMs, cancellationToken).ConfigureAwait(false);
             if (result.ExitCode != 0)
             {
                 logger.LogWarning(
-                    "Workspace hook '{HookName}' failed for '{WorkspacePath}' with exit code {ExitCode}. Cleanup will continue.",
+                    "workspace_hook failed issue_identifier={issue_identifier} hook_name={hook_name} workspace_path={workspace_path} exit_code={exit_code} outcome=failed",
+                    issueIdentifier,
                     hookName,
                     workspacePath,
                     result.ExitCode);
@@ -127,7 +148,8 @@ public sealed class WorkspaceManager(
         {
             logger.LogWarning(
                 exception,
-                "Workspace hook '{HookName}' failed for '{WorkspacePath}'. Cleanup will continue.",
+                "workspace_hook failed issue_identifier={issue_identifier} hook_name={hook_name} workspace_path={workspace_path} outcome=failed",
+                issueIdentifier,
                 hookName,
                 workspacePath);
         }
@@ -136,14 +158,17 @@ public sealed class WorkspaceManager(
     private async Task<ProcessRunResult> RunHookAsync(
         string hookName,
         string script,
+        string issueIdentifier,
         string workspacePath,
         int timeoutMs,
         CancellationToken cancellationToken)
     {
         logger.LogInformation(
-            "Running workspace hook '{HookName}' in '{WorkspacePath}'.",
+            "workspace_hook started issue_identifier={issue_identifier} hook_name={hook_name} workspace_path={workspace_path} timeout_ms={timeout_ms} outcome=started",
+            issueIdentifier,
             hookName,
-            workspacePath);
+            workspacePath,
+            timeoutMs);
 
         return await processRunner.RunAsync(
                 CreateHookRequest(script, workspacePath, timeoutMs),

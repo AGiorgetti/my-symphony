@@ -4,6 +4,8 @@ using Symphony.Infrastructure.DependencyInjection;
 
 var builder = WebApplication.CreateBuilder(args);
 
+builder.Logging.AddSymphonyLogging(builder.Configuration);
+
 builder.Services
     .AddSymphonyApplication()
     .AddSymphonyInfrastructure()

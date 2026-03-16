@@ -55,6 +55,12 @@ public sealed class DispatchWorkerBackgroundService(
         OrchestratorDispatchQueue.DispatchQueueWorkItem workItem,
         CancellationToken cancellationToken)
     {
+        logger.LogInformation(
+            "dispatch_worker started issue_id={issue_id} issue_identifier={issue_identifier} attempt={attempt} outcome=started",
+            workItem.Issue.Id,
+            workItem.Issue.Identifier,
+            workItem.Attempt);
+
         using var executionLease = dispatchQueue.BeginExecution(workItem);
         using var activeSession = activeSessionRegistry.BeginSession(workItem.Issue, workItem.Attempt, cancellationToken);
         var executionContext = activeSession.CreateExecutionContext();
@@ -69,20 +75,29 @@ public sealed class DispatchWorkerBackgroundService(
             executionContext.UpdateStatus(
                 RunAttemptStatus.CanceledByReconciliation,
                 "Execution canceled after reconciliation marked the issue ineligible.");
+            logger.LogInformation(
+                "dispatch_execution canceled issue_id={issue_id} issue_identifier={issue_identifier} session_id={session_id} reason=reconciliation outcome=canceled",
+                workItem.Issue.Id,
+                workItem.Issue.Identifier,
+                executionContext.SessionId);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            logger.LogDebug(
-                "Queued execution for issue {IssueIdentifier} was canceled during shutdown.",
-                workItem.Issue.Identifier);
+            logger.LogInformation(
+                "dispatch_execution canceled issue_id={issue_id} issue_identifier={issue_identifier} session_id={session_id} reason=shutdown outcome=canceled",
+                workItem.Issue.Id,
+                workItem.Issue.Identifier,
+                executionContext.SessionId);
         }
         catch (Exception exception)
         {
             executionContext.UpdateStatus(RunAttemptStatus.Failed, exception.Message);
             logger.LogError(
                 exception,
-                "Queued execution for issue {IssueIdentifier} failed.",
-                workItem.Issue.Identifier);
+                "dispatch_execution failed issue_id={issue_id} issue_identifier={issue_identifier} session_id={session_id} reason=worker_exception outcome=failed",
+                workItem.Issue.Id,
+                workItem.Issue.Identifier,
+                executionContext.SessionId);
         }
     }
 }

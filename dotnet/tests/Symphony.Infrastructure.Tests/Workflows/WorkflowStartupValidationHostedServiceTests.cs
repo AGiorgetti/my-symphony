@@ -45,7 +45,7 @@ public sealed class WorkflowStartupValidationHostedServiceTests
                 Assert.Contains("WORKFLOW.md", exception.Message);
                 Assert.Contains(
                     loggerProvider.Messages,
-                    message => message.Contains("Fix WORKFLOW.md before starting Symphony.", StringComparison.Ordinal));
+                    message => message.Contains("startup_validation failed", StringComparison.Ordinal));
             }
             finally
             {
@@ -95,7 +95,7 @@ public sealed class WorkflowStartupValidationHostedServiceTests
                 Assert.Contains("WORKFLOW.md", exception.Message);
                 Assert.Contains(
                     loggerProvider.Messages,
-                    message => message.Contains("Fix WORKFLOW.md before starting Symphony.", StringComparison.Ordinal));
+                    message => message.Contains("startup_validation failed", StringComparison.Ordinal));
             }
             finally
             {

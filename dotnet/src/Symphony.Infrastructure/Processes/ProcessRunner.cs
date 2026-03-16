@@ -21,6 +21,12 @@ public sealed class ProcessRunner(ILogger<ProcessRunner> logger) : IProcessRunne
         using var process = new Process { StartInfo = startInfo };
 
         var startedAt = DateTimeOffset.UtcNow;
+        logger.LogInformation(
+            "process_run started file_name={file_name} working_directory={working_directory} argument_count={argument_count} timeout_ms={timeout_ms} outcome=started",
+            request.FileName,
+            request.WorkingDirectory,
+            request.Arguments.Count,
+            request.Timeout?.TotalMilliseconds);
 
         if (!process.Start())
         {
@@ -46,14 +52,24 @@ public sealed class ProcessRunner(ILogger<ProcessRunner> logger) : IProcessRunne
             var standardError = await standardErrorTask.ConfigureAwait(false);
             var finishedAt = DateTimeOffset.UtcNow;
             var result = new ProcessRunResult(process.ExitCode, standardOutput, standardError, startedAt, finishedAt);
+            var durationMs = (result.FinishedAt - result.StartedAt).TotalMilliseconds;
 
             if (result.ExitCode != 0)
             {
                 logger.LogWarning(
-                    "Process '{FileName}' exited with code {ExitCode}. Standard error: {StandardError}",
+                    "process_run completed file_name={file_name} exit_code={exit_code} duration_ms={duration_ms} standard_error={standard_error} outcome=failed",
                     request.FileName,
                     result.ExitCode,
+                    durationMs,
                     result.StandardError);
+            }
+            else
+            {
+                logger.LogInformation(
+                    "process_run completed file_name={file_name} exit_code={exit_code} duration_ms={duration_ms} outcome=completed",
+                    request.FileName,
+                    result.ExitCode,
+                    durationMs);
             }
 
             return result;
@@ -70,6 +86,10 @@ public sealed class ProcessRunner(ILogger<ProcessRunner> logger) : IProcessRunne
             {
             }
 
+            logger.LogInformation(
+                "process_run canceled file_name={file_name} working_directory={working_directory} outcome=canceled",
+                request.FileName,
+                request.WorkingDirectory);
             throw;
         }
     }

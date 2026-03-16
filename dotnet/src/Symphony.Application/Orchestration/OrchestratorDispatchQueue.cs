@@ -50,8 +50,10 @@ public sealed class OrchestratorDispatchQueue(
             if (_claimed.Contains(issue.Id))
             {
                 logger.LogDebug(
-                    "Issue {IssueIdentifier} is already claimed and will not be enqueued again.",
-                    issue.Identifier);
+                    "dispatch_enqueue skipped issue_id={issue_id} issue_identifier={issue_identifier} attempt={attempt} reason=already_claimed outcome=skipped",
+                    issue.Id,
+                    issue.Identifier,
+                    attempt);
 
                 return DispatchEnqueueResult.AlreadyClaimed;
             }
@@ -62,8 +64,10 @@ public sealed class OrchestratorDispatchQueue(
         if (!acquiredSlot)
         {
             logger.LogDebug(
-                "Issue {IssueIdentifier} could not be enqueued because no execution slots are available.",
-                issue.Identifier);
+                "dispatch_enqueue skipped issue_id={issue_id} issue_identifier={issue_identifier} attempt={attempt} reason=no_capacity outcome=skipped",
+                issue.Id,
+                issue.Identifier,
+                attempt);
 
             return DispatchEnqueueResult.NoCapacity;
         }
@@ -77,8 +81,10 @@ public sealed class OrchestratorDispatchQueue(
                 ReleaseExecutionSlot();
 
                 logger.LogDebug(
-                    "Issue {IssueIdentifier} became claimed before it could be enqueued.",
-                    issue.Identifier);
+                    "dispatch_enqueue skipped issue_id={issue_id} issue_identifier={issue_identifier} attempt={attempt} reason=claimed_before_queue outcome=skipped",
+                    issue.Id,
+                    issue.Identifier,
+                    attempt);
 
                 return DispatchEnqueueResult.AlreadyClaimed;
             }
@@ -91,9 +97,11 @@ public sealed class OrchestratorDispatchQueue(
             await _dispatchChannel.Writer.WriteAsync(workItem, cancellationToken).ConfigureAwait(false);
 
             logger.LogInformation(
-                "Enqueued issue {IssueIdentifier} for dispatch attempt {Attempt}.",
+                "dispatch_enqueue completed issue_id={issue_id} issue_identifier={issue_identifier} attempt={attempt} queued_at={queued_at:O} outcome=enqueued",
+                issue.Id,
                 issue.Identifier,
-                attempt);
+                attempt,
+                workItem.QueuedAt);
 
             return DispatchEnqueueResult.Enqueued;
         }
@@ -158,8 +166,10 @@ public sealed class OrchestratorDispatchQueue(
         }
 
         logger.LogInformation(
-            "Started queued execution for issue {IssueIdentifier} at {StartedAt}.",
+            "dispatch_execution started issue_id={issue_id} issue_identifier={issue_identifier} attempt={attempt} started_at={started_at:O} outcome=started",
+            workItem.Issue.Id,
             workItem.Issue.Identifier,
+            workItem.Attempt,
             startedAt);
 
         return new ExecutionLease(this, workItem.Issue);
@@ -177,6 +187,9 @@ public sealed class OrchestratorDispatchQueue(
                 _concurrencyGate = new SemaphoreSlim(targetConcurrency, int.MaxValue);
                 _configuredConcurrency = targetConcurrency;
                 _pendingPermitReduction = 0;
+                logger.LogInformation(
+                    "dispatch_capacity completed max_concurrent_agents={max_concurrent_agents} outcome=configured",
+                    targetConcurrency);
                 return;
             }
 
@@ -193,12 +206,18 @@ public sealed class OrchestratorDispatchQueue(
                 if (_pendingPermitReduction >= permitsToAdd)
                 {
                     _pendingPermitReduction -= permitsToAdd;
+                    logger.LogInformation(
+                        "dispatch_capacity completed max_concurrent_agents={max_concurrent_agents} outcome=updated",
+                        targetConcurrency);
                     return;
                 }
 
                 permitsToAdd -= _pendingPermitReduction;
                 _pendingPermitReduction = 0;
                 _concurrencyGate.Release(permitsToAdd);
+                logger.LogInformation(
+                    "dispatch_capacity completed max_concurrent_agents={max_concurrent_agents} outcome=updated",
+                    targetConcurrency);
                 return;
             }
 
@@ -211,6 +230,9 @@ public sealed class OrchestratorDispatchQueue(
             }
 
             _pendingPermitReduction += permitsToRemove;
+            logger.LogInformation(
+                "dispatch_capacity completed max_concurrent_agents={max_concurrent_agents} outcome=updated",
+                targetConcurrency);
         }
     }
 
@@ -234,7 +256,8 @@ public sealed class OrchestratorDispatchQueue(
         ReleaseExecutionSlot();
 
         logger.LogInformation(
-            "Completed queued execution for issue {IssueIdentifier}.",
+            "dispatch_execution completed issue_id={issue_id} issue_identifier={issue_identifier} outcome=completed",
+            issue.Id,
             issue.Identifier);
     }
 
