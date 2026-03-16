@@ -24,6 +24,7 @@ public class InfrastructureServiceCollectionExtensionsTests
     {
         var services = new ServiceCollection();
         services.AddLogging();
+        services.AddSingleton<IIssueTrackerClient, StubIssueTrackerClient>();
         services.AddSymphonyApplication();
 
         services.AddSymphonyInfrastructure();
@@ -33,14 +34,41 @@ public class InfrastructureServiceCollectionExtensionsTests
         Assert.NotNull(serviceProvider.GetService<InfrastructureServiceMarker>());
         Assert.IsType<WorkflowOptionsResolver>(serviceProvider.GetRequiredService<IWorkflowOptionsResolver>());
         Assert.IsType<WorkflowOptionsProvider>(serviceProvider.GetRequiredService<IWorkflowOptionsProvider>());
+        Assert.IsType<WorkflowOptionsProvider>(serviceProvider.GetRequiredService<IWorkflowDefinitionProvider>());
+        Assert.Same(
+            serviceProvider.GetRequiredService<IWorkflowOptionsProvider>(),
+            serviceProvider.GetRequiredService<IWorkflowDefinitionProvider>());
         Assert.IsType<TrackerClientOptionsProvider>(serviceProvider.GetRequiredService<ITrackerClientOptionsProvider>());
         Assert.IsType<YamlWorkflowLoader>(serviceProvider.GetRequiredService<IWorkflowLoader>());
         Assert.IsType<ProcessRunner>(serviceProvider.GetRequiredService<IProcessRunner>());
         Assert.IsType<WorkspaceManager>(serviceProvider.GetRequiredService<IWorkspaceManager>());
         Assert.IsType<CodexQueuedIssueWorker>(serviceProvider.GetRequiredService<IQueuedIssueWorker>());
+        Assert.IsType<OrchestratorPollingIterationHandler>(serviceProvider.GetRequiredService<IPollingIterationHandler>());
         var hostedServices = serviceProvider.GetServices<IHostedService>().ToArray();
 
         Assert.Contains(hostedServices, service => service is WorkflowStartupValidationHostedService);
         Assert.Contains(hostedServices, service => service is PollingBackgroundService);
+    }
+
+    private sealed class StubIssueTrackerClient : IIssueTrackerClient
+    {
+        public Task<IReadOnlyList<Domain.Issues.Issue>> FetchCandidateIssuesAsync(CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<IReadOnlyList<Domain.Issues.Issue>>(Array.Empty<Domain.Issues.Issue>());
+        }
+
+        public Task<IReadOnlyList<Domain.Issues.Issue>> FetchIssuesByStatesAsync(
+            IReadOnlyCollection<string> stateNames,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<IReadOnlyList<Domain.Issues.Issue>>(Array.Empty<Domain.Issues.Issue>());
+        }
+
+        public Task<IReadOnlyList<Domain.Issues.Issue>> FetchIssueStatesByIdsAsync(
+            IReadOnlyCollection<string> issueIds,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<IReadOnlyList<Domain.Issues.Issue>>(Array.Empty<Domain.Issues.Issue>());
+        }
     }
 }

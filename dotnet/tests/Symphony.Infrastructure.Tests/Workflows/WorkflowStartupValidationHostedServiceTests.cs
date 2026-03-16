@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Symphony.Application.Configuration;
 using Symphony.Infrastructure.Configuration;
 using Symphony.Infrastructure.Workflows;
@@ -27,7 +28,7 @@ public sealed class WorkflowStartupValidationHostedServiceTests
         var loggerProvider = new TestLoggerProvider();
         using var loggerFactory = LoggerFactory.Create(builder => builder.AddProvider(loggerProvider));
         var service = new WorkflowStartupValidationHostedService(
-            new WorkflowOptionsProvider(new YamlWorkflowLoader(), new WorkflowOptionsResolver()),
+            new WorkflowOptionsProvider(new YamlWorkflowLoader(), new WorkflowOptionsResolver(), NullLogger<WorkflowOptionsProvider>.Instance),
             loggerFactory.CreateLogger<WorkflowStartupValidationHostedService>());
 
         await CurrentDirectoryGate.WaitAsync();
@@ -77,7 +78,7 @@ public sealed class WorkflowStartupValidationHostedServiceTests
         var loggerProvider = new TestLoggerProvider();
         using var loggerFactory = LoggerFactory.Create(builder => builder.AddProvider(loggerProvider));
         var service = new WorkflowStartupValidationHostedService(
-            new WorkflowOptionsProvider(new YamlWorkflowLoader(), new WorkflowOptionsResolver()),
+            new WorkflowOptionsProvider(new YamlWorkflowLoader(), new WorkflowOptionsResolver(), NullLogger<WorkflowOptionsProvider>.Instance),
             loggerFactory.CreateLogger<WorkflowStartupValidationHostedService>());
 
         await CurrentDirectoryGate.WaitAsync();

@@ -220,6 +220,12 @@ Notes:
 - If a value is missing, defaults are used where defined by the implementation/spec.
 - `polling.interval_ms` controls the delay between poll ticks. After startup validation succeeds,
   Symphony runs an immediate tick and then continues on the configured interval.
+- Each poll tick reconciles currently running issues before fetching new candidates. Terminal
+  tracker transitions cancel the active worker and trigger workspace cleanup; non-active,
+  non-terminal transitions cancel the worker without deleting the workspace.
+- Candidate dispatch order follows `SPEC.md`: priority `1..4` first, then oldest `created_at`,
+  then issue identifier. `Todo` issues with non-terminal blockers are skipped, and
+  `agent.max_concurrent_agents_by_state` can further limit dispatch by normalized tracker state.
 - The host defaults to JSON console logging through `Microsoft.Extensions.Logging`. Adjust
   `Logging:Console:FormatterOptions` in `appsettings*.json` to tune timestamps and scope emission.
 - The application layer keeps dispatch staging in a bounded in-memory channel and enforces
@@ -244,8 +250,9 @@ Notes:
 - `tracker.active_states` and `tracker.terminal_states` should be explicitly set for your tracker
   workflow.
 - If `WORKFLOW.md` is missing or has invalid YAML at startup, Symphony does not boot.
-- If a later reload fails, Symphony keeps running with the last known good workflow settings,
-  including the last valid poll interval, and logs the reload error until the file is fixed.
+- If a later reload fails, Symphony keeps running with the last known good workflow settings and
+  prompt template for future runs, including the last valid poll interval, and logs the reload
+  error until the file is fixed.
 
 ## Web dashboard
 
