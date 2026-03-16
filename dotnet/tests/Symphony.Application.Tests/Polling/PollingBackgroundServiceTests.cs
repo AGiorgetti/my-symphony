@@ -32,6 +32,7 @@ public sealed class PollingBackgroundServiceTests
 
                     return Task.CompletedTask;
                 }),
+            new PollingRefreshTrigger(TimeProvider.System),
             TimeProvider.System,
             NullLogger<PollingBackgroundService>.Instance);
 
@@ -71,6 +72,7 @@ public sealed class PollingBackgroundServiceTests
                         throw;
                     }
                 }),
+            new PollingRefreshTrigger(TimeProvider.System),
             TimeProvider.System,
             NullLogger<PollingBackgroundService>.Instance);
 
@@ -97,6 +99,7 @@ public sealed class PollingBackgroundServiceTests
                     firstInvocation.TrySetResult();
                     return Task.CompletedTask;
                 }),
+            new PollingRefreshTrigger(TimeProvider.System),
             TimeProvider.System,
             logger);
 
@@ -116,6 +119,44 @@ public sealed class PollingBackgroundServiceTests
         Assert.Contains(
             logger.Entries,
             entry => entry.Message.Contains("polling_service completed", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task RequestRefresh_wakes_the_polling_loop_before_the_interval_elapses()
+    {
+        var firstInvocation = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var secondInvocation = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var invocationCount = 0;
+        var refreshTrigger = new PollingRefreshTrigger(TimeProvider.System);
+        var service = new PollingBackgroundService(
+            new StaticWorkflowOptionsProvider(CreateWorkflowOptions(intervalMs: 30_000)),
+            new DelegatePollingIterationHandler(
+                (_, _) =>
+                {
+                    var currentInvocation = Interlocked.Increment(ref invocationCount);
+                    if (currentInvocation == 1)
+                    {
+                        firstInvocation.TrySetResult();
+                    }
+                    else if (currentInvocation == 2)
+                    {
+                        secondInvocation.TrySetResult();
+                    }
+
+                    return Task.CompletedTask;
+                }),
+            refreshTrigger,
+            TimeProvider.System,
+            NullLogger<PollingBackgroundService>.Instance);
+
+        await service.StartAsync(CancellationToken.None);
+        await firstInvocation.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+        refreshTrigger.RequestRefresh();
+        await secondInvocation.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        await service.StopAsync(CancellationToken.None);
+
+        Assert.Equal(2, invocationCount);
     }
 
     [Fact]
@@ -144,6 +185,7 @@ public sealed class PollingBackgroundServiceTests
 
                     return Task.CompletedTask;
                 }),
+            new PollingRefreshTrigger(TimeProvider.System),
             TimeProvider.System,
             NullLogger<PollingBackgroundService>.Instance);
 

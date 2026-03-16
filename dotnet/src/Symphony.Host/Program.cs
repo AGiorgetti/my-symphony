@@ -1,4 +1,5 @@
 using Symphony.Application.DependencyInjection;
+using Symphony.Host.Api;
 using Symphony.Host.Composition;
 using Symphony.Infrastructure.DependencyInjection;
 
@@ -14,5 +15,6 @@ builder.Services
 var app = builder.Build();
 
 app.MapGet("/", () => "Hello World!");
+app.MapSymphonyApi();
 
 app.Run();

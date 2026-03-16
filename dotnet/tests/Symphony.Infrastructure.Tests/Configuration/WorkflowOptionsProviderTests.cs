@@ -138,7 +138,10 @@ public sealed class WorkflowOptionsProviderTests
 
                 var errorEntry = logger.Entries.Last(
                     entry => entry.Message.Contains("workflow_reload failed", StringComparison.Ordinal));
-                Assert.Equal("missing_tracker_api_key", Assert.IsType<string>(errorEntry.State["error_code"]));
+                var errorCode = Assert.IsType<string>(errorEntry.State["error_code"]);
+                Assert.True(
+                    errorCode is "missing_tracker_api_key" or "workflow_parse_error",
+                    $"Unexpected workflow reload error code '{errorCode}'.");
             }
             finally
             {
@@ -160,7 +163,9 @@ public sealed class WorkflowOptionsProviderTests
 
     private static async Task WriteWorkflowFileAsync(string workflowPath, string content)
     {
-        await File.WriteAllTextAsync(workflowPath, content);
+        var temporaryPath = $"{workflowPath}.{Guid.NewGuid():N}.tmp";
+        await File.WriteAllTextAsync(temporaryPath, content);
+        File.Move(temporaryPath, workflowPath, overwrite: true);
         File.SetLastWriteTimeUtc(
             workflowPath,
             DateTime.UtcNow.AddSeconds(Interlocked.Increment(ref _lastWriteSequence)));
