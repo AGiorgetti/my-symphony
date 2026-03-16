@@ -3,9 +3,11 @@ using Symphony.Application.Configuration;
 using Symphony.Application.Polling;
 using Symphony.Abstractions.Processes;
 using Symphony.Abstractions.Workflows;
+using Symphony.Abstractions.Workspaces;
 using Symphony.Infrastructure.Configuration;
 using Symphony.Infrastructure.Processes;
 using Symphony.Infrastructure.Workflows;
+using Symphony.Infrastructure.Workspaces;
 
 namespace Symphony.Infrastructure.DependencyInjection;
 
@@ -22,6 +24,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddHostedService<WorkflowStartupValidationHostedService>();
         services.AddHostedService<PollingBackgroundService>();
         services.AddSingleton<IProcessRunner, ProcessRunner>();
+        services.AddSingleton<IWorkspaceManager, WorkspaceManager>();
 
         return services;
     }

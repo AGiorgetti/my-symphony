@@ -5,10 +5,12 @@ using Symphony.Application.DependencyInjection;
 using Symphony.Application.Polling;
 using Symphony.Abstractions.Processes;
 using Symphony.Abstractions.Workflows;
+using Symphony.Abstractions.Workspaces;
 using Symphony.Infrastructure.Configuration;
 using Symphony.Infrastructure.DependencyInjection;
 using Symphony.Infrastructure.Processes;
 using Symphony.Infrastructure.Workflows;
+using Symphony.Infrastructure.Workspaces;
 
 namespace Symphony.Infrastructure.Tests;
 
@@ -30,6 +32,7 @@ public class InfrastructureServiceCollectionExtensionsTests
         Assert.IsType<WorkflowOptionsProvider>(serviceProvider.GetRequiredService<IWorkflowOptionsProvider>());
         Assert.IsType<YamlWorkflowLoader>(serviceProvider.GetRequiredService<IWorkflowLoader>());
         Assert.IsType<ProcessRunner>(serviceProvider.GetRequiredService<IProcessRunner>());
+        Assert.IsType<WorkspaceManager>(serviceProvider.GetRequiredService<IWorkspaceManager>());
         var hostedServices = serviceProvider.GetServices<IHostedService>().ToArray();
 
         Assert.Contains(hostedServices, service => service is WorkflowStartupValidationHostedService);
