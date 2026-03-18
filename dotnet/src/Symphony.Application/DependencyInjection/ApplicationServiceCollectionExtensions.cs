@@ -18,6 +18,7 @@ public static class ApplicationServiceCollectionExtensions
         services.TryAddSingleton(TimeProvider.System);
         services.TryAddSingleton<PollingRefreshTrigger>();
         services.TryAddSingleton<PollingStatusTracker>();
+        services.TryAddSingleton<AttemptHistoryTracker>();
         services.TryAddSingleton<RetryDelayPlanner>();
         services.TryAddSingleton<OrchestratorDispatchQueue>();
         services.TryAddSingleton<IOrchestratorDispatchQueue>(serviceProvider => serviceProvider.GetRequiredService<OrchestratorDispatchQueue>());

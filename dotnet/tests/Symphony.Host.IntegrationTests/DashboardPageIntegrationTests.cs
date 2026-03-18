@@ -23,6 +23,7 @@ public sealed class DashboardPageIntegrationTests
             new StubRuntimeService(),
             new StaticDashboardStateService(
                 new DashboardSnapshot(
+                    new DateTimeOffset(2026, 3, 16, 15, 0, 0, TimeSpan.Zero),
                     "Healthy",
                     "Single-process in-memory",
                     new DateTimeOffset(2026, 3, 16, 15, 0, 0, TimeSpan.Zero),
@@ -32,6 +33,38 @@ public sealed class DashboardPageIntegrationTests
                     OutputTokens: 40,
                     TotalTokens: 140,
                     SecondsRunning: 300d,
+                    ActiveSessions:
+                    [
+                        new DashboardActiveSessionSnapshot(
+                            "ABC-1",
+                            "In Progress",
+                            "thread-1-turn-1",
+                            3,
+                            "turn_completed",
+                            "Applied changes",
+                            new DateTimeOffset(2026, 3, 16, 14, 55, 0, TimeSpan.Zero),
+                            new DateTimeOffset(2026, 3, 16, 14, 59, 0, TimeSpan.Zero),
+                            140)
+                    ],
+                    RetryQueue:
+                    [
+                        new DashboardRetrySnapshot(
+                            "ABC-2",
+                            2,
+                            new DateTimeOffset(2026, 3, 16, 15, 1, 0, TimeSpan.Zero),
+                            "retry later")
+                    ],
+                    RecentAttempts:
+                    [
+                        new DashboardRecentAttemptSnapshot(
+                            "ABC-3",
+                            1,
+                            "Retrying",
+                            new DateTimeOffset(2026, 3, 16, 14, 58, 30, TimeSpan.Zero),
+                            22.5d,
+                            "Tracker request failed",
+                            "thread-3-turn-2")
+                    ],
                     LastError: null)));
         var client = CreateHttpClient(app);
 
@@ -43,6 +76,12 @@ public sealed class DashboardPageIntegrationTests
         Assert.Contains("Service Health", html, StringComparison.Ordinal);
         Assert.Contains("Single-process in-memory", html, StringComparison.Ordinal);
         Assert.Contains("2026-03-16 15:00:00 UTC", html, StringComparison.Ordinal);
+        Assert.Contains("Active Sessions", html, StringComparison.Ordinal);
+        Assert.Contains("Retry Queue", html, StringComparison.Ordinal);
+        Assert.Contains("Recent Attempts", html, StringComparison.Ordinal);
+        Assert.Contains("ABC-1", html, StringComparison.Ordinal);
+        Assert.Contains("ABC-2", html, StringComparison.Ordinal);
+        Assert.Contains("ABC-3", html, StringComparison.Ordinal);
     }
 
     [Fact]

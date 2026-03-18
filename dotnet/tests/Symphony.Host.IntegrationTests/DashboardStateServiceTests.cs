@@ -13,21 +13,58 @@ public sealed class DashboardStateServiceTests
         {
             StateSnapshot = new OrchestratorStateSnapshot(
                 new DateTimeOffset(2026, 3, 16, 15, 0, 0, TimeSpan.Zero),
-                [],
-                [],
+                [
+                    new RunningIssueSnapshot(
+                        "1",
+                        "ABC-1",
+                        "In Progress",
+                        "thread-1-turn-1",
+                        4,
+                        "turn_completed",
+                        "Applied changes",
+                        new DateTimeOffset(2026, 3, 16, 14, 55, 0, TimeSpan.Zero),
+                        new DateTimeOffset(2026, 3, 16, 14, 59, 30, TimeSpan.Zero),
+                        120,
+                        45,
+                        165)
+                ],
+                [
+                    new Symphony.Abstractions.Orchestration.RetryDispatchSnapshot(
+                        "2",
+                        "ABC-2",
+                        2,
+                        new DateTimeOffset(2026, 3, 16, 15, 2, 0, TimeSpan.Zero),
+                        "retry later")
+                ],
                 new CodexTotalsSnapshot(120, 45, 165, 90d),
                 RateLimits: null)
         };
+        var attemptHistoryTracker = new AttemptHistoryTracker();
+        attemptHistoryTracker.Record(
+            "3",
+            "ABC-3",
+            1,
+            "Retrying",
+            new DateTimeOffset(2026, 3, 16, 14, 58, 0, TimeSpan.Zero),
+            new DateTimeOffset(2026, 3, 16, 14, 59, 0, TimeSpan.Zero),
+            "Tracker request failed",
+            "thread-3-turn-2");
         var pollingStatusTracker = new PollingStatusTracker();
         pollingStatusTracker.RecordStarted(new DateTimeOffset(2026, 3, 16, 14, 59, 0, TimeSpan.Zero));
         pollingStatusTracker.RecordCompleted(new DateTimeOffset(2026, 3, 16, 15, 0, 0, TimeSpan.Zero));
-        var service = new DashboardStateService(runtimeService, pollingStatusTracker);
+        var service = new DashboardStateService(runtimeService, attemptHistoryTracker, pollingStatusTracker);
 
         var snapshot = await service.GetSnapshotAsync();
 
         Assert.Equal("Healthy", snapshot.ServiceHealth);
         Assert.Equal("Single-process in-memory", snapshot.OrchestratorMode);
         Assert.Equal(new DateTimeOffset(2026, 3, 16, 15, 0, 0, TimeSpan.Zero), snapshot.LastPollTickAt);
+        Assert.Single(snapshot.ActiveSessions);
+        Assert.Single(snapshot.RetryQueue);
+        Assert.Single(snapshot.RecentAttempts);
+        Assert.Equal("ABC-1", snapshot.ActiveSessions[0].IssueIdentifier);
+        Assert.Equal("ABC-2", snapshot.RetryQueue[0].IssueIdentifier);
+        Assert.Equal("Retrying", snapshot.RecentAttempts[0].Outcome);
         Assert.Equal(165, snapshot.TotalTokens);
         Assert.Null(snapshot.LastError);
     }
@@ -36,10 +73,11 @@ public sealed class DashboardStateServiceTests
     public async Task GetSnapshotAsync_returns_degraded_dashboard_summary_after_failed_poll()
     {
         var runtimeService = new StubRuntimeService();
+        var attemptHistoryTracker = new AttemptHistoryTracker();
         var pollingStatusTracker = new PollingStatusTracker();
         pollingStatusTracker.RecordStarted(new DateTimeOffset(2026, 3, 16, 15, 10, 0, TimeSpan.Zero));
         pollingStatusTracker.RecordFailed(new DateTimeOffset(2026, 3, 16, 15, 11, 0, TimeSpan.Zero), "Tracker request failed");
-        var service = new DashboardStateService(runtimeService, pollingStatusTracker);
+        var service = new DashboardStateService(runtimeService, attemptHistoryTracker, pollingStatusTracker);
 
         var snapshot = await service.GetSnapshotAsync();
 
