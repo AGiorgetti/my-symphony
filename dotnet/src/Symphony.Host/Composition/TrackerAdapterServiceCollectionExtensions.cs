@@ -14,18 +14,11 @@ public static class TrackerAdapterServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(configuration);
 
-        if (!TrackerAdapterKinds.TryNormalize(configuration["tracker:kind"], out var trackerKind))
-        {
-            throw new InvalidOperationException(
-                $"Configuration value 'tracker:kind' must be one of: {string.Join(", ", TrackerAdapterKinds.All)}.");
-        }
+        services.AddGitHubTrackerAdapter();
+        services.AddAzureDevOpsTrackerAdapter();
+        services.AddLinearTrackerAdapter();
+        services.AddSingleton<IIssueTrackerClient, WorkflowDrivenIssueTrackerClient>();
 
-        return trackerKind switch
-        {
-            TrackerAdapterKinds.GitHub => services.AddGitHubTrackerAdapter(),
-            TrackerAdapterKinds.AzureDevOps => services.AddAzureDevOpsTrackerAdapter(),
-            TrackerAdapterKinds.Linear => services.AddLinearTrackerAdapter(),
-            _ => throw new InvalidOperationException($"Unsupported tracker:kind '{trackerKind}'.")
-        };
+        return services;
     }
 }

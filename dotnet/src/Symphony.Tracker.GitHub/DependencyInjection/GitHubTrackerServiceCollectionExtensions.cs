@@ -9,7 +9,7 @@ public static class GitHubTrackerServiceCollectionExtensions
     {
         ArgumentNullException.ThrowIfNull(services);
 
-        services.AddHttpClient<IIssueTrackerClient, GitHubIssueTrackerClient>(client =>
+        services.AddHttpClient<GitHubIssueTrackerClient>(client =>
         {
             client.Timeout = TimeSpan.FromSeconds(30);
         });
