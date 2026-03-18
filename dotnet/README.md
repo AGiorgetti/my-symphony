@@ -188,6 +188,10 @@ dotnet build -c Release
 dotnet test -c Release
 ```
 
+The PR workflow in [`.github/workflows/make-all.yml`](../.github/workflows/make-all.yml) runs the
+same solution-wide `dotnet test` suite, including the host integration checks for startup
+validation, API contracts, and the smoke orchestration path.
+
 ## Configuration
 
 The `WORKFLOW.md` file uses YAML front matter for configuration and a Markdown body for the Codex
