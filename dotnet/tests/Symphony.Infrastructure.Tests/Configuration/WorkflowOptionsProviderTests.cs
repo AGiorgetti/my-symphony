@@ -31,7 +31,8 @@ public sealed class WorkflowOptionsProviderTests
             """);
 
         var logger = new TestLogger<WorkflowOptionsProvider>();
-        using var provider = new WorkflowOptionsProvider(new YamlWorkflowLoader(), new WorkflowOptionsResolver(), logger);
+        var workflowLoadStatusTracker = new WorkflowLoadStatusTracker();
+        using var provider = CreateProvider(logger, workflowLoadStatusTracker);
 
         await CurrentDirectoryGate.WaitAsync();
 
@@ -67,6 +68,8 @@ public sealed class WorkflowOptionsProviderTests
                 Assert.Equal("Initial prompt for {{ issue.identifier }}", initialDefinition.PromptTemplate);
                 Assert.Equal(250, reloadedOptions.Polling.IntervalMs);
                 Assert.Equal("Updated prompt for {{ issue.title }}", reloadedDefinition.PromptTemplate);
+                Assert.Equal("Loaded", workflowLoadStatusTracker.GetSnapshot().Status);
+                Assert.Equal(250, workflowLoadStatusTracker.GetSnapshot().PollingIntervalMs);
                 Assert.Contains(
                     logger.Entries,
                     entry => entry.Message.Contains("workflow_reload completed", StringComparison.Ordinal));
@@ -102,7 +105,8 @@ public sealed class WorkflowOptionsProviderTests
             """);
 
         var logger = new TestLogger<WorkflowOptionsProvider>();
-        using var provider = new WorkflowOptionsProvider(new YamlWorkflowLoader(), new WorkflowOptionsResolver(), logger);
+        var workflowLoadStatusTracker = new WorkflowLoadStatusTracker();
+        using var provider = CreateProvider(logger, workflowLoadStatusTracker);
 
         await CurrentDirectoryGate.WaitAsync();
 
@@ -142,6 +146,11 @@ public sealed class WorkflowOptionsProviderTests
                 Assert.True(
                     errorCode is "missing_tracker_api_key" or "workflow_parse_error",
                     $"Unexpected workflow reload error code '{errorCode}'.");
+                var snapshot = workflowLoadStatusTracker.GetSnapshot();
+                Assert.Equal("ReloadFailedUsingLastKnownGood", snapshot.Status);
+                Assert.Equal(initialOptions.Polling.IntervalMs, snapshot.PollingIntervalMs);
+                Assert.Equal(errorCode, snapshot.LastErrorCode);
+                Assert.NotNull(snapshot.LastSuccessfulLoadAt);
             }
             finally
             {
@@ -152,6 +161,18 @@ public sealed class WorkflowOptionsProviderTests
         {
             CurrentDirectoryGate.Release();
         }
+    }
+
+    private static WorkflowOptionsProvider CreateProvider(
+        TestLogger<WorkflowOptionsProvider> logger,
+        WorkflowLoadStatusTracker workflowLoadStatusTracker)
+    {
+        return new WorkflowOptionsProvider(
+            new YamlWorkflowLoader(),
+            new WorkflowOptionsResolver(),
+            workflowLoadStatusTracker,
+            TimeProvider.System,
+            logger);
     }
 
     private static string CreateTemporaryDirectory()

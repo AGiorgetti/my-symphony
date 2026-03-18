@@ -133,6 +133,27 @@ public sealed class DispatchWorkerBackgroundService(
                 workItem.Issue.Identifier,
                 executionContext.SessionId);
         }
+        catch (IssueExecutionTimedOutException exception)
+        {
+            executionContext.UpdateStatus(RunAttemptStatus.TimedOut, exception.Message);
+            attemptHistoryTracker.Record(
+                workItem.Issue.Id,
+                workItem.Issue.Identifier,
+                workItem.Attempt,
+                "TimedOut",
+                attemptStartedAt,
+                timeProvider.GetUtcNow(),
+                exception.Message,
+                executionContext.SessionId);
+            logger.LogWarning(
+                exception,
+                "dispatch_execution timed_out issue_id={issue_id} issue_identifier={issue_identifier} session_id={session_id} reason=timeout outcome=timed_out",
+                workItem.Issue.Id,
+                workItem.Issue.Identifier,
+                executionContext.SessionId);
+            await dispatchQueue.ScheduleFailureRetryAsync(workItem, exception, cancellationToken).ConfigureAwait(false);
+            executionLease.PreserveClaimForRetry();
+        }
         catch (Exception exception)
         {
             executionContext.UpdateStatus(RunAttemptStatus.Failed, exception.Message);

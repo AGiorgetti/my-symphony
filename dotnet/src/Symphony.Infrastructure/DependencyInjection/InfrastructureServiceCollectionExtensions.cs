@@ -23,6 +23,8 @@ public static class InfrastructureServiceCollectionExtensions
 
         services.AddSingleton<InfrastructureServiceMarker>();
         services.AddSingleton<IWorkflowOptionsResolver, WorkflowOptionsResolver>();
+        services.AddSingleton<WorkflowLoadStatusTracker>();
+        services.AddSingleton<IWorkflowLoadStatusReader>(serviceProvider => serviceProvider.GetRequiredService<WorkflowLoadStatusTracker>());
         services.AddSingleton<WorkflowOptionsProvider>();
         services.AddSingleton<IWorkflowOptionsProvider>(serviceProvider => serviceProvider.GetRequiredService<WorkflowOptionsProvider>());
         services.AddSingleton<IWorkflowDefinitionProvider>(serviceProvider => serviceProvider.GetRequiredService<WorkflowOptionsProvider>());

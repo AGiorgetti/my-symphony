@@ -28,7 +28,7 @@ public sealed class WorkflowStartupValidationHostedServiceTests
         var loggerProvider = new TestLoggerProvider();
         using var loggerFactory = LoggerFactory.Create(builder => builder.AddProvider(loggerProvider));
         var service = new WorkflowStartupValidationHostedService(
-            new WorkflowOptionsProvider(new YamlWorkflowLoader(), new WorkflowOptionsResolver(), NullLogger<WorkflowOptionsProvider>.Instance),
+            CreateProvider(),
             loggerFactory.CreateLogger<WorkflowStartupValidationHostedService>());
 
         await CurrentDirectoryGate.WaitAsync();
@@ -78,7 +78,7 @@ public sealed class WorkflowStartupValidationHostedServiceTests
         var loggerProvider = new TestLoggerProvider();
         using var loggerFactory = LoggerFactory.Create(builder => builder.AddProvider(loggerProvider));
         var service = new WorkflowStartupValidationHostedService(
-            new WorkflowOptionsProvider(new YamlWorkflowLoader(), new WorkflowOptionsResolver(), NullLogger<WorkflowOptionsProvider>.Instance),
+            CreateProvider(),
             loggerFactory.CreateLogger<WorkflowStartupValidationHostedService>());
 
         await CurrentDirectoryGate.WaitAsync();
@@ -107,6 +107,16 @@ public sealed class WorkflowStartupValidationHostedServiceTests
         {
             CurrentDirectoryGate.Release();
         }
+    }
+
+    private static WorkflowOptionsProvider CreateProvider()
+    {
+        return new WorkflowOptionsProvider(
+            new YamlWorkflowLoader(),
+            new WorkflowOptionsResolver(),
+            new WorkflowLoadStatusTracker(),
+            TimeProvider.System,
+            NullLogger<WorkflowOptionsProvider>.Instance);
     }
 
     private sealed class TestLoggerProvider : ILoggerProvider

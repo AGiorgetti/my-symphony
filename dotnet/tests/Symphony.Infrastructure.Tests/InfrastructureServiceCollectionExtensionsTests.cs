@@ -38,6 +38,10 @@ public class InfrastructureServiceCollectionExtensionsTests
         Assert.Same(
             serviceProvider.GetRequiredService<IWorkflowOptionsProvider>(),
             serviceProvider.GetRequiredService<IWorkflowDefinitionProvider>());
+        Assert.IsType<WorkflowLoadStatusTracker>(serviceProvider.GetRequiredService<IWorkflowLoadStatusReader>());
+        Assert.Same(
+            serviceProvider.GetRequiredService<WorkflowLoadStatusTracker>(),
+            serviceProvider.GetRequiredService<IWorkflowLoadStatusReader>());
         Assert.IsType<TrackerClientOptionsProvider>(serviceProvider.GetRequiredService<ITrackerClientOptionsProvider>());
         Assert.IsType<YamlWorkflowLoader>(serviceProvider.GetRequiredService<IWorkflowLoader>());
         Assert.IsType<ProcessRunner>(serviceProvider.GetRequiredService<IProcessRunner>());

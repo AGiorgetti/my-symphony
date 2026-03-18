@@ -9,6 +9,7 @@ using Symphony.Application.Configuration;
 using Symphony.Application.Polling;
 using Symphony.Application.Runtime;
 using Symphony.Host.Api;
+using Symphony.Host.Health;
 
 namespace Symphony.Host.IntegrationTests;
 
@@ -17,6 +18,9 @@ public sealed class SymphonyApiEndpointRouteBuilderExtensionsTests
     [Fact]
     public async Task State_endpoint_returns_runtime_snapshot()
     {
+        var pollingStatusTracker = new PollingStatusTracker();
+        pollingStatusTracker.RecordStarted(new DateTimeOffset(2026, 3, 16, 14, 59, 55, TimeSpan.Zero));
+        pollingStatusTracker.RecordCompleted(new DateTimeOffset(2026, 3, 16, 14, 59, 55, TimeSpan.Zero));
         using var app = await StartApiApplicationAsync(
             new StubRuntimeService
             {
@@ -47,7 +51,18 @@ public sealed class SymphonyApiEndpointRouteBuilderExtensionsTests
                     ],
                     new CodexTotalsSnapshot(100, 40, 140, 300d),
                     RateLimits: null)
-            });
+            },
+            pollingStatusTracker,
+            new StaticWorkflowLoadStatusReader(
+                new WorkflowLoadStatusSnapshot(
+                    "Loaded",
+                    "C:\\repo\\WORKFLOW.md",
+                    new DateTimeOffset(2026, 3, 16, 14, 58, 0, TimeSpan.Zero),
+                    null,
+                    null,
+                    null,
+                    1_000)),
+            new FakeTimeProvider(new DateTimeOffset(2026, 3, 16, 15, 0, 0, TimeSpan.Zero)));
         var client = CreateHttpClient(app);
 
         var response = await client.GetAsync("/api/v1/state");
@@ -57,6 +72,9 @@ public sealed class SymphonyApiEndpointRouteBuilderExtensionsTests
         Assert.NotNull(payload);
         Assert.Equal(1, payload!.Counts.Running);
         Assert.Equal(1, payload.Counts.Retrying);
+        Assert.Equal("Healthy", payload.Health.Status);
+        Assert.Equal("Loaded", payload.Health.WorkflowLoadStatus);
+        Assert.Equal(5d, payload.Health.LastSuccessfulPollAgeSeconds);
         Assert.Equal("ABC-1", payload.Running[0].IssueIdentifier);
         Assert.Equal("ABC-2", payload.Retrying[0].IssueIdentifier);
     }
@@ -112,11 +130,22 @@ public sealed class SymphonyApiEndpointRouteBuilderExtensionsTests
         };
     }
 
-    private static async Task<WebApplication> StartApiApplicationAsync(IOrchestratorRuntimeService runtimeService)
+    private static async Task<WebApplication> StartApiApplicationAsync(
+        IOrchestratorRuntimeService runtimeService,
+        PollingStatusTracker? pollingStatusTracker = null,
+        IWorkflowLoadStatusReader? workflowLoadStatusReader = null,
+        TimeProvider? timeProvider = null)
     {
         var builder = WebApplication.CreateBuilder();
         builder.WebHost.UseUrls("http://127.0.0.1:0");
         builder.Services.AddSingleton<IOrchestratorRuntimeService>(runtimeService);
+        builder.Services.AddSingleton(pollingStatusTracker ?? new PollingStatusTracker());
+        builder.Services.AddSingleton<IWorkflowLoadStatusReader>(
+            workflowLoadStatusReader
+            ?? new StaticWorkflowLoadStatusReader(
+                new WorkflowLoadStatusSnapshot("Starting", null, null, null, null, null, null)));
+        builder.Services.AddSingleton(timeProvider ?? TimeProvider.System);
+        builder.Services.AddSingleton<ServiceHealthSnapshotProvider>();
         builder.Services.AddSingleton<IWorkflowOptionsProvider>(
             new StaticWorkflowOptionsProvider(
                 new WorkflowServiceOptions(
@@ -198,6 +227,22 @@ public sealed class SymphonyApiEndpointRouteBuilderExtensionsTests
         public Task<WorkflowServiceOptions> GetCurrentAsync(CancellationToken cancellationToken = default)
         {
             return Task.FromResult(workflowOptions);
+        }
+    }
+
+    private sealed class StaticWorkflowLoadStatusReader(WorkflowLoadStatusSnapshot snapshot) : IWorkflowLoadStatusReader
+    {
+        public WorkflowLoadStatusSnapshot GetSnapshot()
+        {
+            return snapshot;
+        }
+    }
+
+    private sealed class FakeTimeProvider(DateTimeOffset currentTime) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow()
+        {
+            return currentTime;
         }
     }
 }

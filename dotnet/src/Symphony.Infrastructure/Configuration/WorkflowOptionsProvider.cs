@@ -9,6 +9,8 @@ public sealed class WorkflowOptionsProvider : IWorkflowOptionsProvider, IWorkflo
 {
     private readonly IWorkflowLoader _workflowLoader;
     private readonly IWorkflowOptionsResolver _workflowOptionsResolver;
+    private readonly WorkflowLoadStatusTracker _workflowLoadStatusTracker;
+    private readonly TimeProvider _timeProvider;
     private readonly ILogger<WorkflowOptionsProvider> _logger;
     private readonly SemaphoreSlim _reloadGate = new(1, 1);
     private WorkflowSnapshot? _currentSnapshot;
@@ -20,10 +22,14 @@ public sealed class WorkflowOptionsProvider : IWorkflowOptionsProvider, IWorkflo
     public WorkflowOptionsProvider(
         IWorkflowLoader workflowLoader,
         IWorkflowOptionsResolver workflowOptionsResolver,
+        WorkflowLoadStatusTracker workflowLoadStatusTracker,
+        TimeProvider timeProvider,
         ILogger<WorkflowOptionsProvider> logger)
     {
         _workflowLoader = workflowLoader;
         _workflowOptionsResolver = workflowOptionsResolver;
+        _workflowLoadStatusTracker = workflowLoadStatusTracker;
+        _timeProvider = timeProvider;
         _logger = logger;
     }
 
@@ -109,6 +115,11 @@ public sealed class WorkflowOptionsProvider : IWorkflowOptionsProvider, IWorkflo
         }
         catch (Exception exception)
         {
+            _workflowLoadStatusTracker.RecordFailed(
+                workflowPath,
+                GetErrorCode(exception),
+                exception.Message,
+                _timeProvider.GetUtcNow());
             _logger.LogError(
                 exception,
                 "workflow_reload failed workflow_path={workflow_path} error_code={error_code} outcome=failed",
@@ -127,6 +138,7 @@ public sealed class WorkflowOptionsProvider : IWorkflowOptionsProvider, IWorkflo
     {
         var workflowDefinition = await _workflowLoader.LoadAsync(workflowPath, cancellationToken).ConfigureAwait(false);
         var workflowOptions = _workflowOptionsResolver.Resolve(workflowDefinition);
+        _workflowLoadStatusTracker.RecordLoaded(workflowPath, workflowOptions, _timeProvider.GetUtcNow());
 
         return new WorkflowSnapshot(
             workflowPath,

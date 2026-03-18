@@ -138,6 +138,48 @@ public sealed class WorkspaceManagerTests
         }
     }
 
+    [Fact]
+    public async Task DeleteForIssueAsync_rejects_workspace_root_path()
+    {
+        var workspaceRoot = CreateTemporaryWorkspaceRoot();
+
+        try
+        {
+            var manager = CreateWorkspaceManager(
+                workspaceRoot,
+                processRunner: new RecordingProcessRunner());
+
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => manager.DeleteForIssueAsync("."));
+
+            Assert.Contains("must stay inside the configured workspace root", exception.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            DeleteDirectoryIfPresent(workspaceRoot);
+        }
+    }
+
+    [Fact]
+    public async Task DeleteForIssueAsync_rejects_empty_workspace_key()
+    {
+        var workspaceRoot = CreateTemporaryWorkspaceRoot();
+
+        try
+        {
+            var manager = CreateWorkspaceManager(
+                workspaceRoot,
+                processRunner: new RecordingProcessRunner());
+
+            var exception = await Assert.ThrowsAsync<ArgumentException>(() => manager.DeleteForIssueAsync("   "));
+
+            Assert.Contains("empty string or composed entirely of whitespace", exception.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            DeleteDirectoryIfPresent(workspaceRoot);
+        }
+    }
+
     private static WorkspaceManager CreateWorkspaceManager(
         string workspaceRoot,
         RecordingProcessRunner processRunner,
@@ -208,7 +250,7 @@ public sealed class WorkspaceManagerTests
 
             if (exceptionFactory is not null)
             {
-                throw exceptionFactory(request);
+                return Task.FromException<ProcessRunResult>(exceptionFactory(request));
             }
 
             return Task.FromResult(

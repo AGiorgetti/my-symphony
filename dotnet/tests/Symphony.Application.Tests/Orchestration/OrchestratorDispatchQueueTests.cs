@@ -317,6 +317,32 @@ public sealed class OrchestratorDispatchQueueTests
         Assert.Equal("transient failure", attempt.Error);
     }
 
+    [Fact]
+    public async Task DispatchWorker_records_timeout_attempts_and_schedules_retry()
+    {
+        var timeProvider = TimeProvider.System;
+        var queue = CreateQueue(maxConcurrentAgents: 1);
+        var registry = CreateRegistry(timeProvider);
+        var attemptHistoryTracker = new AttemptHistoryTracker();
+        var worker = new ThrowingQueuedIssueWorker(
+            new IssueExecutionTimedOutException("worker timed out", new TimeoutException("timed out")));
+        var hostedService = CreateHostedService(queue, registry, attemptHistoryTracker, worker, timeProvider);
+
+        await hostedService.StartAsync(CancellationToken.None);
+        await queue.QueueAsync(CreateIssue("1", "ABC-1"));
+        await worker.ExecutionAttempted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        await WaitForConditionAsync(() => queue.GetSnapshot().Retrying.Count == 1, TimeSpan.FromSeconds(2));
+        await WaitForConditionAsync(() => attemptHistoryTracker.GetRecentAttempts().Count == 1, TimeSpan.FromSeconds(2));
+        await hostedService.StopAsync(CancellationToken.None);
+
+        var attempt = Assert.Single(attemptHistoryTracker.GetRecentAttempts());
+        var retry = Assert.Single(queue.GetSnapshot().Retrying);
+
+        Assert.Equal("TimedOut", attempt.Outcome);
+        Assert.Equal("worker timed out", attempt.Error);
+        Assert.Equal("worker timed out", retry.Error);
+    }
+
     private static OrchestratorDispatchQueue CreateQueue(int maxConcurrentAgents)
     {
         return CreateQueue(new StaticWorkflowOptionsProvider(CreateWorkflowOptions(maxConcurrentAgents)));

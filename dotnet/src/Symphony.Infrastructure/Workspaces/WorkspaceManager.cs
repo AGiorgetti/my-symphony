@@ -141,6 +141,15 @@ public sealed class WorkspaceManager(
                     result.ExitCode);
             }
         }
+        catch (ProcessRunTimedOutException exception)
+        {
+            logger.LogWarning(
+                exception,
+                "workspace_hook timed_out issue_identifier={issue_identifier} hook_name={hook_name} workspace_path={workspace_path} outcome=timed_out",
+                issueIdentifier,
+                hookName,
+                workspacePath);
+        }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
             throw;

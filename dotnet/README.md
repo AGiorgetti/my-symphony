@@ -241,11 +241,15 @@ Notes:
 - Successful worker exits schedule a one-second continuation retry. Failed worker exits are retried
   with exponential backoff starting at 10 seconds, capped by `agent.max_retry_backoff_ms`, and are
   surfaced through the in-memory retry snapshot.
+- Operator-facing health now degrades when the last successful poll becomes stale or when
+  `WORKFLOW.md` reload fails and Symphony falls back to the last-known-good workflow snapshot.
 - Active sessions are tracked in-memory by normalized issue id, can expose live session metadata,
   and support targeted reconciliation cancellation without affecting unrelated executions.
 - Worker attempts now create a validated workspace, optionally run `hooks.before_run`, launch Codex
   through `bash -lc <codex.command>`, send the `initialize` / `thread/start` / `turn/start`
   handshake, then run `hooks.after_run` as a best-effort cleanup step after the attempt ends.
+- Hook/process timeouts and Codex read/turn timeouts are recorded separately from ordinary
+  cancellations, surface as `TimedOut` run attempts, and still enter the standard retry backoff.
 - `codex.turn_sandbox_policy` is treated as a structured object and is forwarded to Codex in the
   `turn/start` payload instead of being flattened into a string.
 - Per-issue workspaces live under `workspace.root` using a sanitized issue identifier that keeps
@@ -272,7 +276,10 @@ The dashboard shell is implemented as an interactive-server Blazor page. It is a
 surface only: if dashboard rendering fails, the orchestrator and JSON API continue running.
 - The dashboard now includes active-session, retry-queue, and recent-attempt panels so operators
   can see live execution, next retry ETA, and concise outcome/error summaries without reading raw logs.
-- `GET /api/v1/state` for the current running/retrying snapshot, live token totals, and runtime counts
+- The dashboard health cards now expose last poll tick, last successful poll age, and workflow load
+  status so degraded polling or workflow-reload fallback is visible without reading logs.
+- `GET /api/v1/state` for the current running/retrying snapshot, live token totals, runtime counts,
+  and operator health fields such as poll staleness and workflow reload status
 - `GET /api/v1/{issueIdentifier}` for issue-specific runtime details with a `404` JSON error envelope when the issue is not tracked
 - `POST /api/v1/refresh` to queue an immediate poll-and-reconcile cycle; repeated requests coalesce while one is already pending
 
