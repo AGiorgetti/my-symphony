@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Symphony.Abstractions.Orchestration;
 using Symphony.Application.Configuration;
 using Symphony.Application.Orchestration;
+using Symphony.Application.Runtime;
 using Symphony.Application.Tests.Logging;
 using Symphony.Domain.Issues;
 using Symphony.Domain.Runs;
@@ -119,8 +120,9 @@ public sealed class OrchestratorDispatchQueueTests
     {
         var queue = CreateQueue(maxConcurrentAgents: 2);
         var registry = CreateRegistry();
+        var attemptHistoryTracker = new AttemptHistoryTracker();
         var worker = new BlockingQueuedIssueWorker();
-        var hostedService = CreateHostedService(queue, registry, worker);
+        var hostedService = CreateHostedService(queue, registry, attemptHistoryTracker, worker);
 
         await hostedService.StartAsync(CancellationToken.None);
         await queue.QueueAsync(CreateIssue("ABC-1", "ABC-1"));
@@ -149,8 +151,9 @@ public sealed class OrchestratorDispatchQueueTests
         var logger = new TestLogger<OrchestratorDispatchQueue>();
         var queue = CreateQueue(new StaticWorkflowOptionsProvider(CreateWorkflowOptions(maxConcurrentAgents: 1)), logger: logger);
         var registry = CreateRegistry();
+        var attemptHistoryTracker = new AttemptHistoryTracker();
         var worker = new BlockingQueuedIssueWorker();
-        var hostedService = CreateHostedService(queue, registry, worker);
+        var hostedService = CreateHostedService(queue, registry, attemptHistoryTracker, worker);
         var issue = CreateIssue("123", "ABC-123");
 
         await hostedService.StartAsync(CancellationToken.None);
@@ -198,8 +201,9 @@ public sealed class OrchestratorDispatchQueueTests
             new StaticWorkflowOptionsProvider(CreateWorkflowOptions(maxConcurrentAgents: 1)),
             logger: logger);
         var registry = CreateRegistry();
+        var attemptHistoryTracker = new AttemptHistoryTracker();
         var worker = new ThrowingQueuedIssueWorker(new InvalidOperationException("transient failure"));
-        var hostedService = CreateHostedService(queue, registry, worker);
+        var hostedService = CreateHostedService(queue, registry, attemptHistoryTracker, worker);
 
         await hostedService.StartAsync(CancellationToken.None);
         await queue.QueueAsync(CreateIssue("1", "ABC-1"));
@@ -227,8 +231,9 @@ public sealed class OrchestratorDispatchQueueTests
     {
         var queue = CreateQueue(maxConcurrentAgents: 1);
         var registry = CreateRegistry();
+        var attemptHistoryTracker = new AttemptHistoryTracker();
         var worker = new ThrowingQueuedIssueWorker(new NonTransientIssueExecutionException("do not retry"));
-        var hostedService = CreateHostedService(queue, registry, worker);
+        var hostedService = CreateHostedService(queue, registry, attemptHistoryTracker, worker);
         var issue = CreateIssue("1", "ABC-1");
 
         await hostedService.StartAsync(CancellationToken.None);
@@ -251,8 +256,9 @@ public sealed class OrchestratorDispatchQueueTests
             new RetryDelayPlanner(() => 1d),
             timeProvider);
         var registry = CreateRegistry(timeProvider);
+        var attemptHistoryTracker = new AttemptHistoryTracker();
         var worker = new FailOnceQueuedIssueWorker();
-        var dispatchHostedService = CreateHostedService(queue, registry, worker);
+        var dispatchHostedService = CreateHostedService(queue, registry, attemptHistoryTracker, worker, timeProvider);
         var retryHostedService = CreateRetryHostedService(queue, timeProvider);
 
         await dispatchHostedService.StartAsync(CancellationToken.None);
@@ -263,6 +269,52 @@ public sealed class OrchestratorDispatchQueueTests
         await dispatchHostedService.StopAsync(CancellationToken.None);
 
         Assert.Equal(new int?[] { null, 1 }, worker.Attempts.ToArray());
+    }
+
+    [Fact]
+    public async Task DispatchWorker_records_successful_attempts_for_dashboard_history()
+    {
+        var timeProvider = TimeProvider.System;
+        var queue = CreateQueue(maxConcurrentAgents: 1);
+        var registry = CreateRegistry(timeProvider);
+        var attemptHistoryTracker = new AttemptHistoryTracker();
+        var worker = new BlockingQueuedIssueWorker();
+        var hostedService = CreateHostedService(queue, registry, attemptHistoryTracker, worker, timeProvider);
+
+        await hostedService.StartAsync(CancellationToken.None);
+        await queue.QueueAsync(CreateIssue("1", "ABC-1"));
+        await worker.ExecutionStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+        worker.AllowCompletion("ABC-1");
+        await worker.WaitForCompletionAsync("ABC-1", TimeSpan.FromSeconds(2));
+        await WaitForConditionAsync(() => attemptHistoryTracker.GetRecentAttempts().Count == 1, TimeSpan.FromSeconds(2));
+        await hostedService.StopAsync(CancellationToken.None);
+
+        var attempt = Assert.Single(attemptHistoryTracker.GetRecentAttempts());
+        Assert.Equal("ABC-1", attempt.IssueIdentifier);
+        Assert.Equal("Succeeded", attempt.Outcome);
+        Assert.Null(attempt.Error);
+    }
+
+    [Fact]
+    public async Task DispatchWorker_records_retrying_attempts_for_dashboard_history()
+    {
+        var timeProvider = TimeProvider.System;
+        var queue = CreateQueue(maxConcurrentAgents: 1);
+        var registry = CreateRegistry(timeProvider);
+        var attemptHistoryTracker = new AttemptHistoryTracker();
+        var worker = new ThrowingQueuedIssueWorker(new InvalidOperationException("transient failure"));
+        var hostedService = CreateHostedService(queue, registry, attemptHistoryTracker, worker, timeProvider);
+
+        await hostedService.StartAsync(CancellationToken.None);
+        await queue.QueueAsync(CreateIssue("1", "ABC-1"));
+        await worker.ExecutionAttempted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        await WaitForConditionAsync(() => attemptHistoryTracker.GetRecentAttempts().Count == 1, TimeSpan.FromSeconds(2));
+        await hostedService.StopAsync(CancellationToken.None);
+
+        var attempt = Assert.Single(attemptHistoryTracker.GetRecentAttempts());
+        Assert.Equal("Retrying", attempt.Outcome);
+        Assert.Equal("transient failure", attempt.Error);
     }
 
     private static OrchestratorDispatchQueue CreateQueue(int maxConcurrentAgents)
@@ -300,9 +352,21 @@ public sealed class OrchestratorDispatchQueueTests
         ActiveSessionRegistry registry,
         IQueuedIssueWorker queuedIssueWorker)
     {
+        return CreateHostedService(queue, registry, new AttemptHistoryTracker(), queuedIssueWorker, timeProvider: null);
+    }
+
+    private static DispatchWorkerBackgroundService CreateHostedService(
+        OrchestratorDispatchQueue queue,
+        ActiveSessionRegistry registry,
+        AttemptHistoryTracker attemptHistoryTracker,
+        IQueuedIssueWorker queuedIssueWorker,
+        TimeProvider? timeProvider = null)
+    {
         return new DispatchWorkerBackgroundService(
             queue,
             registry,
+            attemptHistoryTracker,
+            timeProvider ?? TimeProvider.System,
             queuedIssueWorker,
             NullLogger<DispatchWorkerBackgroundService>.Instance);
     }

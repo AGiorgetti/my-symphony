@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Symphony.Application.Runtime;
 using Symphony.Domain.Runs;
 
 namespace Symphony.Application.Orchestration;
@@ -7,6 +8,8 @@ namespace Symphony.Application.Orchestration;
 public sealed class DispatchWorkerBackgroundService(
     OrchestratorDispatchQueue dispatchQueue,
     ActiveSessionRegistry activeSessionRegistry,
+    AttemptHistoryTracker attemptHistoryTracker,
+    TimeProvider timeProvider,
     IQueuedIssueWorker queuedIssueWorker,
     ILogger<DispatchWorkerBackgroundService> logger) : BackgroundService
 {
@@ -55,6 +58,8 @@ public sealed class DispatchWorkerBackgroundService(
         OrchestratorDispatchQueue.DispatchQueueWorkItem workItem,
         CancellationToken cancellationToken)
     {
+        var attemptStartedAt = timeProvider.GetUtcNow();
+
         logger.LogInformation(
             "dispatch_worker started issue_id={issue_id} issue_identifier={issue_identifier} attempt={attempt} outcome=started",
             workItem.Issue.Id,
@@ -69,14 +74,32 @@ public sealed class DispatchWorkerBackgroundService(
         {
             await queuedIssueWorker.ExecuteAsync(executionContext).ConfigureAwait(false);
             executionContext.UpdateStatus(RunAttemptStatus.Succeeded);
+            attemptHistoryTracker.Record(
+                workItem.Issue.Id,
+                workItem.Issue.Identifier,
+                workItem.Attempt,
+                "Succeeded",
+                attemptStartedAt,
+                timeProvider.GetUtcNow(),
+                sessionId: executionContext.SessionId);
             await dispatchQueue.ScheduleContinuationRetryAsync(workItem, cancellationToken).ConfigureAwait(false);
             executionLease.PreserveClaimForRetry();
         }
         catch (OperationCanceledException) when (activeSession.WasCanceledByReconciliation)
         {
+            const string cancellationError = "Execution canceled after reconciliation marked the issue ineligible.";
             executionContext.UpdateStatus(
                 RunAttemptStatus.CanceledByReconciliation,
-                "Execution canceled after reconciliation marked the issue ineligible.");
+                cancellationError);
+            attemptHistoryTracker.Record(
+                workItem.Issue.Id,
+                workItem.Issue.Identifier,
+                workItem.Attempt,
+                "Canceled",
+                attemptStartedAt,
+                timeProvider.GetUtcNow(),
+                cancellationError,
+                executionContext.SessionId);
             logger.LogInformation(
                 "dispatch_execution canceled issue_id={issue_id} issue_identifier={issue_identifier} session_id={session_id} reason=reconciliation outcome=canceled",
                 workItem.Issue.Id,
@@ -94,6 +117,15 @@ public sealed class DispatchWorkerBackgroundService(
         catch (NonTransientIssueExecutionException exception)
         {
             executionContext.UpdateStatus(RunAttemptStatus.Failed, exception.Message);
+            attemptHistoryTracker.Record(
+                workItem.Issue.Id,
+                workItem.Issue.Identifier,
+                workItem.Attempt,
+                "Failed",
+                attemptStartedAt,
+                timeProvider.GetUtcNow(),
+                exception.Message,
+                executionContext.SessionId);
             logger.LogWarning(
                 exception,
                 "dispatch_execution failed issue_id={issue_id} issue_identifier={issue_identifier} session_id={session_id} reason=non_transient outcome=failed_no_retry",
@@ -104,6 +136,15 @@ public sealed class DispatchWorkerBackgroundService(
         catch (Exception exception)
         {
             executionContext.UpdateStatus(RunAttemptStatus.Failed, exception.Message);
+            attemptHistoryTracker.Record(
+                workItem.Issue.Id,
+                workItem.Issue.Identifier,
+                workItem.Attempt,
+                "Retrying",
+                attemptStartedAt,
+                timeProvider.GetUtcNow(),
+                exception.Message,
+                executionContext.SessionId);
             logger.LogError(
                 exception,
                 "dispatch_execution failed issue_id={issue_id} issue_identifier={issue_identifier} session_id={session_id} reason=worker_exception outcome=failed",

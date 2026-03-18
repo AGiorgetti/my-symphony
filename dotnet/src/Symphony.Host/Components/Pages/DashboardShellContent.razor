@@ -28,46 +28,153 @@
         </article>
     </section>
 
-    <section class="detail-grid" aria-label="Runtime details">
-        <article class="detail-card">
-            <h2>Workload</h2>
-            <dl class="detail-list">
+    <section class="ops-strip" aria-label="Orchestrator totals">
+        <div class="ops-stat">
+            <span class="metric-label">Running Sessions</span>
+            <strong class="ops-value">@snapshot.RunningCount</strong>
+        </div>
+        <div class="ops-stat">
+            <span class="metric-label">Retry Queue</span>
+            <strong class="ops-value">@snapshot.RetryingCount</strong>
+        </div>
+        <div class="ops-stat">
+            <span class="metric-label">Token Totals</span>
+            <strong class="ops-value">@snapshot.TotalTokens</strong>
+            <span class="ops-meta">input @snapshot.InputTokens / output @snapshot.OutputTokens</span>
+        </div>
+        <div class="ops-stat">
+            <span class="metric-label">Runtime Seconds</span>
+            <strong class="ops-value">@snapshot.SecondsRunning.ToString("0.0")</strong>
+            <span class="ops-meta">Aggregate active-session runtime</span>
+        </div>
+    </section>
+
+    <section class="detail-grid" aria-label="Operational panels">
+        <article class="detail-card panel-card">
+            <div class="panel-heading">
                 <div>
-                    <dt>Running Sessions</dt>
-                    <dd>@snapshot.RunningCount</dd>
+                    <h2>Active Sessions</h2>
+                    <p>Live runs with current tracker state, session metadata, and token usage.</p>
                 </div>
-                <div>
-                    <dt>Retry Queue</dt>
-                    <dd>@snapshot.RetryingCount</dd>
-                </div>
-            </dl>
+            </div>
+
+            @if (snapshot.ActiveSessions.Count == 0)
+            {
+                <p class="empty-state">No active sessions are running right now.</p>
+            }
+            else
+            {
+                <ul class="panel-list">
+                    @foreach (var session in snapshot.ActiveSessions)
+                    {
+                        <li class="panel-item">
+                            <div class="panel-item-top">
+                                <strong>@session.IssueIdentifier</strong>
+                                <span class="pill pill--neutral">@session.State</span>
+                            </div>
+                            <p class="panel-meta">
+                                started @FormatTimestamp(session.StartedAt) · @FormatElapsed(session.StartedAt) live
+                            </p>
+                            <p class="panel-meta">
+                                session @(session.SessionId ?? "pending") · turns @session.TurnCount · tokens @session.TotalTokens
+                            </p>
+                            @if (!string.IsNullOrWhiteSpace(session.LastEvent) || !string.IsNullOrWhiteSpace(session.LastMessage))
+                            {
+                                <p class="panel-note">
+                                    Latest: @session.LastEvent
+                                    @if (!string.IsNullOrWhiteSpace(session.LastMessage))
+                                    {
+                                        <span> · @session.LastMessage</span>
+                                    }
+                                </p>
+                            }
+                        </li>
+                    }
+                </ul>
+            }
         </article>
-        <article class="detail-card">
-            <h2>Codex Totals</h2>
-            <dl class="detail-list">
+
+        <article class="detail-card panel-card">
+            <div class="panel-heading">
                 <div>
-                    <dt>Input Tokens</dt>
-                    <dd>@snapshot.InputTokens</dd>
+                    <h2>Retry Queue</h2>
+                    <p>Scheduled continuation and failure retries with their next retry ETA.</p>
                 </div>
-                <div>
-                    <dt>Output Tokens</dt>
-                    <dd>@snapshot.OutputTokens</dd>
-                </div>
-                <div>
-                    <dt>Total Tokens</dt>
-                    <dd>@snapshot.TotalTokens</dd>
-                </div>
-                <div>
-                    <dt>Seconds Running</dt>
-                    <dd>@snapshot.SecondsRunning.ToString("0.0")</dd>
-                </div>
-            </dl>
+            </div>
+
+            @if (snapshot.RetryQueue.Count == 0)
+            {
+                <p class="empty-state">No retries are queued at the moment.</p>
+            }
+            else
+            {
+                <ul class="panel-list">
+                    @foreach (var retry in snapshot.RetryQueue)
+                    {
+                        <li class="panel-item">
+                            <div class="panel-item-top">
+                                <strong>@retry.IssueIdentifier</strong>
+                                <span class="pill pill--warning">Retry @retry.Attempt</span>
+                            </div>
+                            <p class="panel-meta">
+                                ETA @FormatRetryEta(retry.DueAt) · due @FormatTimestamp(retry.DueAt)
+                            </p>
+                            @if (!string.IsNullOrWhiteSpace(retry.Error))
+                            {
+                                <p class="panel-note panel-note--warning">@retry.Error</p>
+                            }
+                        </li>
+                    }
+                </ul>
+            }
         </article>
+
+        <article class="detail-card panel-card">
+            <div class="panel-heading">
+                <div>
+                    <h2>Recent Attempts</h2>
+                    <p>Most recent run outcomes with concise error summaries for operator triage.</p>
+                </div>
+            </div>
+
+            @if (snapshot.RecentAttempts.Count == 0)
+            {
+                <p class="empty-state">Recent run attempts will appear here after the first worker completes.</p>
+            }
+            else
+            {
+                <ul class="panel-list">
+                    @foreach (var attempt in snapshot.RecentAttempts)
+                    {
+                        <li class="panel-item">
+                            <div class="panel-item-top">
+                                <strong>@attempt.IssueIdentifier</strong>
+                                <span class="pill @GetOutcomeClass(attempt.Outcome)">@attempt.Outcome</span>
+                            </div>
+                            <p class="panel-meta">
+                                @GetAttemptLabel(attempt.Attempt) · finished @FormatTimestamp(attempt.CompletedAt) · @FormatDuration(attempt.DurationSeconds)
+                            </p>
+                            @if (!string.IsNullOrWhiteSpace(attempt.SessionId))
+                            {
+                                <p class="panel-meta">session @attempt.SessionId</p>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(attempt.Error))
+                            {
+                                <p class="panel-note panel-note--warning">@attempt.Error</p>
+                            }
+                        </li>
+                    }
+                </ul>
+            }
+        </article>
+    </section>
+
+    <section class="detail-grid detail-grid--notes" aria-label="Operational notes">
         <article class="detail-card">
-            <h2>Operational Notes</h2>
+            <h2>Operator Notes</h2>
             <p>
-                API observers can use <code>/api/v1/state</code> and <code>/api/v1/refresh</code>. The
-                richer panels for sessions and retries land separately.
+                API observers can use <code>/api/v1/state</code> and <code>/api/v1/refresh</code>. Dashboard
+                failures must not stop orchestration or the API surface.
             </p>
             @if (!string.IsNullOrWhiteSpace(snapshot.LastError))
             {
@@ -79,6 +186,7 @@
 
 @code {
     private DashboardSnapshot snapshot = new(
+        GeneratedAt: DateTimeOffset.UnixEpoch,
         ServiceHealth: "Starting",
         OrchestratorMode: "Single-process in-memory",
         LastPollTickAt: null,
@@ -88,6 +196,9 @@
         OutputTokens: 0,
         TotalTokens: 0,
         SecondsRunning: 0d,
+        ActiveSessions: [],
+        RetryQueue: [],
+        RecentAttempts: [],
         LastError: null);
 
     protected override async Task OnInitializedAsync()
@@ -97,7 +208,7 @@
 
     private static string FormatTimestamp(DateTimeOffset? timestamp)
     {
-        return timestamp?.ToString("yyyy-MM-dd HH:mm:ss 'UTC'") ?? "Waiting for first tick";
+        return timestamp?.ToUniversalTime().ToString("yyyy-MM-dd HH:mm:ss 'UTC'") ?? "Waiting for first tick";
     }
 
     private static string GetHealthClass(string serviceHealth)
@@ -107,6 +218,49 @@
             "healthy" => "metric-card--healthy",
             "degraded" => "metric-card--degraded",
             _ => "metric-card--starting"
+        };
+    }
+
+    private string FormatRetryEta(DateTimeOffset dueAt)
+    {
+        var remaining = dueAt - snapshot.GeneratedAt;
+        if (remaining <= TimeSpan.Zero)
+        {
+            return "due now";
+        }
+
+        return remaining.TotalMinutes >= 1d
+            ? $"in {remaining.TotalMinutes:0.#} min"
+            : $"in {remaining.TotalSeconds:0}s";
+    }
+
+    private string FormatElapsed(DateTimeOffset startedAt)
+    {
+        var elapsed = snapshot.GeneratedAt - startedAt;
+        return FormatDuration(Math.Max(elapsed.TotalSeconds, 0d));
+    }
+
+    private static string FormatDuration(double durationSeconds)
+    {
+        return durationSeconds >= 60d
+            ? $"{durationSeconds / 60d:0.#} min"
+            : $"{durationSeconds:0.#} s";
+    }
+
+    private static string GetAttemptLabel(int? attempt)
+    {
+        return attempt is null ? "Initial run" : $"Attempt {attempt}";
+    }
+
+    private static string GetOutcomeClass(string outcome)
+    {
+        return outcome.ToLowerInvariant() switch
+        {
+            "succeeded" => "pill--success",
+            "retrying" => "pill--warning",
+            "failed" => "pill--danger",
+            "canceled" => "pill--neutral",
+            _ => "pill--neutral"
         };
     }
 
