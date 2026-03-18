@@ -21,6 +21,7 @@ Alignment policy:
 - Use plain ASP.NET Core on .NET 10 with Generic Host.
 - Use a long-running orchestrator implemented as `BackgroundService`.
 - Do not use Orleans or Akka.NET in v1.
+- The application and its execution paths must remain cross-platform across Windows, Linux, and macOS.
 
 2. Concurrency and orchestration
 - Use `System.Threading.Channels` to decouple polling and execution dispatch.
@@ -35,6 +36,7 @@ Alignment policy:
 4. External integrations
 - Prefer CLI invocation over library SDKs when interacting with external tools/services in execution paths.
 - Use `System.Diagnostics.Process` with explicit argument list and redirected stdout/stderr.
+- Process launch behavior must support Windows, Linux, and macOS without assuming a Unix-only shell environment.
 - Never run shell-interpolated commands with untrusted values.
 
 5. Dashboard and API
@@ -174,6 +176,8 @@ All tool and service interactions that are CLI-capable follow these requirements
 3. Treat non-zero exit codes as failures and capture stderr in logs.
 
 4. Never build a single shell command string from issue/workflow/user values.
+
+5. Choose process launch strategy and shell integration in a platform-aware way so the same workflow can execute on Windows, Linux, and macOS.
 
 ## Concurrency and Session Model
 
