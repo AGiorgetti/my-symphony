@@ -439,7 +439,10 @@ fields locally if they want stricter startup checks.
 
 - `command` (string shell command)
   - Default: `codex app-server`
-  - The runtime launches this command via `bash -lc` in the workspace directory.
+  - The runtime launches this command using a shell appropriate to the host OS in the workspace
+    directory.
+  - Conforming defaults include `pwsh -NoProfile -NonInteractive -Command <codex.command>` on
+    Windows and `sh -lc <codex.command>` on Linux/macOS.
   - The launched process must speak a compatible app-server protocol over stdio.
 - `approval_policy` (Codex `AskForApproval` value)
   - Default: implementation-defined.
@@ -931,7 +934,7 @@ Compatibility profile:
 Subprocess launch parameters:
 
 - Command: `codex.command`
-- Invocation: `bash -lc <codex.command>`
+- Invocation: host-OS-appropriate shell execution of `codex.command`
 - Working directory: workspace path
 - Stdout/stderr: separate streams
 - Framing: line-delimited protocol messages on stdout (JSON-RPC-like JSON per line)
@@ -939,6 +942,8 @@ Subprocess launch parameters:
 Notes:
 
 - The default command is `codex app-server`.
+- Conforming defaults include `pwsh -NoProfile -NonInteractive -Command <codex.command>` on
+  Windows and `sh -lc <codex.command>` on Linux/macOS.
 - Approval policy, cwd, and prompt are expressed in the protocol messages in Section 10.2.
 
 Recommended additional process settings:
@@ -2118,7 +2123,7 @@ Unless otherwise noted, Sections 17.1 through 17.7 are `Core Conformance`. Bulle
 
 ### 17.5 Coding-Agent App-Server Client
 
-- Launch command uses workspace cwd and invokes `bash -lc <codex.command>`
+- Launch command uses workspace cwd and a shell appropriate to the host OS for `codex.command`
 - Startup handshake sends `initialize`, `initialized`, `thread/start`, `turn/start`
 - `initialize` includes client identity/capabilities payload required by the targeted Codex
   app-server protocol

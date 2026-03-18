@@ -7,6 +7,16 @@ This directory documents the ASP.NET Core implementation of Symphony, based on
 > Symphony .NET is prototype software intended for evaluation in trusted environments and is
 > presented as-is.
 
+## Platform support
+
+Symphony .NET is intended to run cross-platform on Windows, Linux, and macOS.
+
+- Codex process startup and workflow hook execution use a shell appropriate to the host OS.
+- The current implementation uses `pwsh`/`powershell` command execution on Windows and `sh -lc`
+  execution on Linux/macOS.
+- Workflow authors should keep `codex.command` and hook scripts compatible with the target runtime
+  OS they intend to deploy on.
+
 ## How it works
 
 1. Polls a configured issue tracker adapter for candidate work.
@@ -246,8 +256,9 @@ Notes:
 - Active sessions are tracked in-memory by normalized issue id, can expose live session metadata,
   and support targeted reconciliation cancellation without affecting unrelated executions.
 - Worker attempts now create a validated workspace, optionally run `hooks.before_run`, launch Codex
-  through `bash -lc <codex.command>`, send the `initialize` / `thread/start` / `turn/start`
-  handshake, then run `hooks.after_run` as a best-effort cleanup step after the attempt ends.
+  through a shell appropriate to the host OS, send the `initialize` / `thread/start` /
+  `turn/start` handshake, then run `hooks.after_run` as a best-effort cleanup step after the
+  attempt ends.
 - Hook/process timeouts and Codex read/turn timeouts are recorded separately from ordinary
   cancellations, surface as `TimedOut` run attempts, and still enter the standard retry backoff.
 - `codex.turn_sandbox_policy` is treated as a structured object and is forwarded to Codex in the
