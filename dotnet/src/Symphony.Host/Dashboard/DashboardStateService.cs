@@ -1,19 +1,20 @@
 using Symphony.Application.Polling;
 using Symphony.Application.Runtime;
+using Symphony.Host.Health;
 
 namespace Symphony.Host.Dashboard;
 
 public sealed class DashboardStateService(
     IOrchestratorRuntimeService orchestratorRuntimeService,
     AttemptHistoryTracker attemptHistoryTracker,
-    PollingStatusTracker pollingStatusTracker) : IDashboardStateService
+    ServiceHealthSnapshotProvider serviceHealthSnapshotProvider) : IDashboardStateService
 {
     private const string InMemoryMode = "Single-process in-memory";
 
     public async Task<DashboardSnapshot> GetSnapshotAsync(CancellationToken cancellationToken = default)
     {
         var runtimeSnapshot = await orchestratorRuntimeService.GetStateSnapshotAsync(cancellationToken).ConfigureAwait(false);
-        var pollingSnapshot = pollingStatusTracker.GetSnapshot();
+        var healthSnapshot = serviceHealthSnapshotProvider.GetSnapshot();
         var activeSessions = runtimeSnapshot.Running
             .Select(
                 session => new DashboardActiveSessionSnapshot(
@@ -49,9 +50,13 @@ public sealed class DashboardStateService(
 
         return new DashboardSnapshot(
             runtimeSnapshot.GeneratedAt,
-            DetermineServiceHealth(pollingSnapshot),
+            healthSnapshot.Status,
             InMemoryMode,
-            pollingSnapshot.LastSuccessfulTickAt ?? pollingSnapshot.LastCompletedAt ?? pollingSnapshot.LastStartedAt,
+            healthSnapshot.LastPollTickAt,
+            healthSnapshot.LastSuccessfulPollAt,
+            healthSnapshot.LastSuccessfulPollAgeSeconds,
+            healthSnapshot.WorkflowLoadStatus,
+            healthSnapshot.WorkflowLastLoadedAt,
             runtimeSnapshot.Running.Count,
             runtimeSnapshot.Retrying.Count,
             runtimeSnapshot.CodexTotals.InputTokens,
@@ -61,22 +66,7 @@ public sealed class DashboardStateService(
             activeSessions,
             retryQueue,
             recentAttempts,
-            pollingSnapshot.LastError);
-    }
-
-    private static string DetermineServiceHealth(PollingStatusSnapshot pollingSnapshot)
-    {
-        if (pollingSnapshot.LastFailedAt is not null
-            && (pollingSnapshot.LastSuccessfulTickAt is null || pollingSnapshot.LastFailedAt > pollingSnapshot.LastSuccessfulTickAt))
-        {
-            return "Degraded";
-        }
-
-        if (pollingSnapshot.LastSuccessfulTickAt is not null)
-        {
-            return "Healthy";
-        }
-
-        return "Starting";
+            healthSnapshot.PollLastError,
+            healthSnapshot.WorkflowLastError);
     }
 }

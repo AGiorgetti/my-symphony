@@ -91,7 +91,11 @@ public sealed class ProcessRunnerTests
             ? new ProcessRunRequest("cmd", ["/c", "ping 127.0.0.1 -n 30 > nul"], CreateTemporaryDirectory(), timeout: TimeSpan.FromMilliseconds(200))
             : new ProcessRunRequest("/bin/sh", ["-c", "sleep 30"], CreateTemporaryDirectory(), timeout: TimeSpan.FromMilliseconds(200));
 
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => _runner.RunAsync(request));
+        var exception = await Assert.ThrowsAsync<ProcessRunTimedOutException>(() => _runner.RunAsync(request));
+
+        Assert.Equal(request.FileName, exception.FileName);
+        Assert.Equal(request.WorkingDirectory, exception.WorkingDirectory);
+        Assert.Equal(request.Timeout, exception.Timeout);
     }
 
     private static ProcessRunRequest CreateShellRequest(string script, string workingDirectory)

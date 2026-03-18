@@ -1,7 +1,9 @@
 using System.Text;
+using Microsoft.AspNetCore.Mvc;
 using Symphony.Abstractions.Orchestration;
 using Symphony.Application.Configuration;
 using Symphony.Application.Runtime;
+using Symphony.Host.Health;
 
 namespace Symphony.Host.Api;
 
@@ -15,15 +17,22 @@ public static class SymphonyApiEndpointRouteBuilderExtensions
 
         group.MapGet(
             "/state",
-            async Task<IResult> (IOrchestratorRuntimeService runtimeService, CancellationToken cancellationToken) =>
+            async Task<IResult> (
+                [FromServices] IOrchestratorRuntimeService runtimeService,
+                [FromServices] ServiceHealthSnapshotProvider serviceHealthSnapshotProvider,
+                CancellationToken cancellationToken) =>
             {
                 var snapshot = await runtimeService.GetStateSnapshotAsync(cancellationToken).ConfigureAwait(false);
-                return Results.Ok(ToStateResponse(snapshot));
+                return Results.Ok(ToStateResponse(snapshot, serviceHealthSnapshotProvider.GetSnapshot()));
             });
 
         group.MapGet(
             "/{issueIdentifier}",
-            async Task<IResult> (string issueIdentifier, IOrchestratorRuntimeService runtimeService, IWorkflowOptionsProvider workflowOptionsProvider, CancellationToken cancellationToken) =>
+            async Task<IResult> (
+                string issueIdentifier,
+                [FromServices] IOrchestratorRuntimeService runtimeService,
+                [FromServices] IWorkflowOptionsProvider workflowOptionsProvider,
+                CancellationToken cancellationToken) =>
             {
                 var snapshot = await runtimeService.GetIssueSnapshotAsync(issueIdentifier, cancellationToken).ConfigureAwait(false);
                 if (snapshot is null)
@@ -45,7 +54,7 @@ public static class SymphonyApiEndpointRouteBuilderExtensions
 
         group.MapPost(
             "/refresh",
-            IResult (IOrchestratorRuntimeService runtimeService) =>
+            IResult ([FromServices] IOrchestratorRuntimeService runtimeService) =>
             {
                 var receipt = runtimeService.RequestRefresh();
                 return Results.Accepted(
@@ -60,7 +69,7 @@ public static class SymphonyApiEndpointRouteBuilderExtensions
         return endpoints;
     }
 
-    private static StateResponseDto ToStateResponse(OrchestratorStateSnapshot snapshot)
+    private static StateResponseDto ToStateResponse(OrchestratorStateSnapshot snapshot, ServiceHealthSnapshot healthSnapshot)
     {
         var running = snapshot.Running
             .Select(
@@ -92,6 +101,17 @@ public static class SymphonyApiEndpointRouteBuilderExtensions
         return new StateResponseDto(
             snapshot.GeneratedAt,
             new StateCountsDto(running.Length, retrying.Length),
+            new HealthStatusDto(
+                healthSnapshot.Status,
+                healthSnapshot.LastPollTickAt,
+                healthSnapshot.LastSuccessfulPollAt,
+                healthSnapshot.LastSuccessfulPollAgeSeconds,
+                healthSnapshot.PollIsStale,
+                healthSnapshot.WorkflowLoadStatus,
+                healthSnapshot.WorkflowLastLoadedAt,
+                healthSnapshot.WorkflowPath,
+                healthSnapshot.PollLastError,
+                healthSnapshot.WorkflowLastError),
             running,
             retrying,
             new CodexTotalsDto(

@@ -187,6 +187,10 @@ internal sealed class CodexAppServerClient(
             {
                 throw new CodexAgentException("response_timeout", "Timed out waiting for Codex app-server response.", exception);
             }
+            catch (OperationCanceledException exception) when (!cancellationToken.IsCancellationRequested)
+            {
+                throw new CodexAgentException("response_timeout", "Timed out waiting for Codex app-server response.", exception);
+            }
 
             if (line is null)
             {

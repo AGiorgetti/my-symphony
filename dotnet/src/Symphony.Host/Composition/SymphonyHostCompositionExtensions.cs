@@ -2,6 +2,7 @@ using Symphony.Application.DependencyInjection;
 using Symphony.Host.Api;
 using Symphony.Host.Components;
 using Symphony.Host.Dashboard;
+using Symphony.Host.Health;
 using Symphony.Infrastructure.DependencyInjection;
 
 namespace Symphony.Host.Composition;
@@ -22,6 +23,7 @@ public static class SymphonyHostCompositionExtensions
             .AddSymphonyApplication()
             .AddSymphonyInfrastructure()
             .AddConfiguredTrackerAdapter(builder.Configuration);
+        builder.Services.AddSingleton<ServiceHealthSnapshotProvider>();
         builder.Services.AddSingleton<IDashboardStateService, DashboardStateService>();
 
         return builder;

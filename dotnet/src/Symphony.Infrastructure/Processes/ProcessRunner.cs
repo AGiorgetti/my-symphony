@@ -74,7 +74,7 @@ public sealed class ProcessRunner(ILogger<ProcessRunner> logger) : IProcessRunne
 
             return result;
         }
-        catch (OperationCanceledException) when (effectiveCancellationToken.IsCancellationRequested)
+        catch (OperationCanceledException exception) when (effectiveCancellationToken.IsCancellationRequested)
         {
             TryKill(process);
 
@@ -86,11 +86,25 @@ public sealed class ProcessRunner(ILogger<ProcessRunner> logger) : IProcessRunne
             {
             }
 
-            logger.LogInformation(
-                "process_run canceled file_name={file_name} working_directory={working_directory} outcome=canceled",
+            if (cancellationToken.IsCancellationRequested)
+            {
+                logger.LogInformation(
+                    "process_run canceled file_name={file_name} working_directory={working_directory} outcome=canceled",
+                    request.FileName,
+                    request.WorkingDirectory);
+                throw;
+            }
+
+            logger.LogWarning(
+                "process_run timed_out file_name={file_name} working_directory={working_directory} timeout_ms={timeout_ms} outcome=timed_out",
                 request.FileName,
-                request.WorkingDirectory);
-            throw;
+                request.WorkingDirectory,
+                request.Timeout?.TotalMilliseconds);
+            throw new ProcessRunTimedOutException(
+                request.FileName,
+                request.WorkingDirectory,
+                request.Timeout ?? Timeout.InfiniteTimeSpan,
+                exception);
         }
     }
 

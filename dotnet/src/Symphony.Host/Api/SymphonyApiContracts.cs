@@ -5,6 +5,7 @@ namespace Symphony.Host.Api;
 public sealed record StateResponseDto(
     [property: JsonPropertyName("generated_at")] DateTimeOffset GeneratedAt,
     [property: JsonPropertyName("counts")] StateCountsDto Counts,
+    [property: JsonPropertyName("health")] HealthStatusDto Health,
     [property: JsonPropertyName("running")] IReadOnlyList<RunningIssueDto> Running,
     [property: JsonPropertyName("retrying")] IReadOnlyList<RetryingIssueDto> Retrying,
     [property: JsonPropertyName("codex_totals")] CodexTotalsDto CodexTotals,
@@ -13,6 +14,18 @@ public sealed record StateResponseDto(
 public sealed record StateCountsDto(
     [property: JsonPropertyName("running")] int Running,
     [property: JsonPropertyName("retrying")] int Retrying);
+
+public sealed record HealthStatusDto(
+    [property: JsonPropertyName("status")] string Status,
+    [property: JsonPropertyName("last_poll_tick_at")] DateTimeOffset? LastPollTickAt,
+    [property: JsonPropertyName("last_successful_poll_at")] DateTimeOffset? LastSuccessfulPollAt,
+    [property: JsonPropertyName("last_successful_poll_age_seconds")] double? LastSuccessfulPollAgeSeconds,
+    [property: JsonPropertyName("poll_is_stale")] bool PollIsStale,
+    [property: JsonPropertyName("workflow_load_status")] string WorkflowLoadStatus,
+    [property: JsonPropertyName("workflow_last_loaded_at")] DateTimeOffset? WorkflowLastLoadedAt,
+    [property: JsonPropertyName("workflow_path")] string? WorkflowPath,
+    [property: JsonPropertyName("poll_last_error")] string? PollLastError,
+    [property: JsonPropertyName("workflow_last_error")] string? WorkflowLastError);
 
 public sealed record RunningIssueDto(
     [property: JsonPropertyName("issue_id")] string IssueId,

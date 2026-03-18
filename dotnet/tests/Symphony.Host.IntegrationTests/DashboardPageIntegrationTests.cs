@@ -27,6 +27,10 @@ public sealed class DashboardPageIntegrationTests
                     "Healthy",
                     "Single-process in-memory",
                     new DateTimeOffset(2026, 3, 16, 15, 0, 0, TimeSpan.Zero),
+                    new DateTimeOffset(2026, 3, 16, 14, 59, 30, TimeSpan.Zero),
+                    30d,
+                    "Loaded",
+                    new DateTimeOffset(2026, 3, 16, 14, 58, 0, TimeSpan.Zero),
                     RunningCount: 2,
                     RetryingCount: 1,
                     InputTokens: 100,
@@ -65,7 +69,8 @@ public sealed class DashboardPageIntegrationTests
                             "Tracker request failed",
                             "thread-3-turn-2")
                     ],
-                    LastError: null)));
+                    LastError: null,
+                    WorkflowLastError: null)));
         var client = CreateHttpClient(app);
 
         var response = await client.GetAsync("/");
@@ -74,8 +79,10 @@ public sealed class DashboardPageIntegrationTests
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Contains("Runtime Control Surface", html, StringComparison.Ordinal);
         Assert.Contains("Service Health", html, StringComparison.Ordinal);
+        Assert.Contains("Workflow Config", html, StringComparison.Ordinal);
         Assert.Contains("Single-process in-memory", html, StringComparison.Ordinal);
         Assert.Contains("2026-03-16 15:00:00 UTC", html, StringComparison.Ordinal);
+        Assert.Contains("Loaded", html, StringComparison.Ordinal);
         Assert.Contains("Active Sessions", html, StringComparison.Ordinal);
         Assert.Contains("Retry Queue", html, StringComparison.Ordinal);
         Assert.Contains("Recent Attempts", html, StringComparison.Ordinal);

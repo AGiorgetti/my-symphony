@@ -143,7 +143,68 @@ public sealed class CodexQueuedIssueWorkerTests
         }
     }
 
-    private static WorkflowServiceOptions CreateWorkflowOptions()
+    [Fact]
+    public async Task ExecuteAsync_translates_hook_timeout_to_issue_timeout()
+    {
+        var workspacePath = Path.Combine(Path.GetTempPath(), "symphony-runner-tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(workspacePath);
+
+        try
+        {
+            var worker = new CodexQueuedIssueWorker(
+                new StaticWorkflowOptionsProvider(CreateWorkflowOptions()),
+                new StaticWorkflowDefinitionProvider(new WorkflowDefinition(null, "Prompt")),
+                new StaticWorkspaceManager(new Workspace(workspacePath, "GH-21", createdNow: true)),
+                new RecordingProcessRunner(
+                    exceptionFactory: request => new ProcessRunTimedOutException(
+                        request.FileName,
+                        request.WorkingDirectory,
+                        request.Timeout ?? TimeSpan.FromMilliseconds(1))),
+                new WorkflowPromptRenderer(),
+                new CodexAppServerClient(new TestCodexProcessSessionFactory(), TimeProvider.System, NullLogger<CodexAppServerClient>.Instance),
+                NullLogger<CodexQueuedIssueWorker>.Instance);
+
+            using var testContext = CreateContext(attempt: null);
+
+            await Assert.ThrowsAsync<IssueExecutionTimedOutException>(() => worker.ExecuteAsync(testContext.Context));
+        }
+        finally
+        {
+            Directory.Delete(workspacePath, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_translates_codex_response_timeout_to_issue_timeout()
+    {
+        var workspacePath = Path.Combine(Path.GetTempPath(), "symphony-runner-tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(workspacePath);
+
+        try
+        {
+            var worker = new CodexQueuedIssueWorker(
+                new StaticWorkflowOptionsProvider(CreateWorkflowOptions(beforeRun: null, afterRun: null, readTimeoutMs: 50)),
+                new StaticWorkflowDefinitionProvider(new WorkflowDefinition(null, "Prompt")),
+                new StaticWorkspaceManager(new Workspace(workspacePath, "GH-21", createdNow: true)),
+                new RecordingProcessRunner(),
+                new WorkflowPromptRenderer(),
+                new CodexAppServerClient(new TestCodexProcessSessionFactory(), TimeProvider.System, NullLogger<CodexAppServerClient>.Instance),
+                NullLogger<CodexQueuedIssueWorker>.Instance);
+
+            using var testContext = CreateContext(attempt: null);
+
+            await Assert.ThrowsAsync<IssueExecutionTimedOutException>(() => worker.ExecuteAsync(testContext.Context));
+        }
+        finally
+        {
+            Directory.Delete(workspacePath, recursive: true);
+        }
+    }
+
+    private static WorkflowServiceOptions CreateWorkflowOptions(
+        string? beforeRun = "Write-Host before",
+        string? afterRun = "Write-Host after",
+        int readTimeoutMs = 5_000)
     {
         return new WorkflowServiceOptions(
             new WorkflowTrackerOptions(
@@ -160,8 +221,8 @@ public sealed class CodexQueuedIssueWorkerTests
             new WorkflowWorkspaceOptions(Path.Combine(Path.GetTempPath(), "symphony-runner-tests")),
             new WorkflowHookOptions(
                 null,
-                "Write-Host before",
-                "Write-Host after",
+                beforeRun,
+                afterRun,
                 null,
                 5_000),
             new WorkflowAgentOptions(1, 20, 300_000, new Dictionary<string, int>(StringComparer.Ordinal)),
@@ -174,7 +235,7 @@ public sealed class CodexQueuedIssueWorkerTests
                     ["type"] = "workspaceWrite"
                 },
                 60_000,
-                5_000,
+                readTimeoutMs,
                 300_000));
     }
 
@@ -225,7 +286,9 @@ public sealed class CodexQueuedIssueWorkerTests
         }
     }
 
-    private sealed class RecordingProcessRunner(IReadOnlyList<int>? exitCodes = null) : IProcessRunner
+    private sealed class RecordingProcessRunner(
+        IReadOnlyList<int>? exitCodes = null,
+        Func<ProcessRunRequest, Exception>? exceptionFactory = null) : IProcessRunner
     {
         private readonly Queue<int> _exitCodes = new((exitCodes ?? [0, 0]).ToArray());
 
@@ -234,6 +297,11 @@ public sealed class CodexQueuedIssueWorkerTests
         public Task<ProcessRunResult> RunAsync(ProcessRunRequest request, CancellationToken cancellationToken = default)
         {
             Requests.Add(request);
+            if (exceptionFactory is not null)
+            {
+                return Task.FromException<ProcessRunResult>(exceptionFactory(request));
+            }
+
             var exitCode = _exitCodes.Count > 0
                 ? _exitCodes.Dequeue()
                 : 0;

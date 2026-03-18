@@ -5,6 +5,10 @@ public sealed record DashboardSnapshot(
     string ServiceHealth,
     string OrchestratorMode,
     DateTimeOffset? LastPollTickAt,
+    DateTimeOffset? LastSuccessfulPollAt,
+    double? LastSuccessfulPollAgeSeconds,
+    string WorkflowLoadStatus,
+    DateTimeOffset? WorkflowLastLoadedAt,
     int RunningCount,
     int RetryingCount,
     long InputTokens,
@@ -14,7 +18,8 @@ public sealed record DashboardSnapshot(
     IReadOnlyList<DashboardActiveSessionSnapshot> ActiveSessions,
     IReadOnlyList<DashboardRetrySnapshot> RetryQueue,
     IReadOnlyList<DashboardRecentAttemptSnapshot> RecentAttempts,
-    string? LastError);
+    string? LastError,
+    string? WorkflowLastError);
 
 public sealed record DashboardActiveSessionSnapshot(
     string IssueIdentifier,

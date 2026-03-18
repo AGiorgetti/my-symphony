@@ -24,7 +24,12 @@
         <article class="metric-card">
             <span class="metric-label">Last Poll Tick</span>
             <strong class="metric-value">@FormatTimestamp(snapshot.LastPollTickAt)</strong>
-            <span class="metric-meta">Most recent started or completed orchestrator poll tick.</span>
+            <span class="metric-meta">@GetPollMessage(snapshot)</span>
+        </article>
+        <article class="metric-card">
+            <span class="metric-label">Workflow Config</span>
+            <strong class="metric-value">@snapshot.WorkflowLoadStatus</strong>
+            <span class="metric-meta">@GetWorkflowMessage(snapshot)</span>
         </article>
     </section>
 
@@ -190,6 +195,10 @@
         ServiceHealth: "Starting",
         OrchestratorMode: "Single-process in-memory",
         LastPollTickAt: null,
+        LastSuccessfulPollAt: null,
+        LastSuccessfulPollAgeSeconds: null,
+        WorkflowLoadStatus: "Starting",
+        WorkflowLastLoadedAt: null,
         RunningCount: 0,
         RetryingCount: 0,
         InputTokens: 0,
@@ -199,7 +208,8 @@
         ActiveSessions: [],
         RetryQueue: [],
         RecentAttempts: [],
-        LastError: null);
+        LastError: null,
+        WorkflowLastError: null);
 
     protected override async Task OnInitializedAsync()
     {
@@ -259,6 +269,8 @@
             "succeeded" => "pill--success",
             "retrying" => "pill--warning",
             "failed" => "pill--danger",
+            "timedout" => "pill--danger",
+            "stalled" => "pill--danger",
             "canceled" => "pill--neutral",
             _ => "pill--neutral"
         };
@@ -266,16 +278,54 @@
 
     private static string GetHealthMessage(DashboardSnapshot snapshot)
     {
+        if (string.Equals(snapshot.WorkflowLoadStatus, "ReloadFailedUsingLastKnownGood", StringComparison.Ordinal))
+        {
+            return "Workflow reload failed; the service is using the last-known-good configuration.";
+        }
+
         if (!string.IsNullOrWhiteSpace(snapshot.LastError))
         {
             return "Latest poll attempt failed; the orchestrator is still running.";
         }
 
+        if (string.Equals(snapshot.ServiceHealth, "Degraded", StringComparison.Ordinal)
+            && snapshot.LastSuccessfulPollAgeSeconds is double ageSeconds)
+        {
+            return $"Last successful poll is {FormatDuration(ageSeconds)} old.";
+        }
+
         return snapshot.ServiceHealth switch
         {
-            "Healthy" => "Recent poll ticks completed successfully.",
-            "Degraded" => "Recent poll tick failed; inspect logs for details.",
-            _ => "No successful poll tick has completed yet."
+            "Healthy" => "Workflow loaded and recent poll ticks are healthy.",
+            "Degraded" => "Health indicators are degraded; inspect logs for details.",
+            _ => "Waiting for the first successful workflow load and poll tick."
         };
+    }
+
+    private static string GetPollMessage(DashboardSnapshot snapshot)
+    {
+        if (snapshot.LastSuccessfulPollAt is null)
+        {
+            return "Waiting for the first successful orchestrator poll.";
+        }
+
+        var age = snapshot.LastSuccessfulPollAgeSeconds is double ageSeconds
+            ? FormatDuration(ageSeconds)
+            : "unknown age";
+        return $"Last success {FormatTimestamp(snapshot.LastSuccessfulPollAt)} ({age} ago).";
+    }
+
+    private static string GetWorkflowMessage(DashboardSnapshot snapshot)
+    {
+        if (string.Equals(snapshot.WorkflowLoadStatus, "ReloadFailedUsingLastKnownGood", StringComparison.Ordinal))
+        {
+            return string.IsNullOrWhiteSpace(snapshot.WorkflowLastError)
+                ? "Last workflow reload failed; continuing with the cached definition."
+                : $"Reload failed: {snapshot.WorkflowLastError}";
+        }
+
+        return snapshot.WorkflowLastLoadedAt is null
+            ? "Waiting for the initial workflow load."
+            : $"Last loaded {FormatTimestamp(snapshot.WorkflowLastLoadedAt)}.";
     }
 }
