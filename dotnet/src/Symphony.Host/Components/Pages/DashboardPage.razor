@@ -1,0 +1,18 @@
+@page "/"
+
+<ErrorBoundary>
+    <ChildContent>
+        <DashboardShellContent />
+    </ChildContent>
+    <ErrorContent>
+        <main class="dashboard-page">
+            <section class="hero">
+                <p class="eyebrow">Symphony</p>
+                <h1>Dashboard temporarily unavailable</h1>
+                <p class="lede">
+                    The UI hit an error while rendering. Orchestrator background work keeps running.
+                </p>
+            </section>
+        </main>
+    </ErrorContent>
+</ErrorBoundary>

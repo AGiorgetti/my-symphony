@@ -1,0 +1,127 @@
+@inject IDashboardStateService DashboardStateService
+
+<main class="dashboard-page">
+    <section class="hero">
+        <p class="eyebrow">Symphony</p>
+        <h1>Runtime Control Surface</h1>
+        <p class="lede">
+            Operator-facing dashboard for the in-memory orchestrator. The UI reflects runtime state but
+            is not required for orchestration correctness.
+        </p>
+    </section>
+
+    <section class="summary-grid" aria-label="System summary">
+        <article class="metric-card @(GetHealthClass(snapshot.ServiceHealth))">
+            <span class="metric-label">Service Health</span>
+            <strong class="metric-value">@snapshot.ServiceHealth</strong>
+            <span class="metric-meta">@GetHealthMessage(snapshot)</span>
+        </article>
+        <article class="metric-card">
+            <span class="metric-label">Orchestrator Mode</span>
+            <strong class="metric-value">@snapshot.OrchestratorMode</strong>
+            <span class="metric-meta">State is tracked in-process and served live.</span>
+        </article>
+        <article class="metric-card">
+            <span class="metric-label">Last Poll Tick</span>
+            <strong class="metric-value">@FormatTimestamp(snapshot.LastPollTickAt)</strong>
+            <span class="metric-meta">Most recent started or completed orchestrator poll tick.</span>
+        </article>
+    </section>
+
+    <section class="detail-grid" aria-label="Runtime details">
+        <article class="detail-card">
+            <h2>Workload</h2>
+            <dl class="detail-list">
+                <div>
+                    <dt>Running Sessions</dt>
+                    <dd>@snapshot.RunningCount</dd>
+                </div>
+                <div>
+                    <dt>Retry Queue</dt>
+                    <dd>@snapshot.RetryingCount</dd>
+                </div>
+            </dl>
+        </article>
+        <article class="detail-card">
+            <h2>Codex Totals</h2>
+            <dl class="detail-list">
+                <div>
+                    <dt>Input Tokens</dt>
+                    <dd>@snapshot.InputTokens</dd>
+                </div>
+                <div>
+                    <dt>Output Tokens</dt>
+                    <dd>@snapshot.OutputTokens</dd>
+                </div>
+                <div>
+                    <dt>Total Tokens</dt>
+                    <dd>@snapshot.TotalTokens</dd>
+                </div>
+                <div>
+                    <dt>Seconds Running</dt>
+                    <dd>@snapshot.SecondsRunning.ToString("0.0")</dd>
+                </div>
+            </dl>
+        </article>
+        <article class="detail-card">
+            <h2>Operational Notes</h2>
+            <p>
+                API observers can use <code>/api/v1/state</code> and <code>/api/v1/refresh</code>. The
+                richer panels for sessions and retries land separately.
+            </p>
+            @if (!string.IsNullOrWhiteSpace(snapshot.LastError))
+            {
+                <p class="detail-alert">Last poll error: @snapshot.LastError</p>
+            }
+        </article>
+    </section>
+</main>
+
+@code {
+    private DashboardSnapshot snapshot = new(
+        ServiceHealth: "Starting",
+        OrchestratorMode: "Single-process in-memory",
+        LastPollTickAt: null,
+        RunningCount: 0,
+        RetryingCount: 0,
+        InputTokens: 0,
+        OutputTokens: 0,
+        TotalTokens: 0,
+        SecondsRunning: 0d,
+        LastError: null);
+
+    protected override async Task OnInitializedAsync()
+    {
+        snapshot = await DashboardStateService.GetSnapshotAsync();
+    }
+
+    private static string FormatTimestamp(DateTimeOffset? timestamp)
+    {
+        return timestamp?.ToString("yyyy-MM-dd HH:mm:ss 'UTC'") ?? "Waiting for first tick";
+    }
+
+    private static string GetHealthClass(string serviceHealth)
+    {
+        return serviceHealth.ToLowerInvariant() switch
+        {
+            "healthy" => "metric-card--healthy",
+            "degraded" => "metric-card--degraded",
+            _ => "metric-card--starting"
+        };
+    }
+
+    private static string GetHealthMessage(DashboardSnapshot snapshot)
+    {
+        if (!string.IsNullOrWhiteSpace(snapshot.LastError))
+        {
+            return "Latest poll attempt failed; the orchestrator is still running.";
+        }
+
+        return snapshot.ServiceHealth switch
+        {
+            "Healthy" => "Recent poll ticks completed successfully.",
+            "Degraded" => "Recent poll tick failed; inspect logs for details.",
+            _ => "No successful poll tick has completed yet."
+        };
+    }
+}

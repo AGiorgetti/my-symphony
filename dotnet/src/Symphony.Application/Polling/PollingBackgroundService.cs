@@ -8,6 +8,7 @@ public sealed class PollingBackgroundService : BackgroundService
 {
     private readonly IPollingIterationHandler _pollingIterationHandler;
     private readonly PollingRefreshTrigger _pollingRefreshTrigger;
+    private readonly PollingStatusTracker _pollingStatusTracker;
     private readonly ILogger<PollingBackgroundService> _logger;
     private readonly TimeProvider _timeProvider;
     private readonly IWorkflowOptionsProvider _workflowOptionsProvider;
@@ -16,12 +17,14 @@ public sealed class PollingBackgroundService : BackgroundService
         IWorkflowOptionsProvider workflowOptionsProvider,
         IPollingIterationHandler pollingIterationHandler,
         PollingRefreshTrigger pollingRefreshTrigger,
+        PollingStatusTracker pollingStatusTracker,
         TimeProvider timeProvider,
         ILogger<PollingBackgroundService> logger)
     {
         _workflowOptionsProvider = workflowOptionsProvider;
         _pollingIterationHandler = pollingIterationHandler;
         _pollingRefreshTrigger = pollingRefreshTrigger;
+        _pollingStatusTracker = pollingStatusTracker;
         _timeProvider = timeProvider;
         _logger = logger;
     }
@@ -37,6 +40,8 @@ public sealed class PollingBackgroundService : BackgroundService
         {
             while (!stoppingToken.IsCancellationRequested)
             {
+                var tickStartedAt = _timeProvider.GetUtcNow();
+                _pollingStatusTracker.RecordStarted(tickStartedAt);
                 _logger.LogInformation(
                     "poll_tick started poll_interval_ms={poll_interval_ms} outcome=started",
                     currentOptions.Polling.IntervalMs);
@@ -44,6 +49,7 @@ public sealed class PollingBackgroundService : BackgroundService
                 try
                 {
                     await _pollingIterationHandler.ExecuteAsync(currentOptions, stoppingToken).ConfigureAwait(false);
+                    _pollingStatusTracker.RecordCompleted(_timeProvider.GetUtcNow());
                     _logger.LogInformation(
                         "poll_tick completed poll_interval_ms={poll_interval_ms} outcome=completed",
                         currentOptions.Polling.IntervalMs);
@@ -54,6 +60,7 @@ public sealed class PollingBackgroundService : BackgroundService
                 }
                 catch (Exception exception)
                 {
+                    _pollingStatusTracker.RecordFailed(_timeProvider.GetUtcNow(), exception.Message);
                     _logger.LogError(
                         exception,
                         "poll_tick failed poll_interval_ms={poll_interval_ms} outcome=failed",
