@@ -9,9 +9,22 @@ internal static class ShellCommandRequestFactory
         string workingDirectory,
         int timeoutMs)
     {
-        return OperatingSystem.IsWindows()
+        return Create(
+            OperatingSystem.IsWindows(),
+            command,
+            workingDirectory,
+            timeoutMs);
+    }
+
+    public static ProcessRunRequest Create(
+        bool isWindows,
+        string command,
+        string workingDirectory,
+        int timeoutMs)
+    {
+        return isWindows
             ? new ProcessRunRequest(
-                fileName: "pwsh",
+                fileName: "powershell",
                 arguments: ["-NoProfile", "-NonInteractive", "-Command", command],
                 workingDirectory: workingDirectory,
                 timeout: TimeSpan.FromMilliseconds(timeoutMs))
