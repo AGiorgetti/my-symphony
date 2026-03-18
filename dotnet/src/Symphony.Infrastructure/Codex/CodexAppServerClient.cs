@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Globalization;
 using System.Text.Json;
@@ -32,8 +33,9 @@ internal sealed class CodexAppServerClient(
                 context.CancellationToken)
             .ConfigureAwait(false);
 
+        var startupDiagnostics = new ConcurrentQueue<string>();
         using var stderrCancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(context.CancellationToken);
-        var standardErrorPump = PumpStandardErrorAsync(session, context, stderrCancellationTokenSource.Token);
+        var standardErrorPump = PumpStandardErrorAsync(session, context, startupDiagnostics, stderrCancellationTokenSource.Token);
 
         try
         {
@@ -62,7 +64,7 @@ internal sealed class CodexAppServerClient(
                     },
                     context.CancellationToken)
                 .ConfigureAwait(false);
-            _ = await ReadResponseAsync(session, 1, codexOptions.ReadTimeoutMs, context, context.CancellationToken).ConfigureAwait(false);
+            _ = await ReadResponseAsync(session, 1, codexOptions.ReadTimeoutMs, context, startupDiagnostics, context.CancellationToken).ConfigureAwait(false);
 
             await SendAsync(
                     session,
@@ -91,7 +93,7 @@ internal sealed class CodexAppServerClient(
                     },
                     context.CancellationToken)
                 .ConfigureAwait(false);
-            var threadStartResponse = await ReadResponseAsync(session, 2, codexOptions.ReadTimeoutMs, context, context.CancellationToken)
+            var threadStartResponse = await ReadResponseAsync(session, 2, codexOptions.ReadTimeoutMs, context, startupDiagnostics, context.CancellationToken)
                 .ConfigureAwait(false);
             var threadId = ExtractRequiredNestedId(threadStartResponse, "thread");
 
@@ -120,7 +122,7 @@ internal sealed class CodexAppServerClient(
                     },
                     context.CancellationToken)
                 .ConfigureAwait(false);
-            var turnStartResponse = await ReadResponseAsync(session, 3, codexOptions.ReadTimeoutMs, context, context.CancellationToken)
+            var turnStartResponse = await ReadResponseAsync(session, 3, codexOptions.ReadTimeoutMs, context, startupDiagnostics, context.CancellationToken)
                 .ConfigureAwait(false);
             var turnId = ExtractRequiredNestedId(turnStartResponse, "turn");
 
@@ -171,6 +173,7 @@ internal sealed class CodexAppServerClient(
         int expectedId,
         int readTimeoutMs,
         QueuedIssueExecutionContext context,
+        ConcurrentQueue<string> startupDiagnostics,
         CancellationToken cancellationToken)
     {
         while (true)
@@ -196,7 +199,7 @@ internal sealed class CodexAppServerClient(
             {
                 throw new CodexAgentException(
                     "port_exit",
-                    "Codex app-server exited before completing the startup handshake.");
+                    BuildStartupHandshakeExitMessage(session, startupDiagnostics));
             }
 
             JsonElement payload;
@@ -296,6 +299,7 @@ internal sealed class CodexAppServerClient(
     private async Task PumpStandardErrorAsync(
         ICodexProcessSession session,
         QueuedIssueExecutionContext context,
+        ConcurrentQueue<string> startupDiagnostics,
         CancellationToken cancellationToken)
     {
         while (!cancellationToken.IsCancellationRequested)
@@ -305,6 +309,8 @@ internal sealed class CodexAppServerClient(
             {
                 return;
             }
+
+            RecordStartupDiagnostic(startupDiagnostics, line);
 
             logger.LogInformation(
                 "codex_stderr completed issue_id={issue_id} issue_identifier={issue_identifier} session_id={session_id} diagnostic={diagnostic} outcome=completed",
@@ -480,6 +486,39 @@ internal sealed class CodexAppServerClient(
         throw new CodexAgentException("response_error", $"Codex app-server response was missing result.{propertyName}.id.");
     }
 
+    private static string BuildStartupHandshakeExitMessage(
+        ICodexProcessSession session,
+        ConcurrentQueue<string> startupDiagnostics)
+    {
+        var message = "Codex app-server exited before completing the startup handshake.";
+
+        if (session.ExitCode is { } exitCode)
+        {
+            message += $" exit_code={exitCode}.";
+        }
+
+        var diagnostics = string.Join(" | ", startupDiagnostics.ToArray());
+        if (!string.IsNullOrWhiteSpace(diagnostics))
+        {
+            message += $" stderr={diagnostics}";
+        }
+
+        return message;
+    }
+
+    private static void RecordStartupDiagnostic(ConcurrentQueue<string> startupDiagnostics, string line)
+    {
+        if (string.IsNullOrWhiteSpace(line))
+        {
+            return;
+        }
+
+        startupDiagnostics.Enqueue(line.Trim());
+        while (startupDiagnostics.Count > 8 && startupDiagnostics.TryDequeue(out _))
+        {
+        }
+    }
+
     private static string GetRequiredString(JsonElement element, string fieldName)
     {
         return element.ValueKind switch
@@ -637,6 +676,11 @@ internal interface ICodexProcessSessionFactory
 
 internal readonly record struct CodexProcessStartRequest(string Command, string WorkingDirectory);
 
+internal readonly record struct CodexProcessStartPlan(
+    string FileName,
+    IReadOnlyList<string> Arguments,
+    string WorkingDirectory);
+
 internal interface ICodexProcessSession : IAsyncDisposable
 {
     int? ProcessId { get; }
@@ -663,43 +707,59 @@ internal sealed class ProcessCodexProcessSessionFactory : ICodexProcessSessionFa
         ArgumentException.ThrowIfNullOrWhiteSpace(request.Command);
         ArgumentException.ThrowIfNullOrWhiteSpace(request.WorkingDirectory);
 
-        try
+        Exception? lastException = null;
+
+        foreach (var startPlan in CodexProcessStartPlanFactory.Create(request))
         {
-            var startInfo = new ProcessStartInfo
+            try
             {
-                FileName = "bash",
-                WorkingDirectory = request.WorkingDirectory,
-                UseShellExecute = false,
-                RedirectStandardInput = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true
-            };
-            startInfo.ArgumentList.Add("-lc");
-            startInfo.ArgumentList.Add(request.Command);
+                var process = new Process
+                {
+                    StartInfo = CreateStartInfo(startPlan)
+                };
 
-            var process = new Process
-            {
-                StartInfo = startInfo
-            };
+                if (!process.Start())
+                {
+                    process.Dispose();
+                    continue;
+                }
 
-            if (!process.Start())
-            {
-                throw new CodexAgentException("codex_not_found", $"Failed to launch Codex command '{request.Command}'.");
+                return Task.FromResult<ICodexProcessSession>(new ProcessCodexProcessSession(process));
             }
+            catch (Exception exception) when (exception is InvalidOperationException or System.ComponentModel.Win32Exception)
+            {
+                lastException = exception;
+            }
+        }
 
-            return Task.FromResult<ICodexProcessSession>(new ProcessCodexProcessSession(process));
-        }
-        catch (CodexAgentException)
+        var attemptedLaunchers = string.Join(", ", CodexProcessStartPlanFactory.Create(request).Select(plan => plan.FileName));
+        var message = $"Failed to launch Codex command '{request.Command}' using: {attemptedLaunchers}.";
+        if (lastException is not null)
         {
-            throw;
+            message += $" {lastException.Message}";
         }
-        catch (Exception exception)
+
+        throw new CodexAgentException("codex_not_found", message, lastException);
+    }
+
+    private static ProcessStartInfo CreateStartInfo(CodexProcessStartPlan startPlan)
+    {
+        var startInfo = new ProcessStartInfo
         {
-            throw new CodexAgentException(
-                "codex_not_found",
-                $"Failed to launch Codex command '{request.Command}'. {exception.Message}",
-                exception);
+            FileName = startPlan.FileName,
+            WorkingDirectory = startPlan.WorkingDirectory,
+            UseShellExecute = false,
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true
+        };
+
+        foreach (var argument in startPlan.Arguments)
+        {
+            startInfo.ArgumentList.Add(argument);
         }
+
+        return startInfo;
     }
 
     private sealed class ProcessCodexProcessSession(Process process) : ICodexProcessSession
@@ -778,6 +838,44 @@ internal sealed class ProcessCodexProcessSessionFactory : ICodexProcessSessionFa
                 ? readTask.WaitAsync(cancellationToken)
                 : readTask.WaitAsync(timeout.Value, cancellationToken);
         }
+    }
+}
+
+internal static class CodexProcessStartPlanFactory
+{
+    public static IReadOnlyList<CodexProcessStartPlan> Create(CodexProcessStartRequest request)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(request.Command);
+        ArgumentException.ThrowIfNullOrWhiteSpace(request.WorkingDirectory);
+
+        return OperatingSystem.IsWindows()
+            ? CreateWindowsPlans(request)
+            : [new CodexProcessStartPlan("sh", ["-lc", request.Command], request.WorkingDirectory)];
+    }
+
+    public static IReadOnlyList<CodexProcessStartPlan> Create(bool isWindows, CodexProcessStartRequest request)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(request.Command);
+        ArgumentException.ThrowIfNullOrWhiteSpace(request.WorkingDirectory);
+
+        return isWindows
+            ? CreateWindowsPlans(request)
+            : [new CodexProcessStartPlan("sh", ["-lc", request.Command], request.WorkingDirectory)];
+    }
+
+    private static IReadOnlyList<CodexProcessStartPlan> CreateWindowsPlans(CodexProcessStartRequest request)
+    {
+        return
+        [
+            new CodexProcessStartPlan(
+                "pwsh",
+                ["-NoProfile", "-NonInteractive", "-Command", request.Command],
+                request.WorkingDirectory),
+            new CodexProcessStartPlan(
+                "powershell",
+                ["-NoProfile", "-NonInteractive", "-Command", request.Command],
+                request.WorkingDirectory)
+        ];
     }
 }
 

@@ -135,6 +135,38 @@ public sealed class CodexAppServerClientTests
         Assert.True(sessionFactory.Session!.WasKilled);
     }
 
+    [Fact]
+    public async Task RunAsync_includes_stderr_when_process_exits_during_startup_handshake()
+    {
+        var sessionFactory = new TestCodexProcessSessionFactory(
+            async (line, session) =>
+            {
+                using var document = JsonDocument.Parse(line);
+                var root = document.RootElement;
+                var method = root.TryGetProperty("method", out var methodElement)
+                    ? methodElement.GetString()
+                    : null;
+
+                if (method == "initialize")
+                {
+                    session.EnqueueStderr("codex: command not found");
+                    session.Exit(127);
+                }
+
+                await Task.CompletedTask;
+            });
+        var client = new CodexAppServerClient(sessionFactory, TimeProvider.System, NullLogger<CodexAppServerClient>.Instance);
+        using var testContext = CreateContext();
+
+        var exception = await Assert.ThrowsAsync<CodexAgentException>(
+            () => client.RunAsync(testContext.Context, Path.GetTempPath(), "Prompt body", CreateCodexOptions()));
+
+        Assert.Equal("port_exit", exception.Code);
+        Assert.Contains("startup handshake", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("exit_code=127", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("command not found", exception.Message, StringComparison.Ordinal);
+    }
+
     private static WorkflowCodexOptions CreateCodexOptions()
     {
         return new WorkflowCodexOptions(
