@@ -77,6 +77,12 @@ public sealed class DashboardPageIntegrationTests
         var html = await response.Content.ReadAsStringAsync();
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains("<html lang=\"en\" class=\"dark\" data-theme=\"dark-yellow\">", html, StringComparison.Ordinal);
+        Assert.Contains("<link rel=\"stylesheet\" href=\"app.min.css\" />", html, StringComparison.Ordinal);
+        Assert.Contains("<link rel=\"stylesheet\" href=\"_content/Flowbite/flowbite.min.css\" />", html, StringComparison.Ordinal);
+        Assert.Contains("https://cdn.jsdelivr.net/npm/@floating-ui/core@1.6.13/dist/floating-ui.core.umd.min.js", html, StringComparison.Ordinal);
+        Assert.Contains("https://cdn.jsdelivr.net/npm/@floating-ui/dom@1.6.13/dist/floating-ui.dom.umd.min.js", html, StringComparison.Ordinal);
+        Assert.Contains("<script src=\"_content/Flowbite/flowbite.js\"></script>", html, StringComparison.Ordinal);
         Assert.Contains("Runtime Control Surface", html, StringComparison.Ordinal);
         Assert.Contains("Service Health", html, StringComparison.Ordinal);
         Assert.Contains("Workflow Config", html, StringComparison.Ordinal);
