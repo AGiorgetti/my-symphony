@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using Flowbite.Services;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Hosting.Server;
@@ -87,6 +88,10 @@ public sealed class DashboardPageIntegrationTests
         Assert.Contains("Runtime Control Surface", html, StringComparison.Ordinal);
         Assert.Contains("Service Health", html, StringComparison.Ordinal);
         Assert.Contains("Workflow Config", html, StringComparison.Ordinal);
+        Assert.Contains("Operator Dashboard", html, StringComparison.Ordinal);
+        Assert.Contains("href=\"/sessions\"", html, StringComparison.Ordinal);
+        Assert.Contains("Live sessions", html, StringComparison.Ordinal);
+        Assert.Contains(">2</span>", html, StringComparison.Ordinal);
         Assert.Contains("Single-process in-memory", html, StringComparison.Ordinal);
         Assert.Contains("2026-03-16 15:00:00 UTC", html, StringComparison.Ordinal);
         Assert.Contains("Loaded", html, StringComparison.Ordinal);
@@ -135,6 +140,7 @@ public sealed class DashboardPageIntegrationTests
         var builder = WebApplication.CreateBuilder();
         builder.WebHost.UseUrls("http://127.0.0.1:0");
         builder.Services.AddRazorComponents().AddInteractiveServerComponents();
+        builder.Services.AddFlowbite();
         builder.Services.AddSingleton<IOrchestratorRuntimeService>(runtimeService);
         builder.Services.AddSingleton<IDashboardStateService>(dashboardStateService);
         builder.Services.AddSingleton<IWorkflowOptionsProvider>(
