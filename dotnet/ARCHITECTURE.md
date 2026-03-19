@@ -13,6 +13,7 @@ Alignment policy:
 
 - Keep this document aligned with [../SPEC.md](../SPEC.md) and the implemented behavior whenever practical.
 - If implementation meaningfully changes behavior, update this document and [../SPEC.md](../SPEC.md) in the same change when possible.
+- For UI architecture decisions see [ARCHITECTURE_UI.md](ARCHITECTURE_UI.md), which extends this document and aligns with [../SPEC_UI.md](../SPEC_UI.md).
 - If immediate sync is not feasible, treat documentation drift as technical debt and reconcile it in the next practical change.
 
 ## Decision Summary

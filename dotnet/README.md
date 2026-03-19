@@ -1,7 +1,7 @@
 # Symphony .NET
 
 This directory documents the ASP.NET Core implementation of Symphony, based on
-[`SPEC.md`](../SPEC.md) at the repository root.
+[`SPEC.md`](../SPEC.md) and [`SPEC_UI.md`](../SPEC_UI.md) at the repository root.
 
 > [!WARNING]
 > Symphony .NET is prototype software intended for evaluation in trusted environments and is
@@ -302,7 +302,3 @@ surface only: if dashboard rendering fails, the orchestrator and JSON API contin
 - `WORKFLOW.azure-devops.md`: Azure DevOps workflow template
 - `WORKFLOW.linear.md`: Linear workflow template
 - `AGENTS.md`: coding conventions and engineering guidance for this implementation
-
-## License
-
-This project is licensed under the [Apache License 2.0](../LICENSE).

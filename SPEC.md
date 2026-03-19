@@ -4,6 +4,8 @@ Status: Draft v1 (language-agnostic)
 
 Purpose: Define a service that orchestrates coding agents to get project work done.
 
+See also: [`SPEC_UI.md`](SPEC_UI.md) — operator dashboard UI specification addendum.
+
 ## 1. Problem Statement
 
 Symphony is a long-running automation service that continuously reads work from an issue tracker
