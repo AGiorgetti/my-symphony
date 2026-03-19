@@ -303,6 +303,8 @@ surface only: if dashboard rendering fails, the orchestrator and JSON API contin
   can see live execution, next retry ETA, and concise outcome/error summaries without reading raw logs.
 - The dashboard health cards now expose last poll tick, last successful poll age, and workflow load
   status so degraded polling or workflow-reload fallback is visible without reading logs.
+- The sidebar footer includes a theme switcher for the built-in `dark-yellow`, `dark-blue`, and
+  `light-blue` palettes; the current browser choice is restored from `localStorage` on refresh.
 - `GET /api/v1/state` for the current running/retrying snapshot, live token totals, runtime counts,
   and operator health fields such as poll staleness and workflow reload status
 - `GET /api/v1/{issueIdentifier}` for issue-specific runtime details with a `404` JSON error envelope when the issue is not tracked

@@ -3,6 +3,7 @@
 @using System.Globalization
 @using Flowbite.Layout
 @inject IDashboardStateService DashboardStateService
+@inject IThemeService ThemeService
 
 <div class="min-h-screen bg-transparent text-[var(--color-on-surface-primary)]">
     <Sidebar @ref="_sidebar"
@@ -20,6 +21,10 @@
                 Sessions
             </SidebarItem>
         </SidebarItemGroup>
+
+        <div class="mt-auto border-t border-[var(--shell-border)] px-3 pb-4 pt-4">
+            <ThemeSwitcher ThemeService="ThemeService" />
+        </div>
     </Sidebar>
 
     <div class="min-h-screen lg:pl-64">
