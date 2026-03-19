@@ -1,0 +1,13 @@
+@inject Symphony.Host.Theming.ThemeService ThemeService
+
+@code {
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        await ThemeService.InitializeAsync();
+    }
+}

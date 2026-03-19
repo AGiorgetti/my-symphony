@@ -5,11 +5,48 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <base href="/" />
     <title>Symphony Dashboard</title>
+    <script>
+        (() => {
+            const storageKey = "symphony-theme";
+            const validThemes = new Set(["dark-yellow", "dark-blue", "light-blue"]);
+            const darkThemes = new Set(["dark-yellow", "dark-blue"]);
+
+            window.symphonyTheme = {
+                getStoredTheme() {
+                    try {
+                        const storedTheme = window.localStorage.getItem(storageKey);
+                        return validThemes.has(storedTheme) ? storedTheme : null;
+                    } catch {
+                        return null;
+                    }
+                },
+                setDarkClass(isDark) {
+                    document.documentElement.classList.toggle("dark", !!isDark);
+                },
+                setThemeAttribute(themeKey) {
+                    document.documentElement.setAttribute("data-theme", themeKey);
+                },
+                storeTheme(themeKey) {
+                    try {
+                        window.localStorage.setItem(storageKey, themeKey);
+                    } catch {
+                    }
+                }
+            };
+
+            const storedTheme = window.symphonyTheme.getStoredTheme();
+            if (storedTheme !== null) {
+                window.symphonyTheme.setDarkClass(darkThemes.has(storedTheme));
+                window.symphonyTheme.setThemeAttribute(storedTheme);
+            }
+        })();
+    </script>
     <link rel="stylesheet" href="app.min.css" />
     <link rel="stylesheet" href="_content/Flowbite/flowbite.min.css" />
     <HeadOutlet @rendermode="InteractiveServer" />
 </head>
 <body>
+    <ThemeInitializer @rendermode="InteractiveServer" />
     <Routes @rendermode="InteractiveServer" />
     <script src="https://cdn.jsdelivr.net/npm/@@floating-ui/core@@1.6.13/dist/floating-ui.core.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@@floating-ui/dom@@1.6.13/dist/floating-ui.dom.umd.min.js"></script>
