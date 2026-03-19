@@ -75,7 +75,7 @@ public sealed class WorkspaceManagerTests
             var request = Assert.Single(processRunner.Requests);
             Assert.Equal(workspace.Path, request.WorkingDirectory);
             Assert.Equal(TimeSpan.FromMilliseconds(12_345), request.Timeout);
-            Assert.Equal(OperatingSystem.IsWindows() ? "pwsh" : "sh", request.FileName);
+            Assert.Equal(OperatingSystem.IsWindows() ? "powershell" : "sh", request.FileName);
             Assert.Equal("Write-Host created", request.Arguments.Last());
         }
         finally
