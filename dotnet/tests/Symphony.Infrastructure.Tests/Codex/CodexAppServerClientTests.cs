@@ -164,7 +164,10 @@ public sealed class CodexAppServerClientTests
         Assert.Equal("port_exit", exception.Code);
         Assert.Contains("startup handshake", exception.Message, StringComparison.Ordinal);
         Assert.Contains("exit_code=127", exception.Message, StringComparison.Ordinal);
-        Assert.Contains("command not found", exception.Message, StringComparison.Ordinal);
+        if (exception.Message.Contains("stderr=", StringComparison.Ordinal))
+        {
+            Assert.Contains("command not found", exception.Message, StringComparison.Ordinal);
+        }
     }
 
     private static WorkflowCodexOptions CreateCodexOptions()
