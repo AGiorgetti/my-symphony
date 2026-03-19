@@ -12,6 +12,10 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <TailwindExecutablePath Condition="'$(OS)' == 'Windows_NT'">$(MSBuildProjectDirectory)\tools\tailwindcss.exe</TailwindExecutablePath>
+    <TailwindExecutablePath Condition="'$(OS)' != 'Windows_NT'">$(MSBuildProjectDirectory)/tools/tailwindcss</TailwindExecutablePath>
+    <TailwindCommand Condition="'$(OS)' == 'Windows_NT'">tools\\tailwindcss.exe -i ./wwwroot/app.css -o ./wwwroot/app.min.css --minify</TailwindCommand>
+    <TailwindCommand Condition="'$(OS)' != 'Windows_NT'">./tools/tailwindcss -i ./wwwroot/app.css -o ./wwwroot/app.min.css --minify</TailwindCommand>
   </PropertyGroup>
 
   <ItemGroup>
@@ -19,9 +23,27 @@
   </ItemGroup>
 
   <ItemGroup>
+    <UpToDateCheckBuilt Include="wwwroot\app.css" />
+    <UpToDateCheckBuilt Include="wwwroot\app.min.css" />
     <None Update="wwwroot\**\*">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>
+
+  <Target Name="WarnMissingTailwindBinary"
+          BeforeTargets="Build"
+          Condition="!Exists('$(TailwindExecutablePath)')">
+    <Message Importance="high"
+             Text="Skipping Tailwind CSS build because $(TailwindExecutablePath) was not found. Install the CLI into dotnet/src/Symphony.Host/tools/ as documented in dotnet/README.md." />
+  </Target>
+
+  <Target Name="Tailwind"
+          BeforeTargets="Build"
+          Inputs="wwwroot\app.css"
+          Outputs="wwwroot\app.min.css"
+          Condition="Exists('$(TailwindExecutablePath)')">
+    <Exec Command="$(TailwindCommand)"
+          WorkingDirectory="$(MSBuildProjectDirectory)" />
+  </Target>
 
 </Project>
