@@ -547,19 +547,23 @@ Tailwind color classes. Required tokens per theme block:
 
 ### 14.5 ThemeService
 
-Register a lightweight `IThemeService` / `ThemeService` singleton in
+Register a lightweight `IThemeService` / `ThemeService` scoped service in
 `SymphonyHostCompositionExtensions.cs`:
 
 - `CurrentTheme` — string property, default `"dark-yellow"`
 - `AvailableThemes` — static list of `ThemeDescriptor` records (key, display name, is dark)
-- `SetTheme(string key)` — persists to `localStorage` and raises `OnThemeChanged` (C# event)
+- `SetThemeAsync(string key)` — persists to `localStorage` and raises `OnThemeChanged`
+  (C# event)
 - On startup, `ThemeService` reads the persisted preference via JS interop
   (`localStorage.getItem("symphony-theme")`) and sets `CurrentTheme` before first render,
   so no theme flash occurs.
 
 The `ThemeSwitcher.razor` sub-component lives in the `MainLayout.razor` sidebar footer and
-renders a Flowbite `Dropdown` listing available themes. On selection it calls
-`IThemeService.SetTheme`, which invokes JS interop to:
+renders a Flowbite `Dropdown` labeled with the current theme display name while listing all
+available themes. `MainLayout.razor` injects the scoped theme service and passes it into the
+sub-component as a typed parameter. The switcher subscribes to `OnThemeChanged` so the trigger
+label updates in place after a selection. On selection it calls `IThemeService.SetThemeAsync`,
+which invokes JS interop to:
 1. Set or remove `class="dark"` on `<html>`
 2. Set `data-theme="{key}"` on `<html>`
 3. Persist `"symphony-theme"` in `localStorage`

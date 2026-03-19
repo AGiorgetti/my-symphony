@@ -90,6 +90,8 @@ public sealed class DashboardPageIntegrationTests
         Assert.Contains("Service Health", html, StringComparison.Ordinal);
         Assert.Contains("Workflow Config", html, StringComparison.Ordinal);
         Assert.Contains("Operator Dashboard", html, StringComparison.Ordinal);
+        Assert.Contains("data-testid=\"theme-switcher\"", html, StringComparison.Ordinal);
+        Assert.Contains("Dark Yellow", html, StringComparison.Ordinal);
         Assert.Contains("href=\"/sessions\"", html, StringComparison.Ordinal);
         Assert.Contains("Live sessions", html, StringComparison.Ordinal);
         Assert.Contains(">2</span>", html, StringComparison.Ordinal);

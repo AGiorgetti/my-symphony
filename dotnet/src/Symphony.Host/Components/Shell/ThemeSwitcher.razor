@@ -1,0 +1,88 @@
+@implements IDisposable
+
+<div class="space-y-2" data-testid="theme-switcher">
+    <p class="text-[0.6875rem] font-bold uppercase tracking-[0.24em] text-[color:var(--color-on-surface-secondary)]">
+        Theme
+    </p>
+
+    <Dropdown Placement="DropdownPlacement.Top"
+              Size="DropdownSize.Small"
+              Slots="@_slots">
+        <Label>@CurrentThemeDisplayName</Label>
+        <ChildContent>
+            @foreach (var theme in ThemeService.AvailableThemes)
+            {
+                <DropdownItem OnClick="@(() => SelectThemeAsync(theme.Key))">
+                    <div class="flex items-center justify-between gap-3">
+                        <span>@theme.DisplayName</span>
+                        @if (IsSelected(theme))
+                        {
+                            <span class="text-[0.6875rem] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-primary-DEFAULT)]">
+                                Current
+                            </span>
+                        }
+                    </div>
+                </DropdownItem>
+            }
+        </ChildContent>
+    </Dropdown>
+</div>
+
+@code {
+    private static readonly DropdownSlots _slots = new()
+    {
+        Trigger = "flex w-full items-center justify-between rounded-[var(--shell-radius-lg)] border border-[var(--shell-border)] bg-[color:var(--color-surface-overlay)] px-3 py-2 text-sm font-medium text-[color:var(--color-on-surface-primary)] hover:bg-[color:var(--color-surface-raised)] focus:ring-[color:var(--color-primary-DEFAULT)]",
+        Menu = "w-60 rounded-[var(--shell-radius-lg)] border border-[var(--shell-border)] bg-[color:var(--color-surface-raised)] shadow-[var(--shell-shadow)]",
+        Item = "text-[color:var(--color-on-surface-primary)] hover:bg-[color:var(--color-surface-overlay)]"
+    };
+
+    private IThemeService? _subscribedThemeService;
+
+    [Parameter, EditorRequired]
+    public IThemeService ThemeService { get; set; } = default!;
+
+    private string CurrentThemeDisplayName =>
+        ThemeService.AvailableThemes.FirstOrDefault(theme =>
+            string.Equals(theme.Key, ThemeService.CurrentTheme, StringComparison.OrdinalIgnoreCase))?.DisplayName
+        ?? ThemeService.CurrentTheme;
+
+    protected override void OnParametersSet()
+    {
+        if (ReferenceEquals(_subscribedThemeService, ThemeService))
+        {
+            return;
+        }
+
+        if (_subscribedThemeService is not null)
+        {
+            _subscribedThemeService.OnThemeChanged -= HandleThemeChanged;
+        }
+
+        _subscribedThemeService = ThemeService;
+        _subscribedThemeService.OnThemeChanged += HandleThemeChanged;
+    }
+
+    public void Dispose()
+    {
+        if (_subscribedThemeService is not null)
+        {
+            _subscribedThemeService.OnThemeChanged -= HandleThemeChanged;
+            _subscribedThemeService = null;
+        }
+    }
+
+    private bool IsSelected(ThemeDescriptor theme)
+    {
+        return string.Equals(theme.Key, ThemeService.CurrentTheme, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private Task SelectThemeAsync(string themeKey)
+    {
+        return ThemeService.SetThemeAsync(themeKey);
+    }
+
+    private void HandleThemeChanged()
+    {
+        _ = InvokeAsync(StateHasChanged);
+    }
+}

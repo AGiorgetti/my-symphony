@@ -50,6 +50,7 @@ This version covers:
 - session lists and dashboard views
 - session detail pages
 - browsing session messages, updates, and outcomes
+- switching between the built-in dashboard themes for the current browser session
 
 This version does not require:
 
@@ -99,6 +100,7 @@ The dashboard must allow the operator to:
 - distinguish clearly between active and ended sessions
 - identify the most recent activity for each session
 - open a detail view for any visible session
+- switch between the built-in themes without leaving the shell
 
 The dashboard should make it easy to notice:
 
@@ -106,6 +108,9 @@ The dashboard should make it easy to notice:
 - sessions that have ended successfully
 - sessions that have ended with failure
 - sessions that may require attention
+
+The dashboard theme preference should persist for the current browser via local storage so the
+selected palette is restored after refresh.
 
 ### 6.2 Session detail page
 
