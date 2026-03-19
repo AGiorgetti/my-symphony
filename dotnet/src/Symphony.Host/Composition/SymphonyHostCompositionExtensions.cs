@@ -26,6 +26,7 @@ public static class SymphonyHostCompositionExtensions
             .AddSymphonyInfrastructure()
             .AddConfiguredTrackerAdapter(builder.Configuration);
         builder.Services.AddSingleton<ServiceHealthSnapshotProvider>();
+        builder.Services.AddSingleton<ISessionActivityStore, SessionActivityStore>();
         builder.Services.AddSingleton<IDashboardStateService, DashboardStateService>();
 
         return builder;
