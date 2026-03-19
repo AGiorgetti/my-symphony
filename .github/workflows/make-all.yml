@@ -36,6 +36,39 @@ jobs:
       - name: Verify formatting
         run: dotnet format --verify-no-changes
 
+      - name: Provision Tailwind CLI
+        shell: pwsh
+        run: |
+          $toolDirectory = Join-Path $PWD "src/Symphony.Host/tools"
+          New-Item -ItemType Directory -Path $toolDirectory -Force | Out-Null
+
+          switch ("${{ runner.os }}") {
+            "Windows" {
+              $assetName = "tailwindcss-windows-x64.exe"
+              $targetName = "tailwindcss.exe"
+            }
+            "Linux" {
+              $assetName = "tailwindcss-linux-x64"
+              $targetName = "tailwindcss"
+            }
+            "macOS" {
+              $assetName = "tailwindcss-macos-arm64"
+              $targetName = "tailwindcss"
+            }
+            default {
+              throw "Unsupported runner.os '${{ runner.os }}'."
+            }
+          }
+
+          $downloadUrl = "https://github.com/tailwindlabs/tailwindcss/releases/latest/download/$assetName"
+          $targetPath = Join-Path $toolDirectory $targetName
+
+          Invoke-WebRequest -Uri $downloadUrl -OutFile $targetPath
+
+          if ("${{ runner.os }}" -ne "Windows") {
+            chmod +x $targetPath
+          }
+
       - name: Build
         run: dotnet build -c Release
 
