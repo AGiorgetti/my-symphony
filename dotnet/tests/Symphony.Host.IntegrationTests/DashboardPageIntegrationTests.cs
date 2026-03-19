@@ -12,6 +12,7 @@ using Symphony.Application.Runtime;
 using Symphony.Host.Api;
 using Symphony.Host.Components;
 using Symphony.Host.Dashboard;
+using Symphony.Host.Theming;
 
 namespace Symphony.Host.IntegrationTests;
 
@@ -143,6 +144,8 @@ public sealed class DashboardPageIntegrationTests
         builder.Services.AddFlowbite();
         builder.Services.AddSingleton<IOrchestratorRuntimeService>(runtimeService);
         builder.Services.AddSingleton<IDashboardStateService>(dashboardStateService);
+        builder.Services.AddScoped<IThemeService, ThemeService>();
+        builder.Services.AddScoped<ThemeService>();
         builder.Services.AddSingleton<IWorkflowOptionsProvider>(
             new StaticWorkflowOptionsProvider(
                 new WorkflowServiceOptions(

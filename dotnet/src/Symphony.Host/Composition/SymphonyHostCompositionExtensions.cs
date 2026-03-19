@@ -4,6 +4,7 @@ using Symphony.Host.Api;
 using Symphony.Host.Components;
 using Symphony.Host.Dashboard;
 using Symphony.Host.Health;
+using Symphony.Host.Theming;
 using Symphony.Infrastructure.DependencyInjection;
 
 namespace Symphony.Host.Composition;
@@ -28,6 +29,8 @@ public static class SymphonyHostCompositionExtensions
         builder.Services.AddSingleton<ServiceHealthSnapshotProvider>();
         builder.Services.AddSingleton<ISessionActivityStore, SessionActivityStore>();
         builder.Services.AddSingleton<IDashboardStateService, DashboardStateService>();
+        builder.Services.AddScoped<IThemeService, ThemeService>();
+        builder.Services.AddScoped<ThemeService>();
 
         return builder;
     }
