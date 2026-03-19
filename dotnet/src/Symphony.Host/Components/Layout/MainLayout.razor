@@ -75,7 +75,7 @@
     private PeriodicTimer? _refreshTimer;
     private CancellationTokenSource? _refreshCancellationTokenSource;
     private Task? _refreshLoopTask;
-    private bool _isSidebarCollapsed = true;
+    private bool _isSidebarCollapsed;
     private string _runningSessionsLabel = "0";
 
     protected override async Task OnInitializedAsync()
