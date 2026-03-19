@@ -19,9 +19,23 @@
   </ItemGroup>
 
   <ItemGroup>
+    <UpToDateCheckBuilt Include="wwwroot\app.css" />
+    <UpToDateCheckBuilt Include="wwwroot\app.min.css" />
     <None Update="wwwroot\**\*">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>
+
+  <Target Name="Tailwind"
+          BeforeTargets="Build"
+          Inputs="wwwroot\app.css"
+          Outputs="wwwroot\app.min.css">
+    <Exec Command="tools\\tailwindcss.exe -i ./wwwroot/app.css -o ./wwwroot/app.min.css --minify"
+          Condition="'$(OS)' == 'Windows_NT'"
+          WorkingDirectory="$(MSBuildProjectDirectory)" />
+    <Exec Command="./tools/tailwindcss -i ./wwwroot/app.css -o ./wwwroot/app.min.css --minify"
+          Condition="'$(OS)' != 'Windows_NT'"
+          WorkingDirectory="$(MSBuildProjectDirectory)" />
+  </Target>
 
 </Project>

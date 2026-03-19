@@ -198,6 +198,20 @@ dotnet build -c Release
 dotnet test -c Release
 ```
 
+## UI asset prerequisite
+
+The dashboard UI build expects a one-time Tailwind CLI download in
+`dotnet/src/Symphony.Host/tools/`.
+
+- Windows x64: download `tailwindcss-windows-x64.exe` and rename it to
+  `tailwindcss.exe`
+- macOS ARM64: download `tailwindcss-macos-arm64` and rename it to `tailwindcss`
+- Linux x64: download `tailwindcss-linux-x64` and rename it to `tailwindcss`
+- Releases: `https://github.com/tailwindlabs/tailwindcss/releases/latest`
+
+After the binary is present, `dotnet build -c Release` runs it automatically to
+generate `dotnet/src/Symphony.Host/wwwroot/app.min.css`.
+
 The PR workflow in [`.github/workflows/make-all.yml`](../.github/workflows/make-all.yml) runs the
 same solution-wide `dotnet test` suite, including the host integration checks for startup
 validation, API contracts, and the smoke orchestration path.

@@ -56,6 +56,7 @@ artifacts-certs/
 dump/
 dotnet/.dotnet-home/
 **/Properties/launchSettings.json
+dotnet/src/Symphony.Host/tools/
 
 # StyleCop
 StyleCopReport.xml
