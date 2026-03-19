@@ -5,7 +5,7 @@
 @inject IDashboardStateService DashboardStateService
 @inject IThemeService ThemeService
 
-<div class="min-h-screen bg-transparent text-[var(--color-on-surface-primary)]">
+<div class="min-h-screen bg-transparent text-[var(--color-on-surface-primary)] lg:flex">
     <Sidebar @ref="_sidebar"
              @bind-IsCollapsed="_isSidebarCollapsed"
              CollapseMode="SidebarCollapseMode.Responsive"
@@ -27,7 +27,7 @@
         </div>
     </Sidebar>
 
-    <div class="min-h-screen lg:pl-64">
+    <div class="min-h-screen min-w-0 flex-1">
         <nav class="sticky top-0 z-30 border-b border-[var(--shell-border)] bg-[color:var(--color-surface-overlay)]/95 backdrop-blur">
             <div class="mx-auto flex w-full max-w-screen-2xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
                 <div class="flex items-center gap-3">
