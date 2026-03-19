@@ -1,0 +1,30 @@
+@using Symphony.Domain.Runs
+
+<Badge Color="@GetColor(Status)">
+    @Status
+</Badge>
+
+@code {
+    [Parameter]
+    [EditorRequired]
+    public RunAttemptStatus Status { get; set; }
+
+    private static Badge.BadgeColor GetColor(RunAttemptStatus status)
+    {
+        return status switch
+        {
+            RunAttemptStatus.Succeeded => Badge.BadgeColor.Success,
+            RunAttemptStatus.PreparingWorkspace => Badge.BadgeColor.Info,
+            RunAttemptStatus.BuildingPrompt => Badge.BadgeColor.Info,
+            RunAttemptStatus.LaunchingAgentProcess => Badge.BadgeColor.Info,
+            RunAttemptStatus.InitializingSession => Badge.BadgeColor.Info,
+            RunAttemptStatus.StreamingTurn => Badge.BadgeColor.Info,
+            RunAttemptStatus.Finishing => Badge.BadgeColor.Info,
+            RunAttemptStatus.Failed => Badge.BadgeColor.Failure,
+            RunAttemptStatus.TimedOut => Badge.BadgeColor.Failure,
+            RunAttemptStatus.Stalled => Badge.BadgeColor.Failure,
+            RunAttemptStatus.CanceledByReconciliation => Badge.BadgeColor.Gray,
+            _ => Badge.BadgeColor.Primary
+        };
+    }
+}
