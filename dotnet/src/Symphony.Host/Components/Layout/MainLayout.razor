@@ -1,5 +1,153 @@
 @inherits LayoutComponentBase
+@implements IAsyncDisposable
+@using System.Globalization
+@using Flowbite.Layout
+@inject IDashboardStateService DashboardStateService
 
-<div class="shell">
-    @Body
+<div class="min-h-screen bg-transparent text-[var(--color-on-surface-primary)]">
+    <Sidebar @ref="_sidebar"
+             @bind-IsCollapsed="_isSidebarCollapsed"
+             CollapseMode="SidebarCollapseMode.Responsive"
+             CollapseBehavior="SidebarCollapseBehavior.Hide">
+        <SidebarLogo Href="/">Symphony</SidebarLogo>
+        <SidebarItemGroup>
+            <SidebarItem Href="/" Icon="@(new HomeIcon())">
+                Dashboard
+            </SidebarItem>
+            <SidebarItem Href="/sessions"
+                         Label="@_runningSessionsLabel"
+                         LabelColorValue="SidebarItem.LabelColor.Primary">
+                Sessions
+            </SidebarItem>
+        </SidebarItemGroup>
+    </Sidebar>
+
+    <div class="min-h-screen lg:pl-64">
+        <nav class="sticky top-0 z-30 border-b border-[var(--shell-border)] bg-[color:var(--color-surface-overlay)]/95 backdrop-blur">
+            <div class="mx-auto flex w-full max-w-screen-2xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
+                <div class="flex items-center gap-3">
+                    <div class="lg:hidden">
+                        <Button OnClick="ToggleSidebarAsync">Menu</Button>
+                    </div>
+                    <div>
+                        <p class="text-xs font-bold uppercase tracking-[0.24em] text-[color:var(--color-primary-DEFAULT)]">Symphony</p>
+                        <h1 class="text-lg font-semibold text-[color:var(--color-on-surface-primary)]">Operator Dashboard</h1>
+                    </div>
+                </div>
+
+                <div class="hidden items-center gap-2 text-sm text-[color:var(--color-on-surface-secondary)] sm:flex">
+                    <span>Live sessions</span>
+                    <span class="inline-flex min-w-8 items-center justify-center rounded-full bg-[color:var(--color-primary-DEFAULT)] px-2 py-1 font-semibold text-slate-950">
+                        @_runningSessionsLabel
+                    </span>
+                </div>
+            </div>
+        </nav>
+
+        <main class="mx-auto flex min-h-[calc(100vh-4.5rem)] w-full max-w-screen-2xl flex-col px-4 py-4 sm:px-6 lg:px-8">
+            <ErrorBoundary>
+                <ChildContent>
+                    @Body
+                </ChildContent>
+                <ErrorContent>
+                    <section class="rounded-[var(--shell-radius-xl)] border border-[var(--shell-border)] bg-[color:var(--color-surface-raised)] p-8 shadow-[var(--shell-shadow)]">
+                        <p class="text-sm font-semibold uppercase tracking-[0.24em] text-[color:var(--color-primary-DEFAULT)]">Symphony</p>
+                        <h2 class="mt-3 text-3xl font-semibold text-[color:var(--color-on-surface-primary)]">Layout content failed to render</h2>
+                        <p class="mt-3 max-w-2xl text-base leading-7 text-[color:var(--color-on-surface-secondary)]">
+                            The page UI hit an error, but the orchestrator and API remain available.
+                        </p>
+                    </section>
+                </ErrorContent>
+            </ErrorBoundary>
+        </main>
+    </div>
+
+    <ToastHost Position="ToastPosition.BottomRight" />
 </div>
+
+@code {
+    private Sidebar? _sidebar;
+    private PeriodicTimer? _refreshTimer;
+    private CancellationTokenSource? _refreshCancellationTokenSource;
+    private Task? _refreshLoopTask;
+    private bool _isSidebarCollapsed = true;
+    private string _runningSessionsLabel = "0";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await RefreshRunningCountAsync();
+
+        _refreshCancellationTokenSource = new CancellationTokenSource();
+        _refreshTimer = new PeriodicTimer(TimeSpan.FromSeconds(5));
+        _refreshLoopTask = RunRefreshLoopAsync(_refreshCancellationTokenSource.Token);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_refreshCancellationTokenSource is not null)
+        {
+            await _refreshCancellationTokenSource.CancelAsync();
+            _refreshCancellationTokenSource.Dispose();
+            _refreshCancellationTokenSource = null;
+        }
+
+        _refreshTimer?.Dispose();
+        _refreshTimer = null;
+
+        if (_refreshLoopTask is not null)
+        {
+            try
+            {
+                await _refreshLoopTask;
+            }
+            catch (OperationCanceledException)
+            {
+            }
+        }
+    }
+
+    private async Task ToggleSidebarAsync()
+    {
+        if (_sidebar is not null)
+        {
+            await _sidebar.ToggleAsync();
+        }
+    }
+
+    private async Task RunRefreshLoopAsync(CancellationToken cancellationToken)
+    {
+        if (_refreshTimer is null)
+        {
+            return;
+        }
+
+        try
+        {
+            while (await _refreshTimer.WaitForNextTickAsync(cancellationToken))
+            {
+                await RefreshRunningCountAsync(cancellationToken);
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private async Task RefreshRunningCountAsync(CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var snapshot = await DashboardStateService.GetSnapshotAsync(cancellationToken);
+            _runningSessionsLabel = snapshot.RunningCount.ToString(CultureInfo.InvariantCulture);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch
+        {
+            // Keep the shell responsive even if dashboard state refresh fails.
+        }
+    }
+}
