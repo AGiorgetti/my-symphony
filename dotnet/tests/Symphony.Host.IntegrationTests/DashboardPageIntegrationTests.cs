@@ -23,56 +23,7 @@ public sealed class DashboardPageIntegrationTests
     {
         using var app = await StartDashboardApplicationAsync(
             new StubRuntimeService(),
-            new StaticDashboardStateService(
-                new DashboardSnapshot(
-                    new DateTimeOffset(2026, 3, 16, 15, 0, 0, TimeSpan.Zero),
-                    "Healthy",
-                    "Single-process in-memory",
-                    new DateTimeOffset(2026, 3, 16, 15, 0, 0, TimeSpan.Zero),
-                    new DateTimeOffset(2026, 3, 16, 14, 59, 30, TimeSpan.Zero),
-                    30d,
-                    "Loaded",
-                    new DateTimeOffset(2026, 3, 16, 14, 58, 0, TimeSpan.Zero),
-                    RunningCount: 2,
-                    RetryingCount: 1,
-                    InputTokens: 100,
-                    OutputTokens: 40,
-                    TotalTokens: 140,
-                    SecondsRunning: 300d,
-                    ActiveSessions:
-                    [
-                        new DashboardActiveSessionSnapshot(
-                            "ABC-1",
-                            "In Progress",
-                            "thread-1-turn-1",
-                            3,
-                            "turn_completed",
-                            "Applied changes",
-                            new DateTimeOffset(2026, 3, 16, 14, 55, 0, TimeSpan.Zero),
-                            new DateTimeOffset(2026, 3, 16, 14, 59, 0, TimeSpan.Zero),
-                            140)
-                    ],
-                    RetryQueue:
-                    [
-                        new DashboardRetrySnapshot(
-                            "ABC-2",
-                            2,
-                            new DateTimeOffset(2026, 3, 16, 15, 1, 0, TimeSpan.Zero),
-                            "retry later")
-                    ],
-                    RecentAttempts:
-                    [
-                        new DashboardRecentAttemptSnapshot(
-                            "ABC-3",
-                            1,
-                            "Retrying",
-                            new DateTimeOffset(2026, 3, 16, 14, 58, 30, TimeSpan.Zero),
-                            22.5d,
-                            "Tracker request failed",
-                            "thread-3-turn-2")
-                    ],
-                    LastError: null,
-                    WorkflowLastError: null)));
+            new StaticDashboardStateService(CreateDashboardSnapshot()));
         var client = CreateHttpClient(app);
 
         var response = await client.GetAsync("/");
@@ -87,6 +38,7 @@ public sealed class DashboardPageIntegrationTests
         Assert.Contains("https://cdn.jsdelivr.net/npm/@floating-ui/dom@1.6.13/dist/floating-ui.dom.umd.min.js", html, StringComparison.Ordinal);
         Assert.Contains("src=\"_content/Flowbite/flowbite.js\"", html, StringComparison.Ordinal);
         Assert.Contains("Runtime Control Surface", html, StringComparison.Ordinal);
+        Assert.Contains("data-testid=\"dashboard-summary-grid\"", html, StringComparison.Ordinal);
         Assert.Contains("Service Health", html, StringComparison.Ordinal);
         Assert.Contains("Workflow Config", html, StringComparison.Ordinal);
         Assert.Contains("Operator Dashboard", html, StringComparison.Ordinal);
@@ -98,12 +50,41 @@ public sealed class DashboardPageIntegrationTests
         Assert.Contains("Single-process in-memory", html, StringComparison.Ordinal);
         Assert.Contains("2026-03-16 15:00:00 UTC", html, StringComparison.Ordinal);
         Assert.Contains("Loaded", html, StringComparison.Ordinal);
-        Assert.Contains("Active Sessions", html, StringComparison.Ordinal);
-        Assert.Contains("Retry Queue", html, StringComparison.Ordinal);
-        Assert.Contains("Recent Attempts", html, StringComparison.Ordinal);
+        Assert.Contains("data-testid=\"dashboard-active-sessions\"", html, StringComparison.Ordinal);
+        Assert.Contains("data-testid=\"dashboard-retry-queue\"", html, StringComparison.Ordinal);
+        Assert.Contains("data-testid=\"dashboard-recent-attempts\"", html, StringComparison.Ordinal);
         Assert.Contains("ABC-1", html, StringComparison.Ordinal);
         Assert.Contains("ABC-2", html, StringComparison.Ordinal);
         Assert.Contains("ABC-3", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Root_page_renders_empty_state_panels_and_summary_alerts()
+    {
+        using var app = await StartDashboardApplicationAsync(
+            new StubRuntimeService(),
+            new StaticDashboardStateService(
+                CreateDashboardSnapshot(
+                    serviceHealth: "Degraded",
+                    lastError: "Tracker request failed",
+                    workflowLastError: "Workflow syntax is invalid.",
+                    activeSessions: [],
+                    retryQueue: [],
+                    recentAttempts: [])));
+        var client = CreateHttpClient(app);
+
+        var response = await client.GetAsync("/");
+        var html = await response.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains("data-testid=\"dashboard-summary-alerts\"", html, StringComparison.Ordinal);
+        Assert.Contains("Polling failure:", html, StringComparison.Ordinal);
+        Assert.Contains("Tracker request failed", html, StringComparison.Ordinal);
+        Assert.Contains("Workflow reload warning:", html, StringComparison.Ordinal);
+        Assert.Contains("Workflow syntax is invalid.", html, StringComparison.Ordinal);
+        Assert.Contains("No active sessions", html, StringComparison.Ordinal);
+        Assert.Contains("Retry queue is empty", html, StringComparison.Ordinal);
+        Assert.Contains("No recent attempts yet", html, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -240,5 +221,64 @@ public sealed class DashboardPageIntegrationTests
         {
             return Task.FromResult(workflowOptions);
         }
+    }
+
+    private static DashboardSnapshot CreateDashboardSnapshot(
+        string serviceHealth = "Healthy",
+        string? lastError = null,
+        string? workflowLastError = null,
+        IReadOnlyList<DashboardActiveSessionSnapshot>? activeSessions = null,
+        IReadOnlyList<DashboardRetrySnapshot>? retryQueue = null,
+        IReadOnlyList<DashboardRecentAttemptSnapshot>? recentAttempts = null)
+    {
+        return new DashboardSnapshot(
+            new DateTimeOffset(2026, 3, 16, 15, 0, 0, TimeSpan.Zero),
+            serviceHealth,
+            "Single-process in-memory",
+            new DateTimeOffset(2026, 3, 16, 15, 0, 0, TimeSpan.Zero),
+            new DateTimeOffset(2026, 3, 16, 14, 59, 30, TimeSpan.Zero),
+            30d,
+            workflowLastError is null ? "Loaded" : "ReloadFailedUsingLastKnownGood",
+            new DateTimeOffset(2026, 3, 16, 14, 58, 0, TimeSpan.Zero),
+            RunningCount: 2,
+            RetryingCount: 1,
+            InputTokens: 100,
+            OutputTokens: 40,
+            TotalTokens: 140,
+            SecondsRunning: 300d,
+            activeSessions ??
+            [
+                new DashboardActiveSessionSnapshot(
+                    "ABC-1",
+                    "In Progress",
+                    "thread-1-turn-1",
+                    3,
+                    "turn_completed",
+                    "Applied changes",
+                    new DateTimeOffset(2026, 3, 16, 14, 55, 0, TimeSpan.Zero),
+                    new DateTimeOffset(2026, 3, 16, 14, 59, 0, TimeSpan.Zero),
+                    140)
+            ],
+            retryQueue ??
+            [
+                new DashboardRetrySnapshot(
+                    "ABC-2",
+                    2,
+                    new DateTimeOffset(2026, 3, 16, 15, 1, 0, TimeSpan.Zero),
+                    "retry later")
+            ],
+            recentAttempts ??
+            [
+                new DashboardRecentAttemptSnapshot(
+                    "ABC-3",
+                    1,
+                    "Retrying",
+                    new DateTimeOffset(2026, 3, 16, 14, 58, 30, TimeSpan.Zero),
+                    22.5d,
+                    "Tracker request failed",
+                    "thread-3-turn-2")
+            ],
+            lastError,
+            workflowLastError);
     }
 }

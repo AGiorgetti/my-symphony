@@ -1,6 +1,8 @@
+@implements IAsyncDisposable
+@using Symphony.Host.Components.Dashboard
 @inject IDashboardStateService DashboardStateService
 
-<main class="dashboard-page">
+<main class="dashboard-page flex flex-col gap-6">
     <section class="hero">
         <p class="eyebrow">Symphony</p>
         <h1>Runtime Control Surface</h1>
@@ -10,322 +12,193 @@
         </p>
     </section>
 
-    <section class="summary-grid" aria-label="System summary">
-        <article class="metric-card @(GetHealthClass(snapshot.ServiceHealth))">
-            <span class="metric-label">Service Health</span>
-            <strong class="metric-value">@snapshot.ServiceHealth</strong>
-            <span class="metric-meta">@GetHealthMessage(snapshot)</span>
-        </article>
-        <article class="metric-card">
-            <span class="metric-label">Orchestrator Mode</span>
-            <strong class="metric-value">@snapshot.OrchestratorMode</strong>
-            <span class="metric-meta">State is tracked in-process and served live.</span>
-        </article>
-        <article class="metric-card">
-            <span class="metric-label">Last Poll Tick</span>
-            <strong class="metric-value">@FormatTimestamp(snapshot.LastPollTickAt)</strong>
-            <span class="metric-meta">@GetPollMessage(snapshot)</span>
-        </article>
-        <article class="metric-card">
-            <span class="metric-label">Workflow Config</span>
-            <strong class="metric-value">@snapshot.WorkflowLoadStatus</strong>
-            <span class="metric-meta">@GetWorkflowMessage(snapshot)</span>
-        </article>
-    </section>
-
-    <section class="ops-strip" aria-label="Orchestrator totals">
-        <div class="ops-stat">
-            <span class="metric-label">Running Sessions</span>
-            <strong class="ops-value">@snapshot.RunningCount</strong>
-        </div>
-        <div class="ops-stat">
-            <span class="metric-label">Retry Queue</span>
-            <strong class="ops-value">@snapshot.RetryingCount</strong>
-        </div>
-        <div class="ops-stat">
-            <span class="metric-label">Token Totals</span>
-            <strong class="ops-value">@snapshot.TotalTokens</strong>
-            <span class="ops-meta">input @snapshot.InputTokens / output @snapshot.OutputTokens</span>
-        </div>
-        <div class="ops-stat">
-            <span class="metric-label">Runtime Seconds</span>
-            <strong class="ops-value">@snapshot.SecondsRunning.ToString("0.0")</strong>
-            <span class="ops-meta">Aggregate active-session runtime</span>
-        </div>
-    </section>
-
-    <section class="detail-grid" aria-label="Operational panels">
-        <article class="detail-card panel-card">
-            <div class="panel-heading">
-                <div>
-                    <h2>Active Sessions</h2>
-                    <p>Live runs with current tracker state, session metadata, and token usage.</p>
-                </div>
-            </div>
-
-            @if (snapshot.ActiveSessions.Count == 0)
+    @if (_isLoading)
+    {
+        <section class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4" data-testid="dashboard-skeleton">
+            @for (var index = 0; index < 4; index++)
             {
-                <p class="empty-state">No active sessions are running right now.</p>
+                <Card Slots="@SkeletonCardSlots">
+                    <Skeleton Variant="SkeletonVariant.Text" Lines="1" AriaLabel="Loading dashboard summary" />
+                    <Skeleton Variant="SkeletonVariant.Text" Lines="2" Width="w-full" />
+                    <Skeleton Variant="SkeletonVariant.Button" Width="w-24" />
+                </Card>
             }
-            else
-            {
-                <ul class="panel-list">
-                    @foreach (var session in snapshot.ActiveSessions)
-                    {
-                        <li class="panel-item">
-                            <div class="panel-item-top">
-                                <strong>@session.IssueIdentifier</strong>
-                                <span class="pill pill--neutral">@session.State</span>
-                            </div>
-                            <p class="panel-meta">
-                                started @FormatTimestamp(session.StartedAt) · @FormatElapsed(session.StartedAt) live
-                            </p>
-                            <p class="panel-meta">
-                                session @(session.SessionId ?? "pending") · turns @session.TurnCount · tokens @session.TotalTokens
-                            </p>
-                            @if (!string.IsNullOrWhiteSpace(session.LastEvent) || !string.IsNullOrWhiteSpace(session.LastMessage))
-                            {
-                                <p class="panel-note">
-                                    Latest: @session.LastEvent
-                                    @if (!string.IsNullOrWhiteSpace(session.LastMessage))
-                                    {
-                                        <span> · @session.LastMessage</span>
-                                    }
-                                </p>
-                            }
-                        </li>
-                    }
-                </ul>
-            }
-        </article>
+        </section>
 
-        <article class="detail-card panel-card">
-            <div class="panel-heading">
-                <div>
-                    <h2>Retry Queue</h2>
-                    <p>Scheduled continuation and failure retries with their next retry ETA.</p>
-                </div>
-            </div>
+        <section class="grid grid-cols-1 gap-6 xl:grid-cols-3">
+            @for (var index = 0; index < 3; index++)
+            {
+                <Card Slots="@SkeletonCardSlots">
+                    <Skeleton Variant="SkeletonVariant.Text" Lines="1" AriaLabel="Loading dashboard panel" />
+                    <Skeleton Variant="SkeletonVariant.Card" Width="w-full" Height="h-48" />
+                </Card>
+            }
+        </section>
+    }
+    else if (_snapshot is not null)
+    {
+        @if (!string.IsNullOrWhiteSpace(_refreshErrorMessage))
+        {
+            <Alert Color="AlertColor.Warning"
+                   Rounded="true"
+                   WithBorderAccent="true"
+                   TextEmphasis="Refresh warning:"
+                   Text="@_refreshErrorMessage" />
+        }
 
-            @if (snapshot.RetryQueue.Count == 0)
-            {
-                <p class="empty-state">No retries are queued at the moment.</p>
-            }
-            else
-            {
-                <ul class="panel-list">
-                    @foreach (var retry in snapshot.RetryQueue)
-                    {
-                        <li class="panel-item">
-                            <div class="panel-item-top">
-                                <strong>@retry.IssueIdentifier</strong>
-                                <span class="pill pill--warning">Retry @retry.Attempt</span>
-                            </div>
-                            <p class="panel-meta">
-                                ETA @FormatRetryEta(retry.DueAt) · due @FormatTimestamp(retry.DueAt)
-                            </p>
-                            @if (!string.IsNullOrWhiteSpace(retry.Error))
-                            {
-                                <p class="panel-note panel-note--warning">@retry.Error</p>
-                            }
-                        </li>
-                    }
-                </ul>
-            }
-        </article>
+        <ErrorBoundary>
+            <ChildContent>
+                <HealthSummaryCards Snapshot="_snapshot" />
+            </ChildContent>
+            <ErrorContent>
+                <Card Slots="@FallbackCardSlots" data-testid="dashboard-summary-fallback">
+                    <p class="text-xs font-bold uppercase tracking-[0.24em] text-[color:var(--color-primary-DEFAULT)]">Dashboard summary</p>
+                    <h2 class="text-2xl font-semibold text-[color:var(--color-on-surface-primary)]">Summary panel failed</h2>
+                    <p class="text-sm leading-6 text-[color:var(--color-on-surface-secondary)]">
+                        The shell is still responsive, but the summary cards hit a rendering error.
+                    </p>
+                </Card>
+            </ErrorContent>
+        </ErrorBoundary>
 
-        <article class="detail-card panel-card">
-            <div class="panel-heading">
-                <div>
-                    <h2>Recent Attempts</h2>
-                    <p>Most recent run outcomes with concise error summaries for operator triage.</p>
-                </div>
-            </div>
+        <section class="grid grid-cols-1 gap-6 xl:grid-cols-3" aria-label="Operational panels">
+            <ErrorBoundary>
+                <ChildContent>
+                    <ActiveSessionsPanel Sessions="_snapshot.ActiveSessions" GeneratedAt="_snapshot.GeneratedAt" />
+                </ChildContent>
+                <ErrorContent>
+                    <Card Slots="@FallbackCardSlots" data-testid="dashboard-active-sessions-fallback">
+                        <p class="text-xs font-bold uppercase tracking-[0.24em] text-[color:var(--color-primary-DEFAULT)]">Active Sessions</p>
+                        <h2 class="text-2xl font-semibold text-[color:var(--color-on-surface-primary)]">Panel failed</h2>
+                        <p class="text-sm leading-6 text-[color:var(--color-on-surface-secondary)]">
+                            Active session details are temporarily unavailable.
+                        </p>
+                    </Card>
+                </ErrorContent>
+            </ErrorBoundary>
 
-            @if (snapshot.RecentAttempts.Count == 0)
-            {
-                <p class="empty-state">Recent run attempts will appear here after the first worker completes.</p>
-            }
-            else
-            {
-                <ul class="panel-list">
-                    @foreach (var attempt in snapshot.RecentAttempts)
-                    {
-                        <li class="panel-item">
-                            <div class="panel-item-top">
-                                <strong>@attempt.IssueIdentifier</strong>
-                                <span class="pill @GetOutcomeClass(attempt.Outcome)">@attempt.Outcome</span>
-                            </div>
-                            <p class="panel-meta">
-                                @GetAttemptLabel(attempt.Attempt) · finished @FormatTimestamp(attempt.CompletedAt) · @FormatDuration(attempt.DurationSeconds)
-                            </p>
-                            @if (!string.IsNullOrWhiteSpace(attempt.SessionId))
-                            {
-                                <p class="panel-meta">session @attempt.SessionId</p>
-                            }
-                            @if (!string.IsNullOrWhiteSpace(attempt.Error))
-                            {
-                                <p class="panel-note panel-note--warning">@attempt.Error</p>
-                            }
-                        </li>
-                    }
-                </ul>
-            }
-        </article>
-    </section>
+            <ErrorBoundary>
+                <ChildContent>
+                    <RetryQueuePanel Entries="_snapshot.RetryQueue" GeneratedAt="_snapshot.GeneratedAt" />
+                </ChildContent>
+                <ErrorContent>
+                    <Card Slots="@FallbackCardSlots" data-testid="dashboard-retry-queue-fallback">
+                        <p class="text-xs font-bold uppercase tracking-[0.24em] text-[color:var(--color-primary-DEFAULT)]">Retry Queue</p>
+                        <h2 class="text-2xl font-semibold text-[color:var(--color-on-surface-primary)]">Panel failed</h2>
+                        <p class="text-sm leading-6 text-[color:var(--color-on-surface-secondary)]">
+                            Retry details are temporarily unavailable.
+                        </p>
+                    </Card>
+                </ErrorContent>
+            </ErrorBoundary>
 
-    <section class="detail-grid detail-grid--notes" aria-label="Operational notes">
-        <article class="detail-card">
-            <h2>Operator Notes</h2>
-            <p>
-                API observers can use <code>/api/v1/state</code> and <code>/api/v1/refresh</code>. Dashboard
-                failures must not stop orchestration or the API surface.
-            </p>
-            @if (!string.IsNullOrWhiteSpace(snapshot.LastError))
-            {
-                <p class="detail-alert">Last poll error: @snapshot.LastError</p>
-            }
-        </article>
-    </section>
+            <ErrorBoundary>
+                <ChildContent>
+                    <RecentAttemptsPanel Attempts="_snapshot.RecentAttempts" />
+                </ChildContent>
+                <ErrorContent>
+                    <Card Slots="@FallbackCardSlots" data-testid="dashboard-recent-attempts-fallback">
+                        <p class="text-xs font-bold uppercase tracking-[0.24em] text-[color:var(--color-primary-DEFAULT)]">Recent Attempts</p>
+                        <h2 class="text-2xl font-semibold text-[color:var(--color-on-surface-primary)]">Panel failed</h2>
+                        <p class="text-sm leading-6 text-[color:var(--color-on-surface-secondary)]">
+                            Recent attempt details are temporarily unavailable.
+                        </p>
+                    </Card>
+                </ErrorContent>
+            </ErrorBoundary>
+        </section>
+    }
 </main>
 
 @code {
-    private DashboardSnapshot snapshot = new(
-        GeneratedAt: DateTimeOffset.UnixEpoch,
-        ServiceHealth: "Starting",
-        OrchestratorMode: "Single-process in-memory",
-        LastPollTickAt: null,
-        LastSuccessfulPollAt: null,
-        LastSuccessfulPollAgeSeconds: null,
-        WorkflowLoadStatus: "Starting",
-        WorkflowLastLoadedAt: null,
-        RunningCount: 0,
-        RetryingCount: 0,
-        InputTokens: 0,
-        OutputTokens: 0,
-        TotalTokens: 0,
-        SecondsRunning: 0d,
-        ActiveSessions: [],
-        RetryQueue: [],
-        RecentAttempts: [],
-        LastError: null,
-        WorkflowLastError: null);
+    private static readonly CardSlots SkeletonCardSlots = new()
+    {
+        Base = "rounded-[var(--shell-radius-lg)] border border-[var(--shell-border)] bg-[color:var(--color-surface-raised)] shadow-[var(--shell-shadow)]",
+        Body = "flex flex-col gap-4 p-5"
+    };
+
+    private static readonly CardSlots FallbackCardSlots = new()
+    {
+        Base = "h-full rounded-[var(--shell-radius-lg)] border border-[var(--shell-border)] bg-[color:var(--color-surface-raised)] shadow-[var(--shell-shadow)]",
+        Body = "flex h-full flex-col gap-3 p-5"
+    };
+
+    private PeriodicTimer? _refreshTimer;
+    private CancellationTokenSource? _refreshCancellationTokenSource;
+    private Task? _refreshLoopTask;
+    private DashboardSnapshot? _snapshot;
+    private bool _isLoading = true;
+    private string? _refreshErrorMessage;
 
     protected override async Task OnInitializedAsync()
     {
-        snapshot = await DashboardStateService.GetSnapshotAsync();
+        await LoadSnapshotAsync();
+
+        _refreshCancellationTokenSource = new CancellationTokenSource();
+        _refreshTimer = new PeriodicTimer(TimeSpan.FromSeconds(5));
+        _refreshLoopTask = RunRefreshLoopAsync(_refreshCancellationTokenSource.Token);
     }
 
-    private static string FormatTimestamp(DateTimeOffset? timestamp)
+    public async ValueTask DisposeAsync()
     {
-        return timestamp?.ToUniversalTime().ToString("yyyy-MM-dd HH:mm:ss 'UTC'") ?? "Waiting for first tick";
-    }
-
-    private static string GetHealthClass(string serviceHealth)
-    {
-        return serviceHealth.ToLowerInvariant() switch
+        if (_refreshCancellationTokenSource is not null)
         {
-            "healthy" => "metric-card--healthy",
-            "degraded" => "metric-card--degraded",
-            _ => "metric-card--starting"
-        };
-    }
-
-    private string FormatRetryEta(DateTimeOffset dueAt)
-    {
-        var remaining = dueAt - snapshot.GeneratedAt;
-        if (remaining <= TimeSpan.Zero)
-        {
-            return "due now";
+            await _refreshCancellationTokenSource.CancelAsync();
+            _refreshCancellationTokenSource.Dispose();
+            _refreshCancellationTokenSource = null;
         }
 
-        return remaining.TotalMinutes >= 1d
-            ? $"in {remaining.TotalMinutes:0.#} min"
-            : $"in {remaining.TotalSeconds:0}s";
-    }
+        _refreshTimer?.Dispose();
+        _refreshTimer = null;
 
-    private string FormatElapsed(DateTimeOffset startedAt)
-    {
-        var elapsed = snapshot.GeneratedAt - startedAt;
-        return FormatDuration(Math.Max(elapsed.TotalSeconds, 0d));
-    }
-
-    private static string FormatDuration(double durationSeconds)
-    {
-        return durationSeconds >= 60d
-            ? $"{durationSeconds / 60d:0.#} min"
-            : $"{durationSeconds:0.#} s";
-    }
-
-    private static string GetAttemptLabel(int? attempt)
-    {
-        return attempt is null ? "Initial run" : $"Attempt {attempt}";
-    }
-
-    private static string GetOutcomeClass(string outcome)
-    {
-        return outcome.ToLowerInvariant() switch
+        if (_refreshLoopTask is not null)
         {
-            "succeeded" => "pill--success",
-            "retrying" => "pill--warning",
-            "failed" => "pill--danger",
-            "timedout" => "pill--danger",
-            "stalled" => "pill--danger",
-            "canceled" => "pill--neutral",
-            _ => "pill--neutral"
-        };
+            try
+            {
+                await _refreshLoopTask;
+            }
+            catch (OperationCanceledException)
+            {
+            }
+        }
     }
 
-    private static string GetHealthMessage(DashboardSnapshot snapshot)
+    private async Task RunRefreshLoopAsync(CancellationToken cancellationToken)
     {
-        if (string.Equals(snapshot.WorkflowLoadStatus, "ReloadFailedUsingLastKnownGood", StringComparison.Ordinal))
+        if (_refreshTimer is null)
         {
-            return "Workflow reload failed; the service is using the last-known-good configuration.";
+            return;
         }
 
-        if (!string.IsNullOrWhiteSpace(snapshot.LastError))
+        try
         {
-            return "Latest poll attempt failed; the orchestrator is still running.";
-        }
+            while (await _refreshTimer.WaitForNextTickAsync(cancellationToken))
+            {
+                try
+                {
+                    await LoadSnapshotAsync(cancellationToken);
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch (Exception exception)
+                {
+                    _refreshErrorMessage = exception.Message;
+                }
 
-        if (string.Equals(snapshot.ServiceHealth, "Degraded", StringComparison.Ordinal)
-            && snapshot.LastSuccessfulPollAgeSeconds is double ageSeconds)
-        {
-            return $"Last successful poll is {FormatDuration(ageSeconds)} old.";
+                await InvokeAsync(StateHasChanged);
+            }
         }
-
-        return snapshot.ServiceHealth switch
+        catch (OperationCanceledException)
         {
-            "Healthy" => "Workflow loaded and recent poll ticks are healthy.",
-            "Degraded" => "Health indicators are degraded; inspect logs for details.",
-            _ => "Waiting for the first successful workflow load and poll tick."
-        };
+        }
     }
 
-    private static string GetPollMessage(DashboardSnapshot snapshot)
+    private async Task LoadSnapshotAsync(CancellationToken cancellationToken = default)
     {
-        if (snapshot.LastSuccessfulPollAt is null)
-        {
-            return "Waiting for the first successful orchestrator poll.";
-        }
-
-        var age = snapshot.LastSuccessfulPollAgeSeconds is double ageSeconds
-            ? FormatDuration(ageSeconds)
-            : "unknown age";
-        return $"Last success {FormatTimestamp(snapshot.LastSuccessfulPollAt)} ({age} ago).";
-    }
-
-    private static string GetWorkflowMessage(DashboardSnapshot snapshot)
-    {
-        if (string.Equals(snapshot.WorkflowLoadStatus, "ReloadFailedUsingLastKnownGood", StringComparison.Ordinal))
-        {
-            return string.IsNullOrWhiteSpace(snapshot.WorkflowLastError)
-                ? "Last workflow reload failed; continuing with the cached definition."
-                : $"Reload failed: {snapshot.WorkflowLastError}";
-        }
-
-        return snapshot.WorkflowLastLoadedAt is null
-            ? "Waiting for the initial workflow load."
-            : $"Last loaded {FormatTimestamp(snapshot.WorkflowLastLoadedAt)}.";
+        _snapshot = await DashboardStateService.GetSnapshotAsync(cancellationToken);
+        _refreshErrorMessage = null;
+        _isLoading = false;
     }
 }

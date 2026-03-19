@@ -1,0 +1,67 @@
+@using Symphony.Host.Dashboard
+
+<Card Slots="@PanelSlots" data-testid="dashboard-active-sessions">
+    <div class="flex items-start justify-between gap-4">
+        <div>
+            <p class="text-xs font-bold uppercase tracking-[0.24em] text-[color:var(--color-primary-DEFAULT)]">Active Sessions</p>
+            <h2 class="mt-2 text-2xl font-semibold text-[color:var(--color-on-surface-primary)]">Current work in flight</h2>
+            <p class="mt-2 text-sm leading-6 text-[color:var(--color-on-surface-secondary)]">
+                Live runs with current tracker state, session metadata, and token usage.
+            </p>
+        </div>
+        <Badge Color="Badge.BadgeColor.Info">@Sessions.Count</Badge>
+    </div>
+
+    @if (Sessions.Count == 0)
+    {
+        <EmptyState Title="No active sessions"
+                    Description="New in-flight work will appear here without requiring a full page reload." />
+    }
+    else
+    {
+        <ul class="space-y-4">
+            @foreach (var session in Sessions)
+            {
+                <li class="rounded-[var(--shell-radius-lg)] border border-[var(--shell-border)] bg-[color:var(--color-surface-overlay)] p-4">
+                    <div class="flex flex-wrap items-center justify-between gap-3">
+                        <a class="text-base font-semibold text-[color:var(--color-on-surface-primary)] underline decoration-[color:var(--color-primary-DEFAULT)] decoration-2 underline-offset-4"
+                           href="/sessions/@Uri.EscapeDataString(session.IssueIdentifier)">
+                            @session.IssueIdentifier
+                        </a>
+                        <Badge Color="@DashboardDisplay.GetSessionStateBadgeColor(session.State)">@session.State</Badge>
+                    </div>
+                    <div class="mt-3 space-y-2 text-sm text-[color:var(--color-on-surface-secondary)]">
+                        <p>Started @DashboardDisplay.FormatTimestamp(session.StartedAt) · @DashboardDisplay.FormatElapsed(session.StartedAt, GeneratedAt) live</p>
+                        <p>Session @(session.SessionId ?? "pending") · turns @session.TurnCount · tokens @session.TotalTokens</p>
+                        @if (!string.IsNullOrWhiteSpace(session.LastEvent) || !string.IsNullOrWhiteSpace(session.LastMessage))
+                        {
+                            <p>
+                                Latest: @session.LastEvent
+                                @if (!string.IsNullOrWhiteSpace(session.LastMessage))
+                                {
+                                    <span> · @session.LastMessage</span>
+                                }
+                            </p>
+                        }
+                    </div>
+                </li>
+            }
+        </ul>
+    }
+</Card>
+
+@code {
+    private static readonly CardSlots PanelSlots = new()
+    {
+        Base = "h-full rounded-[var(--shell-radius-lg)] border border-[var(--shell-border)] bg-[color:var(--color-surface-raised)] shadow-[var(--shell-shadow)]",
+        Body = "flex h-full flex-col gap-6 p-5"
+    };
+
+    [Parameter]
+    [EditorRequired]
+    public required IReadOnlyList<DashboardActiveSessionSnapshot> Sessions { get; set; }
+
+    [Parameter]
+    [EditorRequired]
+    public DateTimeOffset GeneratedAt { get; set; }
+}

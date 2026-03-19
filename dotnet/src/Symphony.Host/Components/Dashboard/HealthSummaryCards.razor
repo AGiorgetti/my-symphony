@@ -1,0 +1,71 @@
+@using Symphony.Host.Dashboard
+
+@if (Alerts.Count > 0)
+{
+    <div class="mb-4 space-y-3" data-testid="dashboard-summary-alerts">
+        @foreach (var alert in Alerts)
+        {
+            <Alert Color="@alert.Color"
+                   Rounded="true"
+                   WithBorderAccent="true"
+                   TextEmphasis="@alert.TextEmphasis"
+                   Text="@alert.Text" />
+        }
+    </div>
+}
+
+<div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4" data-testid="dashboard-summary-grid">
+    <Card Slots="@CardSlots">
+        <p class="text-xs font-bold uppercase tracking-[0.24em] text-[color:var(--color-primary-DEFAULT)]">Service Health</p>
+        <div class="mt-4 flex items-center gap-3">
+            <Badge Color="@DashboardDisplay.GetHealthBadgeColor(Snapshot.ServiceHealth)">@Snapshot.ServiceHealth</Badge>
+            <span class="text-sm text-[color:var(--color-on-surface-secondary)]">@Snapshot.RunningCount running</span>
+        </div>
+        <p class="text-sm leading-6 text-[color:var(--color-on-surface-secondary)]">@DashboardDisplay.GetHealthMessage(Snapshot)</p>
+    </Card>
+
+    <Card Slots="@CardSlots">
+        <p class="text-xs font-bold uppercase tracking-[0.24em] text-[color:var(--color-primary-DEFAULT)]">Orchestrator Mode</p>
+        <h2 class="text-2xl font-semibold text-[color:var(--color-on-surface-primary)]">@Snapshot.OrchestratorMode</h2>
+        <p class="text-sm leading-6 text-[color:var(--color-on-surface-secondary)]">
+            State is tracked in-process and served live for the operator shell.
+        </p>
+        <p class="text-sm text-[color:var(--color-on-surface-secondary)]">
+            Retry queue: @Snapshot.RetryingCount queued
+        </p>
+    </Card>
+
+    <Card Slots="@CardSlots">
+        <p class="text-xs font-bold uppercase tracking-[0.24em] text-[color:var(--color-primary-DEFAULT)]">Last Poll Tick</p>
+        <h2 class="text-2xl font-semibold text-[color:var(--color-on-surface-primary)]">
+            @DashboardDisplay.FormatTimestamp(Snapshot.LastPollTickAt)
+        </h2>
+        <p class="text-sm leading-6 text-[color:var(--color-on-surface-secondary)]">@DashboardDisplay.GetPollMessage(Snapshot)</p>
+        <p class="text-sm text-[color:var(--color-on-surface-secondary)]">
+            Runtime: @DashboardDisplay.FormatDuration(Snapshot.SecondsRunning)
+        </p>
+    </Card>
+
+    <Card Slots="@CardSlots">
+        <p class="text-xs font-bold uppercase tracking-[0.24em] text-[color:var(--color-primary-DEFAULT)]">Workflow Config</p>
+        <div class="mt-4 flex items-center gap-3">
+            <Badge Color="@DashboardDisplay.GetWorkflowBadgeColor(Snapshot.WorkflowLoadStatus)">@Snapshot.WorkflowLoadStatus</Badge>
+            <span class="text-sm text-[color:var(--color-on-surface-secondary)]">@Snapshot.TotalTokens tokens</span>
+        </div>
+        <p class="text-sm leading-6 text-[color:var(--color-on-surface-secondary)]">@DashboardDisplay.GetWorkflowMessage(Snapshot)</p>
+    </Card>
+</div>
+
+@code {
+    private static readonly CardSlots CardSlots = new()
+    {
+        Base = "h-full rounded-[var(--shell-radius-lg)] border border-[var(--shell-border)] bg-[color:var(--color-surface-raised)] shadow-[var(--shell-shadow)]",
+        Body = "flex h-full flex-col gap-3 p-5"
+    };
+
+    [Parameter]
+    [EditorRequired]
+    public required DashboardSnapshot Snapshot { get; set; }
+
+    private IReadOnlyList<DashboardAlertMessage> Alerts => DashboardDisplay.GetAlerts(Snapshot);
+}
