@@ -266,6 +266,11 @@ FakesAssemblies/
 # Node.js Tools for Visual Studio
 .ntvs_analysis.dat
 node_modules/
+!dotnet/src/Symphony.Host/node_modules/
+dotnet/src/Symphony.Host/node_modules/*
+!dotnet/src/Symphony.Host/node_modules/flowbite/
+dotnet/src/Symphony.Host/node_modules/flowbite/*
+!dotnet/src/Symphony.Host/node_modules/flowbite/plugin.js
 
 # Visual Studio 6 build log
 *.plg

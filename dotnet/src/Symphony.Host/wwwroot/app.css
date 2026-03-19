@@ -1,17 +1,102 @@
+@import "tailwindcss";
+@source "../Components/**/*.razor";
+@source "../Components/**/*.cs";
+@source "../**/*.cshtml";
+@source "../**/*.html";
+@plugin "flowbite/plugin";
+
+@theme {
+    --color-primary-50: #fffbeb;
+    --color-primary-100: #fef3c7;
+    --color-primary-200: #fde68a;
+    --color-primary-300: #fcd34d;
+    --color-primary-400: #fbbf24;
+    --color-primary-500: #f59e0b;
+    --color-primary-600: #d97706;
+    --color-primary-700: #b45309;
+    --color-primary-800: #92400e;
+    --color-primary-900: #78350f;
+    --color-primary-DEFAULT: var(--color-primary-400);
+
+    --color-surface-base: #111827;
+    --color-surface-raised: #1f2937;
+    --color-surface-overlay: rgba(31, 41, 55, 0.84);
+    --color-on-surface-primary: #f9fafb;
+    --color-on-surface-secondary: #d1d5db;
+}
+
 :root {
-    --bg: #f3efe5;
-    --panel: rgba(255, 252, 245, 0.92);
-    --panel-strong: #fffaf0;
-    --ink: #1f2933;
-    --muted: #5f6c7b;
-    --accent: #146356;
-    --accent-soft: rgba(20, 99, 86, 0.14);
-    --warn: #a64b2a;
-    --warn-soft: rgba(166, 75, 42, 0.14);
-    --pending: #7a5b16;
-    --pending-soft: rgba(122, 91, 22, 0.14);
-    --border: rgba(31, 41, 51, 0.12);
-    --shadow: 0 18px 60px rgba(31, 41, 51, 0.12);
+    --shell-max-width: 1120px;
+    --shell-radius-xl: 1.75rem;
+    --shell-radius-lg: 1.375rem;
+    --shell-shadow: 0 18px 60px rgba(15, 23, 42, 0.22);
+    --shell-border: color-mix(in oklab, var(--color-on-surface-primary) 12%, transparent);
+    --shell-surface-strong: color-mix(in oklab, var(--color-surface-raised) 88%, white);
+    --shell-surface-soft: color-mix(in oklab, var(--color-surface-overlay) 92%, transparent);
+    --shell-success: #10b981;
+    --shell-success-soft: color-mix(in oklab, var(--shell-success) 18%, transparent);
+    --shell-warning: #f59e0b;
+    --shell-warning-soft: color-mix(in oklab, var(--shell-warning) 18%, transparent);
+    --shell-danger: #f87171;
+    --shell-danger-soft: color-mix(in oklab, var(--shell-danger) 18%, transparent);
+    --shell-neutral-soft: color-mix(in oklab, var(--color-on-surface-primary) 10%, transparent);
+}
+
+[data-theme="dark-yellow"] {
+    --color-primary-50: #fffbeb;
+    --color-primary-100: #fef3c7;
+    --color-primary-200: #fde68a;
+    --color-primary-300: #fcd34d;
+    --color-primary-400: #fbbf24;
+    --color-primary-500: #f59e0b;
+    --color-primary-600: #d97706;
+    --color-primary-700: #b45309;
+    --color-primary-800: #92400e;
+    --color-primary-900: #78350f;
+    --color-primary-DEFAULT: #fbbf24;
+    --color-surface-base: #0f172a;
+    --color-surface-raised: #111827;
+    --color-surface-overlay: rgba(17, 24, 39, 0.84);
+    --color-on-surface-primary: #f9fafb;
+    --color-on-surface-secondary: #cbd5e1;
+}
+
+[data-theme="dark-blue"] {
+    --color-primary-50: #eff6ff;
+    --color-primary-100: #dbeafe;
+    --color-primary-200: #bfdbfe;
+    --color-primary-300: #93c5fd;
+    --color-primary-400: #60a5fa;
+    --color-primary-500: #3b82f6;
+    --color-primary-600: #2563eb;
+    --color-primary-700: #1d4ed8;
+    --color-primary-800: #1e40af;
+    --color-primary-900: #1e3a8a;
+    --color-primary-DEFAULT: #3b82f6;
+    --color-surface-base: #0f172a;
+    --color-surface-raised: #111827;
+    --color-surface-overlay: rgba(17, 24, 39, 0.84);
+    --color-on-surface-primary: #f9fafb;
+    --color-on-surface-secondary: #cbd5e1;
+}
+
+[data-theme="light-blue"] {
+    --color-primary-50: #eff6ff;
+    --color-primary-100: #dbeafe;
+    --color-primary-200: #bfdbfe;
+    --color-primary-300: #93c5fd;
+    --color-primary-400: #60a5fa;
+    --color-primary-500: #3b82f6;
+    --color-primary-600: #2563eb;
+    --color-primary-700: #1d4ed8;
+    --color-primary-800: #1e40af;
+    --color-primary-900: #1e3a8a;
+    --color-primary-DEFAULT: #3b82f6;
+    --color-surface-base: #eff6ff;
+    --color-surface-raised: #ffffff;
+    --color-surface-overlay: rgba(255, 255, 255, 0.9);
+    --color-on-surface-primary: #0f172a;
+    --color-on-surface-secondary: #475569;
 }
 
 * {
@@ -22,15 +107,24 @@ html,
 body {
     margin: 0;
     min-height: 100%;
+}
+
+html {
     background:
-        radial-gradient(circle at top left, rgba(20, 99, 86, 0.16), transparent 38%),
-        linear-gradient(180deg, #f7f2e8 0%, var(--bg) 100%);
-    color: var(--ink);
-    font-family: "Bahnschrift", "Segoe UI Variable Text", "Trebuchet MS", sans-serif;
+        radial-gradient(circle at top left, color-mix(in oklab, var(--color-primary-DEFAULT) 20%, transparent), transparent 38%),
+        linear-gradient(180deg, color-mix(in oklab, var(--color-surface-base) 92%, white) 0%, var(--color-surface-base) 100%);
+    color: var(--color-on-surface-primary);
 }
 
 body {
     min-height: 100vh;
+    background: transparent;
+    color: inherit;
+    font-family: "Bahnschrift", "Segoe UI Variable Text", "Trebuchet MS", sans-serif;
+}
+
+a {
+    color: inherit;
 }
 
 .shell {
@@ -38,17 +132,21 @@ body {
 }
 
 .dashboard-page {
-    width: min(1120px, calc(100vw - 2rem));
+    width: min(var(--shell-max-width), calc(100vw - 2rem));
     margin: 0 auto;
     padding: 2.5rem 0 3rem;
 }
 
 .hero {
     padding: 2rem;
-    border: 1px solid var(--border);
-    border-radius: 28px;
-    background: linear-gradient(160deg, rgba(255, 250, 240, 0.96), rgba(239, 246, 240, 0.9));
-    box-shadow: var(--shadow);
+    border: 1px solid var(--shell-border);
+    border-radius: var(--shell-radius-xl);
+    background: linear-gradient(
+        160deg,
+        color-mix(in oklab, var(--color-surface-raised) 88%, var(--color-primary-50)),
+        color-mix(in oklab, var(--color-surface-overlay) 88%, var(--color-primary-100))
+    );
+    box-shadow: var(--shell-shadow);
 }
 
 .eyebrow {
@@ -57,7 +155,7 @@ body {
     font-weight: 700;
     letter-spacing: 0.24em;
     text-transform: uppercase;
-    color: var(--accent);
+    color: var(--color-primary-DEFAULT);
 }
 
 .hero h1 {
@@ -70,7 +168,7 @@ body {
 .lede {
     max-width: 60ch;
     margin: 1rem 0 0;
-    color: var(--muted);
+    color: var(--color-on-surface-secondary);
     font-size: 1.02rem;
     line-height: 1.6;
 }
@@ -96,10 +194,10 @@ body {
 
 .metric-card,
 .detail-card {
-    border: 1px solid var(--border);
-    border-radius: 22px;
-    background: var(--panel);
-    box-shadow: var(--shadow);
+    border: 1px solid var(--shell-border);
+    border-radius: var(--shell-radius-lg);
+    background: var(--shell-surface-soft);
+    box-shadow: var(--shell-shadow);
 }
 
 .metric-card {
@@ -111,21 +209,21 @@ body {
 }
 
 .metric-card--healthy {
-    background: linear-gradient(180deg, var(--panel-strong), rgba(237, 250, 246, 0.96));
+    background: linear-gradient(180deg, var(--shell-surface-strong), color-mix(in oklab, var(--shell-success) 16%, var(--color-surface-raised)));
 }
 
 .metric-card--degraded {
-    background: linear-gradient(180deg, var(--panel-strong), rgba(255, 241, 236, 0.96));
+    background: linear-gradient(180deg, var(--shell-surface-strong), color-mix(in oklab, var(--shell-danger) 14%, var(--color-surface-raised)));
 }
 
 .metric-card--starting {
-    background: linear-gradient(180deg, var(--panel-strong), rgba(255, 247, 224, 0.96));
+    background: linear-gradient(180deg, var(--shell-surface-strong), color-mix(in oklab, var(--shell-warning) 14%, var(--color-surface-raised)));
 }
 
 .metric-label {
     display: block;
     margin-bottom: 0.5rem;
-    color: var(--muted);
+    color: var(--color-on-surface-secondary);
     font-size: 0.84rem;
     font-weight: 700;
     letter-spacing: 0.08em;
@@ -141,7 +239,7 @@ body {
 .metric-meta {
     display: block;
     margin-top: 0.75rem;
-    color: var(--muted);
+    color: var(--color-on-surface-secondary);
     line-height: 1.5;
 }
 
@@ -153,7 +251,7 @@ body {
 
 .detail-card p {
     margin: 0;
-    color: var(--muted);
+    color: var(--color-on-surface-secondary);
     line-height: 1.55;
 }
 
@@ -166,10 +264,10 @@ body {
 
 .ops-stat {
     padding: 1rem 1.1rem;
-    border: 1px solid var(--border);
-    border-radius: 18px;
-    background: rgba(255, 252, 245, 0.8);
-    box-shadow: var(--shadow);
+    border: 1px solid var(--shell-border);
+    border-radius: 1.125rem;
+    background: color-mix(in oklab, var(--color-surface-raised) 82%, transparent);
+    box-shadow: var(--shell-shadow);
 }
 
 .ops-value {
@@ -181,7 +279,7 @@ body {
 .ops-meta {
     display: block;
     margin-top: 0.45rem;
-    color: var(--muted);
+    color: var(--color-on-surface-secondary);
     font-size: 0.92rem;
     line-height: 1.45;
 }
@@ -200,8 +298,8 @@ body {
 
 .empty-state {
     padding: 1rem;
-    border-radius: 16px;
-    background: rgba(31, 41, 51, 0.04);
+    border-radius: 1rem;
+    background: color-mix(in oklab, var(--color-on-surface-primary) 6%, transparent);
 }
 
 .panel-list {
@@ -214,9 +312,9 @@ body {
 
 .panel-item {
     padding: 1rem;
-    border: 1px solid rgba(31, 41, 51, 0.08);
-    border-radius: 18px;
-    background: rgba(255, 255, 255, 0.4);
+    border: 1px solid color-mix(in oklab, var(--color-on-surface-primary) 8%, transparent);
+    border-radius: 1.125rem;
+    background: color-mix(in oklab, var(--color-surface-overlay) 88%, transparent);
 }
 
 .panel-item-top {
@@ -233,14 +331,14 @@ body {
 }
 
 .panel-note {
-    color: var(--ink) !important;
+    color: var(--color-on-surface-primary) !important;
 }
 
 .panel-note--warning {
     padding: 0.65rem 0.75rem;
-    border-radius: 14px;
-    background: var(--warn-soft);
-    color: var(--warn) !important;
+    border-radius: 0.875rem;
+    background: var(--shell-danger-soft);
+    color: var(--shell-danger) !important;
 }
 
 .pill {
@@ -255,23 +353,23 @@ body {
 }
 
 .pill--success {
-    background: var(--accent-soft);
-    color: var(--accent);
+    background: var(--shell-success-soft);
+    color: var(--shell-success);
 }
 
 .pill--warning {
-    background: var(--pending-soft);
-    color: var(--pending);
+    background: var(--shell-warning-soft);
+    color: var(--shell-warning);
 }
 
 .pill--danger {
-    background: var(--warn-soft);
-    color: var(--warn);
+    background: var(--shell-danger-soft);
+    color: var(--shell-danger);
 }
 
 .pill--neutral {
-    background: rgba(31, 41, 51, 0.08);
-    color: var(--ink);
+    background: var(--shell-neutral-soft);
+    color: var(--color-on-surface-primary);
 }
 
 .detail-list {
@@ -283,7 +381,7 @@ body {
     justify-content: space-between;
     gap: 1rem;
     padding: 0.7rem 0;
-    border-top: 1px solid rgba(31, 41, 51, 0.08);
+    border-top: 1px solid color-mix(in oklab, var(--color-on-surface-primary) 8%, transparent);
 }
 
 .detail-list div:first-child {
@@ -292,7 +390,7 @@ body {
 }
 
 .detail-list dt {
-    color: var(--muted);
+    color: var(--color-on-surface-secondary);
 }
 
 .detail-list dd {
@@ -303,16 +401,42 @@ body {
 .detail-alert {
     margin-top: 1rem !important;
     padding: 0.85rem 1rem;
-    border-radius: 16px;
-    background: var(--warn-soft);
-    color: var(--warn) !important;
+    border-radius: 1rem;
+    background: var(--shell-danger-soft);
+    color: var(--shell-danger) !important;
 }
 
 code {
     padding: 0.15rem 0.35rem;
-    border-radius: 6px;
-    background: rgba(31, 41, 51, 0.08);
+    border-radius: 0.375rem;
+    background: color-mix(in oklab, var(--color-on-surface-primary) 8%, transparent);
     font-size: 0.92em;
+}
+
+.validation-message {
+    color: var(--shell-danger);
+    font-size: 0.9rem;
+}
+
+#blazor-error-ui {
+    display: none;
+    position: fixed;
+    right: 1rem;
+    bottom: 1rem;
+    z-index: 1000;
+    max-width: min(32rem, calc(100vw - 2rem));
+    padding: 1rem 1.25rem;
+    border: 1px solid color-mix(in oklab, var(--shell-danger) 32%, transparent);
+    border-radius: 1rem;
+    background: color-mix(in oklab, var(--color-surface-raised) 88%, var(--shell-danger-soft));
+    box-shadow: var(--shell-shadow);
+    color: var(--color-on-surface-primary);
+}
+
+#blazor-error-ui .dismiss {
+    float: right;
+    margin-left: 1rem;
+    cursor: pointer;
 }
 
 @media (max-width: 900px) {
@@ -323,13 +447,13 @@ code {
     }
 
     .dashboard-page {
-        width: min(100vw - 1.25rem, 1120px);
+        width: min(100vw - 1.25rem, var(--shell-max-width));
         padding-top: 1.25rem;
     }
 
     .hero,
     .metric-card,
     .detail-card {
-        border-radius: 20px;
+        border-radius: 1.25rem;
     }
 }

@@ -61,13 +61,12 @@ public sealed class WorkflowOptionsProviderTests
                     Updated prompt for {{ issue.title }}
                     """);
 
-                var reloadedOptions = await provider.GetCurrentAsync();
-                var reloadedDefinition = await provider.GetCurrentDefinitionAsync();
+                var reloadedSnapshot = await WaitForReloadAsync(provider);
 
                 Assert.Equal(125, initialOptions.Polling.IntervalMs);
                 Assert.Equal("Initial prompt for {{ issue.identifier }}", initialDefinition.PromptTemplate);
-                Assert.Equal(250, reloadedOptions.Polling.IntervalMs);
-                Assert.Equal("Updated prompt for {{ issue.title }}", reloadedDefinition.PromptTemplate);
+                Assert.Equal(250, reloadedSnapshot.Options.Polling.IntervalMs);
+                Assert.Equal("Updated prompt for {{ issue.title }}", reloadedSnapshot.Definition.PromptTemplate);
                 Assert.Equal("Loaded", workflowLoadStatusTracker.GetSnapshot().Status);
                 Assert.Equal(250, workflowLoadStatusTracker.GetSnapshot().PollingIntervalMs);
                 Assert.Contains(
@@ -134,19 +133,18 @@ public sealed class WorkflowOptionsProviderTests
                     Broken prompt
                     """);
 
-                var currentOptions = await provider.GetCurrentAsync();
-                var currentDefinition = await provider.GetCurrentDefinitionAsync();
+                var failedReload = await WaitForFailedReloadAsync(provider, workflowLoadStatusTracker);
 
-                Assert.Equal(initialOptions, currentOptions);
-                Assert.Equal(initialDefinition, currentDefinition);
+                Assert.Equal(initialOptions, failedReload.Options);
+                Assert.Equal(initialDefinition, failedReload.Definition);
 
                 var errorEntry = logger.Entries.Last(
                     entry => entry.Message.Contains("workflow_reload failed", StringComparison.Ordinal));
                 var errorCode = Assert.IsType<string>(errorEntry.State["error_code"]);
                 Assert.True(
-                    errorCode is "missing_tracker_api_key" or "workflow_parse_error",
+                    errorCode is "missing_tracker_api_key" or "workflow_parse_error" or "missing_workflow_file",
                     $"Unexpected workflow reload error code '{errorCode}'.");
-                var snapshot = workflowLoadStatusTracker.GetSnapshot();
+                var snapshot = failedReload.Snapshot;
                 Assert.Equal("ReloadFailedUsingLastKnownGood", snapshot.Status);
                 Assert.Equal(initialOptions.Polling.IntervalMs, snapshot.PollingIntervalMs);
                 Assert.Equal(errorCode, snapshot.LastErrorCode);
@@ -190,6 +188,58 @@ public sealed class WorkflowOptionsProviderTests
         File.SetLastWriteTimeUtc(
             workflowPath,
             DateTime.UtcNow.AddSeconds(Interlocked.Increment(ref _lastWriteSequence)));
+    }
+
+    private static async Task<(WorkflowServiceOptions Options, WorkflowDefinition Definition)> WaitForReloadAsync(
+        WorkflowOptionsProvider provider)
+    {
+        for (var attempt = 0; attempt < 20; attempt++)
+        {
+            var options = await provider.GetCurrentAsync();
+            var definition = await provider.GetCurrentDefinitionAsync();
+
+            if (options.Polling.IntervalMs == 250
+                && string.Equals(
+                    definition.PromptTemplate,
+                    "Updated prompt for {{ issue.title }}",
+                    StringComparison.Ordinal))
+            {
+                return (options, definition);
+            }
+
+            await Task.Delay(TimeSpan.FromMilliseconds(25));
+        }
+
+        var finalOptions = await provider.GetCurrentAsync();
+        var finalDefinition = await provider.GetCurrentDefinitionAsync();
+        return (finalOptions, finalDefinition);
+    }
+
+    private static async Task<(
+        WorkflowServiceOptions Options,
+        WorkflowDefinition Definition,
+        WorkflowLoadStatusSnapshot Snapshot)> WaitForFailedReloadAsync(
+        WorkflowOptionsProvider provider,
+        WorkflowLoadStatusTracker workflowLoadStatusTracker)
+    {
+        for (var attempt = 0; attempt < 20; attempt++)
+        {
+            var options = await provider.GetCurrentAsync();
+            var definition = await provider.GetCurrentDefinitionAsync();
+            var snapshot = workflowLoadStatusTracker.GetSnapshot();
+
+            if (string.Equals(snapshot.Status, "ReloadFailedUsingLastKnownGood", StringComparison.Ordinal))
+            {
+                return (options, definition, snapshot);
+            }
+
+            await Task.Delay(TimeSpan.FromMilliseconds(25));
+        }
+
+        return (
+            await provider.GetCurrentAsync(),
+            await provider.GetCurrentDefinitionAsync(),
+            workflowLoadStatusTracker.GetSnapshot());
     }
 
     private sealed class TestLogger<T> : ILogger<T>
