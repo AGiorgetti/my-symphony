@@ -15,6 +15,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Flowbite" Version="*-*" />
+  </ItemGroup>
+
+  <ItemGroup>
     <None Update="wwwroot\**\*">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>

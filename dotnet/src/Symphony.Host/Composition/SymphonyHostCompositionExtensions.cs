@@ -1,3 +1,4 @@
+using Flowbite.Services;
 using Symphony.Application.DependencyInjection;
 using Symphony.Host.Api;
 using Symphony.Host.Components;
@@ -18,6 +19,7 @@ public static class SymphonyHostCompositionExtensions
         builder.Services
             .AddRazorComponents()
             .AddInteractiveServerComponents();
+        builder.Services.AddFlowbite();
 
         builder.Services
             .AddSymphonyApplication()
