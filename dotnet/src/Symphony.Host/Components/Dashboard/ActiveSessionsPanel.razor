@@ -14,8 +14,12 @@
 
     @if (Sessions.Count == 0)
     {
-        <EmptyState Title="No active sessions"
-                    Description="New in-flight work will appear here without requiring a full page reload." />
+        <div class="rounded-[var(--shell-radius-lg)] border border-dashed border-[var(--shell-border)]/80 bg-[color:var(--color-surface-overlay)]/50 p-4">
+            <p class="text-base font-semibold text-[color:var(--color-on-surface-primary)]">No active sessions</p>
+            <p class="mt-2 text-sm leading-6 text-[color:var(--color-on-surface-secondary)]">
+                New in-flight work will appear here without requiring a full page reload.
+            </p>
+        </div>
     }
     else
     {

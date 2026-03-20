@@ -150,19 +150,19 @@
 
         <div class="mt-auto space-y-4 border-t border-[var(--shell-border)] px-3 pb-4 pt-4">
             <section class="space-y-3" data-testid="orchestrator-control-panel">
-                <div class="space-y-1">
+                <div class="rounded-[var(--shell-radius-lg)] border border-[var(--shell-border)] bg-[color:var(--color-surface-overlay)]/80 p-3">
                     <p class="text-xs font-bold uppercase tracking-[0.24em] text-[color:var(--color-primary-DEFAULT)]">Orchestrator</p>
-                    <div class="flex items-center justify-between gap-2">
+                    <div class="mt-3 space-y-2">
                         <span class="@GetOrchestratorStateBadgeClasses()" data-testid="orchestrator-control-state">
                             @_orchestratorStateLabel
                         </span>
-                        <span class="text-xs text-[color:var(--color-on-surface-secondary)]">
-                            New assignments
-                        </span>
+                        <p class="text-sm leading-6 text-[color:var(--color-on-surface-secondary)]">
+                            @GetOrchestratorDescription()
+                        </p>
                     </div>
                 </div>
 
-                <div class="grid grid-cols-2 gap-2">
+                <div class="flex flex-col gap-2">
                     <button class="@GetOrchestratorActionButtonClasses(_orchestratorState == OrchestratorControlState.Started)"
                             data-testid="orchestrator-start-button"
                             disabled="@(_isUpdatingOrchestratorState || _orchestratorState == OrchestratorControlState.Started)"
@@ -277,5 +277,12 @@
         return isActiveAction
             ? $"{baseClasses} border-[color:var(--color-primary-DEFAULT)] bg-[color:var(--color-primary-DEFAULT)] text-slate-950"
             : $"{baseClasses} border-[var(--shell-border)] bg-[color:var(--color-surface-overlay)] text-[color:var(--color-on-surface-primary)] hover:border-[color:var(--color-primary-DEFAULT)]";
+    }
+
+    private string GetOrchestratorDescription()
+    {
+        return _orchestratorState == OrchestratorControlState.Started
+            ? "New issue assignment is enabled."
+            : "New issue assignment is paused until the orchestrator is started.";
     }
 }

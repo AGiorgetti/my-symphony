@@ -14,8 +14,12 @@
 
     @if (Attempts.Count == 0)
     {
-        <EmptyState Title="No recent attempts yet"
-                    Description="Completed worker attempts will appear here after the first run finishes." />
+        <div class="rounded-[var(--shell-radius-lg)] border border-dashed border-[var(--shell-border)]/80 bg-[color:var(--color-surface-overlay)]/50 p-4">
+            <p class="text-base font-semibold text-[color:var(--color-on-surface-primary)]">No recent attempts yet</p>
+            <p class="mt-2 text-sm leading-6 text-[color:var(--color-on-surface-secondary)]">
+                Completed worker attempts will appear here after the first run finishes.
+            </p>
+        </div>
     }
     else
     {
