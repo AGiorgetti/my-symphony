@@ -8,7 +8,7 @@
 @inject IThemeService ThemeService
 
 <div class="min-h-screen bg-transparent text-[var(--color-on-surface-primary)] lg:flex">
-    <div class="hidden lg:block lg:w-72 lg:shrink-0">
+    <div class="hidden lg:block lg:w-64 lg:shrink-0">
         <Sidebar>
             @SidebarContent
         </Sidebar>
@@ -21,7 +21,7 @@
                 @onclick="CloseSidebar">
         </button>
 
-        <div class="fixed inset-y-0 left-0 z-40 w-72 lg:hidden">
+        <div class="fixed inset-y-0 left-0 z-40 w-64 lg:hidden">
             <Sidebar>
                 @SidebarContent
             </Sidebar>
