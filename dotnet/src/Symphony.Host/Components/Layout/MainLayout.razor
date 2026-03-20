@@ -85,6 +85,16 @@
         _refreshLoopTask = RunRefreshLoopAsync(_refreshCancellationTokenSource.Token);
     }
 
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        await ThemeService.InitializeAsync();
+    }
+
     public async ValueTask DisposeAsync()
     {
         if (_refreshCancellationTokenSource is not null)
