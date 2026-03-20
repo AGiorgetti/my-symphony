@@ -6,5 +6,5 @@ public sealed class OrchestratorControlOptions
 {
     public const string SectionName = "Orchestration";
 
-    public string InitialState { get; set; } = nameof(OrchestratorControlState.Started);
+    public string InitialState { get; set; } = nameof(OrchestratorControlState.Stopped);
 }
