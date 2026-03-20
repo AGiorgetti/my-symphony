@@ -218,6 +218,7 @@ The detail view should include:
 - session status and outcome
 - timestamps relevant to the session lifecycle
 - a readable activity history
+- a separate details view for live session metadata such as tokens, turn count, session ID, and attempt number
 - visible messages and updates from the agent
 - warnings and errors when present
 

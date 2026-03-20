@@ -51,6 +51,16 @@ internal static class SessionDetailDisplay
         };
     }
 
+    internal static string GetAttemptLabel(int? attempt, bool isKnown)
+    {
+        if (!isKnown)
+        {
+            return "Unavailable";
+        }
+
+        return attempt is null ? "Initial run" : $"Attempt {attempt}";
+    }
+
     internal static string GetKindLabel(SessionActivityKind kind)
     {
         return kind switch
@@ -89,6 +99,25 @@ internal static class SessionDetailDisplay
             SessionActivityKind.Outcome => IsSuccessfulOutcome(entry) ? TimelineColor.Green : TimelineColor.Red,
             _ => TimelineColor.Gray
         };
+    }
+
+    internal static int? TryParseTurnCount(string? sessionId)
+    {
+        if (string.IsNullOrWhiteSpace(sessionId))
+        {
+            return null;
+        }
+
+        var markerIndex = sessionId.LastIndexOf("-turn-", StringComparison.OrdinalIgnoreCase);
+        if (markerIndex < 0)
+        {
+            return null;
+        }
+
+        var turnSegment = sessionId[(markerIndex + 6)..];
+        return int.TryParse(turnSegment, NumberStyles.Integer, CultureInfo.InvariantCulture, out var turnCount)
+            ? turnCount
+            : null;
     }
 
     private static bool IsSuccessfulOutcome(SessionActivityEntry entry)

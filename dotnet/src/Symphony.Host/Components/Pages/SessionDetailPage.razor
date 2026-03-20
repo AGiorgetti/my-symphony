@@ -1,5 +1,9 @@
 @page "/sessions/{Identifier}"
+@implements IAsyncDisposable
+@using Symphony.Application.Runtime
 @using Symphony.Host.Components.SessionDetail
+@inject IDashboardStateService DashboardStateService
+@inject IOrchestratorRuntimeService OrchestratorRuntimeService
 @inject ISessionActivityStore SessionActivityStore
 
 <main class="dashboard-page flex flex-col gap-6">
@@ -19,7 +23,7 @@
             <Skeleton Variant="SkeletonVariant.Card" Width="w-full" Height="h-80" />
         </Card>
     }
-    else if (_header is null || _timeline is null)
+    else if (_header is null || _timeline is null || _metadata is null)
     {
         <div data-testid="session-detail-not-found">
             <Alert Color="AlertColor.Warning"
@@ -31,8 +35,39 @@
     }
     else
     {
+        @if (!string.IsNullOrWhiteSpace(_refreshErrorMessage))
+        {
+            <Alert Color="AlertColor.Warning"
+                   Rounded="true"
+                   WithBorderAccent="true"
+                   TextEmphasis="Refresh warning:"
+                   Text="@_refreshErrorMessage" />
+        }
+
         <SessionHeaderCard Session="_header" />
-        <SessionActivityTimeline Timeline="_timeline" />
+
+        <div data-testid="session-detail-tabs">
+            <Tabs Variant="TabVariant.Underline"
+                  ActiveIndex="@_activeTabIndex"
+                  ActiveIndexChanged="@HandleActiveTabChanged">
+                <TabListContent>
+                    <Tab Index="0">Activity</Tab>
+                    <Tab Index="1">Details</Tab>
+                </TabListContent>
+                <TabPanelsContent>
+                    <TabPanel Index="0">
+                        <div data-testid="session-detail-activity-panel">
+                            <SessionActivityTimeline Timeline="_timeline" />
+                        </div>
+                    </TabPanel>
+                    <TabPanel Index="1">
+                        <div data-testid="session-detail-details-panel">
+                            <SessionMetadataPanel Metadata="_metadata" />
+                        </div>
+                    </TabPanel>
+                </TabPanelsContent>
+            </Tabs>
+        </div>
     }
 </main>
 
@@ -46,16 +81,111 @@
     [Parameter]
     public string Identifier { get; set; } = string.Empty;
 
+    private PeriodicTimer? _refreshTimer;
+    private CancellationTokenSource? _refreshCancellationTokenSource;
+    private Task? _refreshLoopTask;
     private bool _isLoading = true;
+    private bool _isSessionActive;
+    private int _activeTabIndex;
     private string _requestedIdentifier = string.Empty;
+    private string? _refreshErrorMessage;
     private SessionHeaderDisplayModel? _header;
     private SessionActivityTimelineModel? _timeline;
+    private SessionMetadataPanelModel? _metadata;
 
-    protected override Task OnParametersSetAsync()
+    protected override async Task OnParametersSetAsync()
     {
-        _requestedIdentifier = Identifier?.Trim() ?? string.Empty;
-        _isLoading = false;
+        await StopRefreshLoopAsync();
 
+        _requestedIdentifier = Identifier?.Trim() ?? string.Empty;
+        _isLoading = true;
+        _refreshErrorMessage = null;
+
+        await LoadAsync();
+
+        if (_isSessionActive)
+        {
+            _refreshCancellationTokenSource = new CancellationTokenSource();
+            _refreshTimer = new PeriodicTimer(TimeSpan.FromSeconds(2));
+            _refreshLoopTask = RunRefreshLoopAsync(_refreshCancellationTokenSource.Token);
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        await StopRefreshLoopAsync();
+    }
+
+    private async Task RunRefreshLoopAsync(CancellationToken cancellationToken)
+    {
+        if (_refreshTimer is null)
+        {
+            return;
+        }
+
+        try
+        {
+            while (await _refreshTimer.WaitForNextTickAsync(cancellationToken))
+            {
+                try
+                {
+                    await LoadAsync(cancellationToken);
+                    if (!_isSessionActive)
+                    {
+                        return;
+                    }
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch (Exception exception)
+                {
+                    _refreshErrorMessage = exception.Message;
+                }
+
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private async Task StopRefreshLoopAsync()
+    {
+        if (_refreshCancellationTokenSource is not null)
+        {
+            await _refreshCancellationTokenSource.CancelAsync();
+            _refreshCancellationTokenSource.Dispose();
+            _refreshCancellationTokenSource = null;
+        }
+
+        _refreshTimer?.Dispose();
+        _refreshTimer = null;
+
+        if (_refreshLoopTask is not null)
+        {
+            try
+            {
+                await _refreshLoopTask;
+            }
+            catch (OperationCanceledException)
+            {
+            }
+
+            _refreshLoopTask = null;
+        }
+    }
+
+    private async Task HandleActiveTabChanged(int index)
+    {
+        _activeTabIndex = index;
+        await Task.CompletedTask;
+    }
+
+    private async Task LoadAsync(CancellationToken cancellationToken = default)
+    {
         var session = string.IsNullOrWhiteSpace(_requestedIdentifier)
             ? null
             : SessionActivityStore.GetSession(_requestedIdentifier);
@@ -64,12 +194,23 @@
         {
             _header = null;
             _timeline = null;
-            return Task.CompletedTask;
+            _metadata = null;
+            _isSessionActive = false;
+            _isLoading = false;
+            return;
         }
+
+        var snapshot = await DashboardStateService.GetSnapshotAsync(cancellationToken);
+        var activeSession = snapshot.ActiveSessions
+            .FirstOrDefault(candidate => string.Equals(candidate.IssueIdentifier, session.IssueIdentifier, StringComparison.OrdinalIgnoreCase));
+        var issueSnapshot = await OrchestratorRuntimeService.GetIssueSnapshotAsync(session.IssueIdentifier, cancellationToken);
 
         _header = BuildHeader(session);
         _timeline = BuildTimeline(session, SessionActivityStore.GetActivities(session.IssueIdentifier));
-        return Task.CompletedTask;
+        _metadata = BuildMetadata(session, activeSession, issueSnapshot, snapshot);
+        _isSessionActive = session.IsActive;
+        _refreshErrorMessage = null;
+        _isLoading = false;
     }
 
     private static SessionHeaderDisplayModel BuildHeader(SessionRecord session)
@@ -140,6 +281,45 @@
         }
 
         return new SessionActivityTimelineModel(orderedActivities, latestAttentionAlert, failureAlert);
+    }
+
+    private static SessionMetadataPanelModel BuildMetadata(
+        SessionRecord session,
+        DashboardActiveSessionSnapshot? activeSession,
+        OrchestratorIssueSnapshot? issueSnapshot,
+        DashboardSnapshot snapshot)
+    {
+        var recentAttempt = snapshot.RecentAttempts
+            .Where(attempt => string.Equals(attempt.IssueIdentifier, session.IssueIdentifier, StringComparison.OrdinalIgnoreCase))
+            .OrderByDescending(attempt => attempt.CompletedAt)
+            .FirstOrDefault();
+        var runningSession = issueSnapshot?.Running;
+        var sessionId = runningSession?.SessionId ?? activeSession?.SessionId ?? recentAttempt?.SessionId;
+        var turnCount = runningSession?.TurnCount ?? activeSession?.TurnCount ?? SessionDetailDisplay.TryParseTurnCount(sessionId);
+        var attempt = issueSnapshot is null ? recentAttempt?.Attempt : issueSnapshot.CurrentRetryAttempt;
+        var isAttemptKnown = issueSnapshot is not null || recentAttempt is not null;
+
+        return new SessionMetadataPanelModel(
+            runningSession?.InputTokens,
+            runningSession?.OutputTokens,
+            runningSession?.TotalTokens ?? activeSession?.TotalTokens,
+            turnCount,
+            sessionId,
+            attempt,
+            isAttemptKnown,
+            GetMetadataAvailabilityMessage(session, runningSession is not null));
+    }
+
+    private static string? GetMetadataAvailabilityMessage(SessionRecord session, bool hasRunningSnapshot)
+    {
+        if (!session.IsActive)
+        {
+            return "Finished sessions keep the last known session ID and attempt when available. Live token counters are only available while the session is active.";
+        }
+
+        return hasRunningSnapshot
+            ? null
+            : "Live runtime metadata is temporarily unavailable while the active session snapshot catches up.";
     }
 
     private static string ComposeAlertMessage(SessionActivityEntry entry)

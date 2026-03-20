@@ -1,0 +1,72 @@
+<div data-testid="session-detail-metadata">
+    <Card Slots="@MetadataCardSlots">
+        <div class="space-y-2">
+            <p class="text-xs font-bold uppercase tracking-[0.24em] text-[color:var(--color-primary-DEFAULT)]">Details</p>
+            <h2 class="text-2xl font-semibold text-[color:var(--color-on-surface-primary)]">Session metadata</h2>
+            <p class="text-sm leading-6 text-[color:var(--color-on-surface-secondary)]">
+                Live runtime token counters plus the latest known session identity and attempt metadata.
+            </p>
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(Metadata.AvailabilityMessage))
+        {
+            <div class="rounded-[var(--shell-radius-lg)] border border-[var(--shell-border)] bg-[color:var(--color-surface-base)] px-4 py-3 text-sm leading-6 text-[color:var(--color-on-surface-secondary)]">
+                @Metadata.AvailabilityMessage
+            </div>
+        }
+
+        <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            <div class="rounded-[var(--shell-radius-lg)] border border-[var(--shell-border)] bg-[color:var(--color-surface-base)] p-4" data-testid="session-detail-metadata-input-tokens">
+                <p class="text-xs font-bold uppercase tracking-[0.2em] text-[color:var(--color-on-surface-secondary)]">Input tokens</p>
+                <p class="mt-2 text-base font-semibold text-[color:var(--color-on-surface-primary)]">@FormatLong(Metadata.InputTokens)</p>
+            </div>
+            <div class="rounded-[var(--shell-radius-lg)] border border-[var(--shell-border)] bg-[color:var(--color-surface-base)] p-4" data-testid="session-detail-metadata-output-tokens">
+                <p class="text-xs font-bold uppercase tracking-[0.2em] text-[color:var(--color-on-surface-secondary)]">Output tokens</p>
+                <p class="mt-2 text-base font-semibold text-[color:var(--color-on-surface-primary)]">@FormatLong(Metadata.OutputTokens)</p>
+            </div>
+            <div class="rounded-[var(--shell-radius-lg)] border border-[var(--shell-border)] bg-[color:var(--color-surface-base)] p-4" data-testid="session-detail-metadata-total-tokens">
+                <p class="text-xs font-bold uppercase tracking-[0.2em] text-[color:var(--color-on-surface-secondary)]">Combined tokens</p>
+                <p class="mt-2 text-base font-semibold text-[color:var(--color-on-surface-primary)]">@FormatLong(Metadata.TotalTokens)</p>
+            </div>
+            <div class="rounded-[var(--shell-radius-lg)] border border-[var(--shell-border)] bg-[color:var(--color-surface-base)] p-4" data-testid="session-detail-metadata-turn-count">
+                <p class="text-xs font-bold uppercase tracking-[0.2em] text-[color:var(--color-on-surface-secondary)]">Turn count</p>
+                <p class="mt-2 text-base font-semibold text-[color:var(--color-on-surface-primary)]">@FormatInt(Metadata.TurnCount)</p>
+            </div>
+            <div class="rounded-[var(--shell-radius-lg)] border border-[var(--shell-border)] bg-[color:var(--color-surface-base)] p-4" data-testid="session-detail-metadata-session-id">
+                <p class="text-xs font-bold uppercase tracking-[0.2em] text-[color:var(--color-on-surface-secondary)]">Session ID</p>
+                <p class="mt-2 break-all text-base font-semibold text-[color:var(--color-on-surface-primary)]">@FormatText(Metadata.SessionId)</p>
+            </div>
+            <div class="rounded-[var(--shell-radius-lg)] border border-[var(--shell-border)] bg-[color:var(--color-surface-base)] p-4" data-testid="session-detail-metadata-attempt">
+                <p class="text-xs font-bold uppercase tracking-[0.2em] text-[color:var(--color-on-surface-secondary)]">Attempt</p>
+                <p class="mt-2 text-base font-semibold text-[color:var(--color-on-surface-primary)]">@SessionDetailDisplay.GetAttemptLabel(Metadata.Attempt, Metadata.IsAttemptKnown)</p>
+            </div>
+        </div>
+    </Card>
+</div>
+
+@code {
+    private static readonly CardSlots MetadataCardSlots = new()
+    {
+        Base = "rounded-[var(--shell-radius-xl)] border border-[var(--shell-border)] bg-[color:var(--color-surface-raised)] shadow-[var(--shell-shadow)]",
+        Body = "flex flex-col gap-6 p-6"
+    };
+
+    [Parameter]
+    [EditorRequired]
+    public required SessionMetadataPanelModel Metadata { get; set; }
+
+    private static string FormatLong(long? value)
+    {
+        return value?.ToString("N0") ?? "Unavailable";
+    }
+
+    private static string FormatInt(int? value)
+    {
+        return value?.ToString() ?? "Unavailable";
+    }
+
+    private static string FormatText(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? "Unavailable" : value;
+    }
+}
