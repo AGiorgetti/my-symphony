@@ -1,0 +1,81 @@
+@if (Sessions.Count == 0)
+{
+    <Card Slots="@EmptyStateCardSlots" data-testid="session-list-empty-state">
+        <EmptyState Title="No sessions in this view"
+                    Description="Change the filter or wait for more agent activity to populate the session explorer." />
+    </Card>
+}
+else
+{
+    <div class="rounded-[var(--shell-radius-lg)] border border-[var(--shell-border)] bg-[color:var(--color-surface-raised)] p-2 shadow-[var(--shell-shadow)]"
+         data-testid="session-list-table">
+        <div class="overflow-x-auto">
+            <Table Striped="true" Hoverable="true" Responsive="true">
+                <TableHead>
+                    <TableRow>
+                        <TableHeadCell>Issue</TableHeadCell>
+                        <TableHeadCell>Status</TableHeadCell>
+                        <TableHeadCell>Started</TableHeadCell>
+                        <TableHeadCell>Ended / Duration</TableHeadCell>
+                        <TableHeadCell>Outcome / last event</TableHeadCell>
+                    </TableRow>
+                </TableHead>
+                <TableBody class="divide-y">
+                    @foreach (var session in Sessions)
+                    {
+                        <TableRow class="bg-[color:var(--color-surface-raised)]">
+                            <TableCell IsFirstColumn="true">
+                                <div class="flex flex-col gap-1">
+                                    <a class="font-semibold text-[color:var(--color-on-surface-primary)] underline decoration-[color:var(--color-primary-DEFAULT)] decoration-2 underline-offset-4"
+                                       href="/sessions/@Uri.EscapeDataString(session.IssueIdentifier)">
+                                        @session.IssueIdentifier
+                                    </a>
+                                    @if (!string.IsNullOrWhiteSpace(session.IssueUrl))
+                                    {
+                                        <a class="text-xs font-medium text-[color:var(--color-on-surface-secondary)] hover:text-[color:var(--color-primary-DEFAULT)]"
+                                           href="@session.IssueUrl">
+                                            Tracker issue
+                                        </a>
+                                    }
+                                </div>
+                            </TableCell>
+                            <TableCell>
+                                <Badge Color="@SessionListDisplay.GetStatusColor(session)">
+                                    @session.Status
+                                </Badge>
+                            </TableCell>
+                            <TableCell class="whitespace-nowrap text-sm text-[color:var(--color-on-surface-secondary)]">
+                                @SessionListDisplay.FormatTimestamp(session.StartedAt)
+                            </TableCell>
+                            <TableCell class="text-sm text-[color:var(--color-on-surface-secondary)]">
+                                <div class="font-medium text-[color:var(--color-on-surface-primary)]">
+                                    @(session.EndedAt is null ? "Live" : SessionListDisplay.FormatTimestamp(session.EndedAt.Value))
+                                </div>
+                                <div>@SessionListDisplay.GetDurationLabel(session)</div>
+                            </TableCell>
+                            <TableCell class="text-sm text-[color:var(--color-on-surface-secondary)]">
+                                <div class="font-medium text-[color:var(--color-on-surface-primary)]">@session.Summary</div>
+                                @if (!string.IsNullOrWhiteSpace(session.Detail))
+                                {
+                                    <div class="mt-1">@session.Detail</div>
+                                }
+                            </TableCell>
+                        </TableRow>
+                    }
+                </TableBody>
+            </Table>
+        </div>
+    </div>
+}
+
+@code {
+    private static readonly CardSlots EmptyStateCardSlots = new()
+    {
+        Base = "rounded-[var(--shell-radius-lg)] border border-[var(--shell-border)] bg-[color:var(--color-surface-raised)] shadow-[var(--shell-shadow)]",
+        Body = "p-6"
+    };
+
+    [Parameter]
+    [EditorRequired]
+    public required IReadOnlyList<SessionListRowViewModel> Sessions { get; set; }
+}

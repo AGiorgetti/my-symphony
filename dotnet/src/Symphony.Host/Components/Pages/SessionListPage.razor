@@ -1,0 +1,219 @@
+@page "/sessions"
+@implements IAsyncDisposable
+@using System.Globalization
+@using Symphony.Host.Components.Sessions
+@inject IDashboardStateService DashboardStateService
+@inject ISessionActivityStore SessionActivityStore
+
+<main class="dashboard-page flex flex-col gap-6">
+    <section class="hero">
+        <p class="eyebrow">Symphony</p>
+        <h1>Session Explorer</h1>
+        <p class="lede">
+            Browse all active and ended sessions from the current application run without leaving the
+            operator shell.
+        </p>
+    </section>
+
+    @if (_isLoading)
+    {
+        <Card Slots="@ShellCardSlots" data-testid="session-list-skeleton">
+            <Skeleton Variant="SkeletonVariant.Text" Lines="1" AriaLabel="Loading session filters" />
+            <Skeleton Variant="SkeletonVariant.Text" Lines="1" Width="w-72" />
+            <Skeleton Variant="SkeletonVariant.Card" Width="w-full" Height="h-64" />
+        </Card>
+    }
+    else
+    {
+        @if (!string.IsNullOrWhiteSpace(_refreshErrorMessage))
+        {
+            <Alert Color="AlertColor.Warning"
+                   Rounded="true"
+                   WithBorderAccent="true"
+                   TextEmphasis="Refresh warning:"
+                   Text="@_refreshErrorMessage" />
+        }
+
+        <Card Slots="@ShellCardSlots" data-testid="session-list-page">
+            <div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                    <p class="text-xs font-bold uppercase tracking-[0.24em] text-[color:var(--color-primary-DEFAULT)]">Session List</p>
+                    <h2 class="mt-2 text-2xl font-semibold text-[color:var(--color-on-surface-primary)]">Current run inventory</h2>
+                    <p class="mt-2 text-sm leading-6 text-[color:var(--color-on-surface-secondary)]">
+                        Filter active and ended sessions, then jump into `/sessions/{identifier}` for the full timeline.
+                    </p>
+                </div>
+                <div class="text-sm text-[color:var(--color-on-surface-secondary)]">
+                    Refreshed @(_generatedAt is null ? "never" : _generatedAt.Value.ToUniversalTime().ToString("HH:mm:ss 'UTC'", CultureInfo.InvariantCulture))
+                </div>
+            </div>
+
+            <Tabs Variant="TabVariant.Underline"
+                  ActiveIndex="@_activeTabIndex"
+                  ActiveIndexChanged="@HandleActiveTabChanged">
+                <TabListContent>
+                    <Tab Index="0">All (@_allSessions.Count)</Tab>
+                    <Tab Index="1">Active (@_activeSessions.Count)</Tab>
+                    <Tab Index="2">Ended (@_endedSessions.Count)</Tab>
+                </TabListContent>
+                <TabPanelsContent>
+                    <TabPanel Index="0">
+                        <SessionListTable Sessions="_allSessions" />
+                    </TabPanel>
+                    <TabPanel Index="1">
+                        <SessionListTable Sessions="_activeSessions" />
+                    </TabPanel>
+                    <TabPanel Index="2">
+                        <SessionListTable Sessions="_endedSessions" />
+                    </TabPanel>
+                </TabPanelsContent>
+            </Tabs>
+        </Card>
+    }
+</main>
+
+@code {
+    private static readonly CardSlots ShellCardSlots = new()
+    {
+        Base = "rounded-[var(--shell-radius-xl)] border border-[var(--shell-border)] bg-[color:var(--color-surface-raised)] shadow-[var(--shell-shadow)]",
+        Body = "flex flex-col gap-6 p-6"
+    };
+
+    private PeriodicTimer? _refreshTimer;
+    private CancellationTokenSource? _refreshCancellationTokenSource;
+    private Task? _refreshLoopTask;
+    private bool _isLoading = true;
+    private int _activeTabIndex;
+    private DateTimeOffset? _generatedAt;
+    private string? _refreshErrorMessage;
+    private IReadOnlyList<SessionListRowViewModel> _allSessions = [];
+    private IReadOnlyList<SessionListRowViewModel> _activeSessions = [];
+    private IReadOnlyList<SessionListRowViewModel> _endedSessions = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        await RefreshAsync();
+
+        _refreshCancellationTokenSource = new CancellationTokenSource();
+        _refreshTimer = new PeriodicTimer(TimeSpan.FromSeconds(5));
+        _refreshLoopTask = RunRefreshLoopAsync(_refreshCancellationTokenSource.Token);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_refreshCancellationTokenSource is not null)
+        {
+            await _refreshCancellationTokenSource.CancelAsync();
+            _refreshCancellationTokenSource.Dispose();
+            _refreshCancellationTokenSource = null;
+        }
+
+        _refreshTimer?.Dispose();
+        _refreshTimer = null;
+
+        if (_refreshLoopTask is not null)
+        {
+            try
+            {
+                await _refreshLoopTask;
+            }
+            catch (OperationCanceledException)
+            {
+            }
+        }
+    }
+
+    private async Task RunRefreshLoopAsync(CancellationToken cancellationToken)
+    {
+        if (_refreshTimer is null)
+        {
+            return;
+        }
+
+        try
+        {
+            while (await _refreshTimer.WaitForNextTickAsync(cancellationToken))
+            {
+                try
+                {
+                    await RefreshAsync(cancellationToken);
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch (Exception exception)
+                {
+                    _refreshErrorMessage = exception.Message;
+                }
+
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private async Task HandleActiveTabChanged(int index)
+    {
+        _activeTabIndex = index;
+        await Task.CompletedTask;
+    }
+
+    private async Task RefreshAsync(CancellationToken cancellationToken = default)
+    {
+        var snapshot = await DashboardStateService.GetSnapshotAsync(cancellationToken);
+        var activeSessionsByIssue = snapshot.ActiveSessions
+            .ToDictionary(session => session.IssueIdentifier, StringComparer.OrdinalIgnoreCase);
+
+        var allSessions = SessionActivityStore.GetAllSessions()
+            .Select(session => BuildRow(session, activeSessionsByIssue, snapshot.GeneratedAt))
+            .ToArray();
+
+        _generatedAt = snapshot.GeneratedAt;
+        _allSessions = allSessions;
+        _activeSessions = allSessions.Where(session => session.IsActive).ToArray();
+        _endedSessions = allSessions.Where(session => !session.IsActive).ToArray();
+        _refreshErrorMessage = null;
+        _isLoading = false;
+    }
+
+    private static SessionListRowViewModel BuildRow(
+        SessionRecord session,
+        IReadOnlyDictionary<string, DashboardActiveSessionSnapshot> activeSessionsByIssue,
+        DateTimeOffset generatedAt)
+    {
+        if (activeSessionsByIssue.TryGetValue(session.IssueIdentifier, out var activeSession))
+        {
+            return new SessionListRowViewModel(
+                session.IssueIdentifier,
+                session.IssueUrl,
+                true,
+                activeSession.State,
+                session.StartedAt,
+                null,
+                Math.Max((generatedAt - session.StartedAt).TotalSeconds, 0d),
+                string.IsNullOrWhiteSpace(activeSession.LastEvent)
+                    ? "Awaiting first event"
+                    : activeSession.LastEvent,
+                string.IsNullOrWhiteSpace(activeSession.LastMessage)
+                    ? $"Session {(activeSession.SessionId ?? "pending")} / turns {activeSession.TurnCount}"
+                    : activeSession.LastMessage);
+        }
+
+        var endedAt = session.EndedAt ?? generatedAt;
+        return new SessionListRowViewModel(
+            session.IssueIdentifier,
+            session.IssueUrl,
+            false,
+            session.FinalOutcome ?? "Ended",
+            session.StartedAt,
+            session.EndedAt,
+            Math.Max((endedAt - session.StartedAt).TotalSeconds, 0d),
+            string.IsNullOrWhiteSpace(session.FinalError)
+                ? "Session completed and is available for inspection."
+                : session.FinalError,
+            session.FinalOutcome is null ? null : $"Final outcome: {session.FinalOutcome}");
+    }
+}
