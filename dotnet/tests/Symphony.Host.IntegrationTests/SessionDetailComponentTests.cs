@@ -55,6 +55,12 @@ public sealed class SessionDetailComponentTests : BunitContext
                             "Tracker moved to In Progress",
                             TimelineColor.Gray),
                         new SessionActivityTimelineEntryModel(
+                            SessionActivityKind.AgentMessage,
+                            new DateTimeOffset(2026, 3, 20, 9, 0, 30, TimeSpan.Zero),
+                            "turn_started",
+                            "Agent picked up the first turn",
+                            TimelineColor.Blue),
+                        new SessionActivityTimelineEntryModel(
                             SessionActivityKind.Warning,
                             new DateTimeOffset(2026, 3, 20, 9, 1, 0, TimeSpan.Zero),
                             "Queued for retry",
@@ -68,6 +74,26 @@ public sealed class SessionDetailComponentTests : BunitContext
         Assert.Contains("data-testid=\"session-detail-failure-alert\"", cut.Markup, StringComparison.Ordinal);
         Assert.Contains("Session started", cut.Markup, StringComparison.Ordinal);
         Assert.Contains("Queued for retry", cut.Markup, StringComparison.Ordinal);
+
+        var timelineItems = cut.FindComponents<TimelineItem>();
+
+        Assert.Collection(
+            timelineItems,
+            item =>
+            {
+                Assert.Equal("Session started", item.Instance.Title);
+                Assert.Equal(TimelineColor.Gray, item.Instance.Color);
+            },
+            item =>
+            {
+                Assert.Equal("turn_started", item.Instance.Title);
+                Assert.Equal(TimelineColor.Blue, item.Instance.Color);
+            },
+            item =>
+            {
+                Assert.Equal("Queued for retry", item.Instance.Title);
+                Assert.Equal(TimelineColor.Orange, item.Instance.Color);
+            });
     }
 
     [Fact]
