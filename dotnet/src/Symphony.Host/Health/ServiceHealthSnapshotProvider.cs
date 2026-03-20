@@ -1,3 +1,4 @@
+using Symphony.Abstractions.Orchestration;
 using Symphony.Application.Configuration;
 using Symphony.Application.Polling;
 
@@ -5,17 +6,20 @@ namespace Symphony.Host.Health;
 
 public sealed class ServiceHealthSnapshotProvider(
     PollingStatusTracker pollingStatusTracker,
+    IOrchestratorControlStatusReader orchestratorControlStatusReader,
     IWorkflowLoadStatusReader workflowLoadStatusReader,
     TimeProvider timeProvider)
 {
     private const string Healthy = "Healthy";
     private const string Degraded = "Degraded";
+    private const string Paused = "Paused";
     private const string Starting = "Starting";
     private static readonly TimeSpan MinimumStaleThreshold = TimeSpan.FromSeconds(30);
 
     public ServiceHealthSnapshot GetSnapshot()
     {
         var pollingSnapshot = pollingStatusTracker.GetSnapshot();
+        var orchestratorSnapshot = orchestratorControlStatusReader.GetSnapshot();
         var workflowSnapshot = workflowLoadStatusReader.GetSnapshot();
         var now = timeProvider.GetUtcNow();
         var lastPollTickAt = pollingSnapshot.LastCompletedAt ?? pollingSnapshot.LastStartedAt;
@@ -31,7 +35,9 @@ public sealed class ServiceHealthSnapshotProvider(
             "ReloadFailedUsingLastKnownGood",
             StringComparison.Ordinal);
 
-        var status = workflowFailed || pollFailed || pollIsStale
+        var status = orchestratorSnapshot.State == OrchestratorControlState.Stopped
+            ? Paused
+            : workflowFailed || pollFailed || pollIsStale
             ? Degraded
             : pollingSnapshot.LastSuccessfulTickAt is not null
                 ? Healthy
@@ -39,6 +45,8 @@ public sealed class ServiceHealthSnapshotProvider(
 
         return new ServiceHealthSnapshot(
             status,
+            orchestratorSnapshot.State,
+            orchestratorSnapshot.ChangedAt,
             lastPollTickAt,
             pollingSnapshot.LastSuccessfulTickAt,
             lastSuccessfulPollAge?.TotalSeconds,
@@ -63,6 +71,8 @@ public sealed class ServiceHealthSnapshotProvider(
 
 public sealed record ServiceHealthSnapshot(
     string Status,
+    OrchestratorControlState OrchestratorState,
+    DateTimeOffset OrchestratorStateChangedAt,
     DateTimeOffset? LastPollTickAt,
     DateTimeOffset? LastSuccessfulPollAt,
     double? LastSuccessfulPollAgeSeconds,

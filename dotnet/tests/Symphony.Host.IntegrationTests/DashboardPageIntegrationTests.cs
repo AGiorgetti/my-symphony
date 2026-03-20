@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.Extensions.DependencyInjection;
+using Symphony.Abstractions.Orchestration;
 using Symphony.Application.Configuration;
 using Symphony.Application.Polling;
 using Symphony.Application.Runtime;
@@ -126,6 +127,7 @@ public sealed class DashboardPageIntegrationTests
         builder.Services.AddRazorComponents().AddInteractiveServerComponents();
         builder.Services.AddFlowbite();
         builder.Services.AddSingleton<IOrchestratorRuntimeService>(runtimeService);
+        builder.Services.AddSingleton<IOrchestratorControl>(new StubOrchestratorControl());
         builder.Services.AddSingleton<IDashboardStateService>(dashboardStateService);
         builder.Services.AddScoped<IThemeService, ThemeService>();
         builder.Services.AddScoped<ThemeService>();
@@ -235,6 +237,8 @@ public sealed class DashboardPageIntegrationTests
             new DateTimeOffset(2026, 3, 16, 15, 0, 0, TimeSpan.Zero),
             serviceHealth,
             "Single-process in-memory",
+            OrchestratorControlState.Started,
+            new DateTimeOffset(2026, 3, 16, 15, 0, 0, TimeSpan.Zero),
             new DateTimeOffset(2026, 3, 16, 15, 0, 0, TimeSpan.Zero),
             new DateTimeOffset(2026, 3, 16, 14, 59, 30, TimeSpan.Zero),
             30d,
@@ -280,5 +284,14 @@ public sealed class DashboardPageIntegrationTests
             ],
             lastError,
             workflowLastError);
+    }
+
+    private sealed class StubOrchestratorControl : IOrchestratorControl
+    {
+        public Task RequestRefreshAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+        public Task PauseAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+        public Task ResumeAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 }

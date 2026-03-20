@@ -1,6 +1,7 @@
 using Bunit;
 using Flowbite.Services;
 using Microsoft.Extensions.DependencyInjection;
+using Symphony.Abstractions.Orchestration;
 using Symphony.Host.Components.Pages;
 using Symphony.Host.Components.Sessions;
 using Symphony.Host.Dashboard;
@@ -38,6 +39,8 @@ public sealed class SessionListTableTests : BunitContext
                     new DateTimeOffset(2026, 3, 20, 8, 0, 0, TimeSpan.Zero),
                     "Healthy",
                     "Single-process in-memory",
+                    OrchestratorControlState.Started,
+                    new DateTimeOffset(2026, 3, 20, 8, 0, 0, TimeSpan.Zero),
                     new DateTimeOffset(2026, 3, 20, 8, 0, 0, TimeSpan.Zero),
                     new DateTimeOffset(2026, 3, 20, 7, 59, 40, TimeSpan.Zero),
                     20d,

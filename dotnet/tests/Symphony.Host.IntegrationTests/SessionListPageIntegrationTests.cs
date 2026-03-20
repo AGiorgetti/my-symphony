@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Symphony.Abstractions.Orchestration;
 using Symphony.Application.Configuration;
 using Symphony.Application.Polling;
 using Symphony.Application.Runtime;
@@ -27,6 +28,8 @@ public sealed class SessionListPageIntegrationTests
                 new DateTimeOffset(2026, 3, 20, 8, 0, 0, TimeSpan.Zero),
                 "Healthy",
                 "Single-process in-memory",
+                OrchestratorControlState.Started,
+                new DateTimeOffset(2026, 3, 20, 8, 0, 0, TimeSpan.Zero),
                 new DateTimeOffset(2026, 3, 20, 8, 0, 0, TimeSpan.Zero),
                 new DateTimeOffset(2026, 3, 20, 7, 59, 40, TimeSpan.Zero),
                 20d,
@@ -126,6 +129,8 @@ public sealed class SessionListPageIntegrationTests
             new DateTimeOffset(2026, 3, 20, 8, 0, 0, TimeSpan.Zero),
             "Healthy",
             "Single-process in-memory",
+            OrchestratorControlState.Started,
+            new DateTimeOffset(2026, 3, 20, 8, 0, 0, TimeSpan.Zero),
             new DateTimeOffset(2026, 3, 20, 8, 0, 0, TimeSpan.Zero),
             new DateTimeOffset(2026, 3, 20, 7, 59, 40, TimeSpan.Zero),
             20d,
@@ -178,6 +183,7 @@ public sealed class SessionListPageIntegrationTests
         builder.Services.AddRazorComponents().AddInteractiveServerComponents();
         builder.Services.AddFlowbite();
         builder.Services.AddSingleton<IOrchestratorRuntimeService>(new StubRuntimeService());
+        builder.Services.AddSingleton<IOrchestratorControl>(new StubOrchestratorControl());
         builder.Services.AddSingleton(sessionActivityStore);
         builder.Services.AddSingleton<ISessionActivityStore>(sessionActivityStore);
         builder.Services.AddSingleton<IDashboardStateService>(dashboardStateService);
@@ -267,5 +273,14 @@ public sealed class SessionListPageIntegrationTests
         {
             return new PollingRefreshReceipt(true, false, DateTimeOffset.UtcNow, ["poll", "reconcile"]);
         }
+    }
+
+    private sealed class StubOrchestratorControl : IOrchestratorControl
+    {
+        public Task RequestRefreshAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+        public Task PauseAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+        public Task ResumeAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 }

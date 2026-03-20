@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Symphony.Application.Configuration;
+using Symphony.Application.Orchestration;
 
 namespace Symphony.Application.Polling;
 
@@ -9,6 +10,7 @@ public sealed class PollingBackgroundService : BackgroundService
     private readonly IPollingIterationHandler _pollingIterationHandler;
     private readonly PollingRefreshTrigger _pollingRefreshTrigger;
     private readonly PollingStatusTracker _pollingStatusTracker;
+    private readonly IOrchestratorExecutionGate _orchestratorExecutionGate;
     private readonly ILogger<PollingBackgroundService> _logger;
     private readonly TimeProvider _timeProvider;
     private readonly IWorkflowOptionsProvider _workflowOptionsProvider;
@@ -18,6 +20,7 @@ public sealed class PollingBackgroundService : BackgroundService
         IPollingIterationHandler pollingIterationHandler,
         PollingRefreshTrigger pollingRefreshTrigger,
         PollingStatusTracker pollingStatusTracker,
+        IOrchestratorExecutionGate orchestratorExecutionGate,
         TimeProvider timeProvider,
         ILogger<PollingBackgroundService> logger)
     {
@@ -25,6 +28,7 @@ public sealed class PollingBackgroundService : BackgroundService
         _pollingIterationHandler = pollingIterationHandler;
         _pollingRefreshTrigger = pollingRefreshTrigger;
         _pollingStatusTracker = pollingStatusTracker;
+        _orchestratorExecutionGate = orchestratorExecutionGate;
         _timeProvider = timeProvider;
         _logger = logger;
     }
@@ -40,6 +44,8 @@ public sealed class PollingBackgroundService : BackgroundService
         {
             while (!stoppingToken.IsCancellationRequested)
             {
+                await _orchestratorExecutionGate.WaitUntilStartedAsync(stoppingToken).ConfigureAwait(false);
+
                 var tickStartedAt = _timeProvider.GetUtcNow();
                 _pollingStatusTracker.RecordStarted(tickStartedAt);
                 _logger.LogInformation(

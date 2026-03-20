@@ -19,11 +19,12 @@ public static class SymphonyApiEndpointRouteBuilderExtensions
             "/state",
             async Task<IResult> (
                 [FromServices] IOrchestratorRuntimeService runtimeService,
+                [FromServices] IOrchestratorControlStatusReader orchestratorControlStatusReader,
                 [FromServices] ServiceHealthSnapshotProvider serviceHealthSnapshotProvider,
                 CancellationToken cancellationToken) =>
             {
                 var snapshot = await runtimeService.GetStateSnapshotAsync(cancellationToken).ConfigureAwait(false);
-                return Results.Ok(ToStateResponse(snapshot, serviceHealthSnapshotProvider.GetSnapshot()));
+                return Results.Ok(ToStateResponse(snapshot, serviceHealthSnapshotProvider.GetSnapshot(), orchestratorControlStatusReader.GetSnapshot()));
             });
 
         group.MapGet(
@@ -62,14 +63,46 @@ public static class SymphonyApiEndpointRouteBuilderExtensions
                     value: new RefreshResponseDto(
                         receipt.Queued,
                         receipt.Coalesced,
-                        receipt.RequestedAt,
-                        receipt.Operations));
+                    receipt.RequestedAt,
+                    receipt.Operations));
+            });
+
+        group.MapGet(
+            "/orchestration",
+            IResult ([FromServices] IOrchestratorControlStatusReader orchestratorControlStatusReader) =>
+            {
+                return Results.Ok(ToOrchestrationResponse(orchestratorControlStatusReader.GetSnapshot()));
+            });
+
+        group.MapPost(
+            "/orchestration/start",
+            async Task<IResult> (
+                [FromServices] IOrchestratorControl orchestratorControl,
+                [FromServices] IOrchestratorControlStatusReader orchestratorControlStatusReader,
+                CancellationToken cancellationToken) =>
+            {
+                await orchestratorControl.ResumeAsync(cancellationToken).ConfigureAwait(false);
+                return Results.Ok(ToOrchestrationResponse(orchestratorControlStatusReader.GetSnapshot()));
+            });
+
+        group.MapPost(
+            "/orchestration/stop",
+            async Task<IResult> (
+                [FromServices] IOrchestratorControl orchestratorControl,
+                [FromServices] IOrchestratorControlStatusReader orchestratorControlStatusReader,
+                CancellationToken cancellationToken) =>
+            {
+                await orchestratorControl.PauseAsync(cancellationToken).ConfigureAwait(false);
+                return Results.Ok(ToOrchestrationResponse(orchestratorControlStatusReader.GetSnapshot()));
             });
 
         return endpoints;
     }
 
-    private static StateResponseDto ToStateResponse(OrchestratorStateSnapshot snapshot, ServiceHealthSnapshot healthSnapshot)
+    private static StateResponseDto ToStateResponse(
+        OrchestratorStateSnapshot snapshot,
+        ServiceHealthSnapshot healthSnapshot,
+        OrchestratorControlSnapshot orchestratorSnapshot)
     {
         var running = snapshot.Running
             .Select(
@@ -103,6 +136,8 @@ public static class SymphonyApiEndpointRouteBuilderExtensions
             new StateCountsDto(running.Length, retrying.Length),
             new HealthStatusDto(
                 healthSnapshot.Status,
+                healthSnapshot.OrchestratorState,
+                healthSnapshot.OrchestratorStateChangedAt,
                 healthSnapshot.LastPollTickAt,
                 healthSnapshot.LastSuccessfulPollAt,
                 healthSnapshot.LastSuccessfulPollAgeSeconds,
@@ -112,6 +147,7 @@ public static class SymphonyApiEndpointRouteBuilderExtensions
                 healthSnapshot.WorkflowPath,
                 healthSnapshot.PollLastError,
                 healthSnapshot.WorkflowLastError),
+            ToOrchestrationResponse(orchestratorSnapshot),
             running,
             retrying,
             new CodexTotalsDto(
@@ -120,6 +156,11 @@ public static class SymphonyApiEndpointRouteBuilderExtensions
                 snapshot.CodexTotals.TotalTokens,
                 snapshot.CodexTotals.SecondsRunning),
             snapshot.RateLimits);
+    }
+
+    private static OrchestrationStatusDto ToOrchestrationResponse(OrchestratorControlSnapshot snapshot)
+    {
+        return new OrchestrationStatusDto(snapshot.State, snapshot.ChangedAt);
     }
 
     private static IssueResponseDto ToIssueResponse(OrchestratorIssueSnapshot snapshot, string workspacePath)

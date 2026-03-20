@@ -1,4 +1,5 @@
 using Flowbite.Services;
+using Symphony.Application.Orchestration;
 using Symphony.Application.DependencyInjection;
 using Symphony.Host.Api;
 using Symphony.Host.Components;
@@ -16,6 +17,8 @@ public static class SymphonyHostCompositionExtensions
         ArgumentNullException.ThrowIfNull(builder);
 
         builder.Logging.AddSymphonyLogging(builder.Configuration);
+        builder.Services.Configure<OrchestratorControlOptions>(
+            builder.Configuration.GetSection(OrchestratorControlOptions.SectionName));
 
         builder.Services
             .AddRazorComponents()

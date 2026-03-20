@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.Extensions.DependencyInjection;
+using Symphony.Abstractions.Orchestration;
 using Symphony.Application.Configuration;
 using Symphony.Application.Polling;
 using Symphony.Application.Runtime;
@@ -73,8 +74,10 @@ public sealed class SymphonyApiEndpointRouteBuilderExtensionsTests
         Assert.Equal(1, payload!.Counts.Running);
         Assert.Equal(1, payload.Counts.Retrying);
         Assert.Equal("Healthy", payload.Health.Status);
+        Assert.Equal(OrchestratorControlState.Started, payload.Health.OrchestratorState);
         Assert.Equal("Loaded", payload.Health.WorkflowLoadStatus);
         Assert.Equal(5d, payload.Health.LastSuccessfulPollAgeSeconds);
+        Assert.Equal(OrchestratorControlState.Started, payload.Orchestration.State);
         Assert.Equal("ABC-1", payload.Running[0].IssueIdentifier);
         Assert.Equal("ABC-2", payload.Retrying[0].IssueIdentifier);
     }
@@ -117,6 +120,63 @@ public sealed class SymphonyApiEndpointRouteBuilderExtensionsTests
         Assert.Equal(["poll", "reconcile"], payload.Operations);
     }
 
+    [Fact]
+    public async Task Orchestration_endpoint_returns_control_snapshot()
+    {
+        var control = new StubOrchestratorControl
+        {
+            Snapshot = new OrchestratorControlSnapshot(
+                OrchestratorControlState.Stopped,
+                new DateTimeOffset(2026, 3, 16, 14, 57, 0, TimeSpan.Zero))
+        };
+        using var app = await StartApiApplicationAsync(new StubRuntimeService(), orchestratorControl: control);
+        var client = CreateHttpClient(app);
+
+        var response = await client.GetAsync("/api/v1/orchestration");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var payload = await response.Content.ReadFromJsonAsync<OrchestrationStatusDto>();
+        Assert.NotNull(payload);
+        Assert.Equal(OrchestratorControlState.Stopped, payload!.State);
+    }
+
+    [Fact]
+    public async Task Start_endpoint_resumes_orchestrator_and_returns_updated_snapshot()
+    {
+        var control = new StubOrchestratorControl
+        {
+            Snapshot = new OrchestratorControlSnapshot(
+                OrchestratorControlState.Stopped,
+                new DateTimeOffset(2026, 3, 16, 14, 57, 0, TimeSpan.Zero))
+        };
+        using var app = await StartApiApplicationAsync(new StubRuntimeService(), orchestratorControl: control);
+        var client = CreateHttpClient(app);
+
+        var response = await client.PostAsJsonAsync("/api/v1/orchestration/start", new { });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(1, control.ResumeCalls);
+        var payload = await response.Content.ReadFromJsonAsync<OrchestrationStatusDto>();
+        Assert.NotNull(payload);
+        Assert.Equal(OrchestratorControlState.Started, payload!.State);
+    }
+
+    [Fact]
+    public async Task Stop_endpoint_pauses_orchestrator_and_returns_updated_snapshot()
+    {
+        var control = new StubOrchestratorControl();
+        using var app = await StartApiApplicationAsync(new StubRuntimeService(), orchestratorControl: control);
+        var client = CreateHttpClient(app);
+
+        var response = await client.PostAsJsonAsync("/api/v1/orchestration/stop", new { });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(1, control.PauseCalls);
+        var payload = await response.Content.ReadFromJsonAsync<OrchestrationStatusDto>();
+        Assert.NotNull(payload);
+        Assert.Equal(OrchestratorControlState.Stopped, payload!.State);
+    }
+
     private static HttpClient CreateHttpClient(WebApplication app)
     {
         var server = app.Services.GetRequiredService<IServer>();
@@ -134,11 +194,15 @@ public sealed class SymphonyApiEndpointRouteBuilderExtensionsTests
         IOrchestratorRuntimeService runtimeService,
         PollingStatusTracker? pollingStatusTracker = null,
         IWorkflowLoadStatusReader? workflowLoadStatusReader = null,
-        TimeProvider? timeProvider = null)
+        TimeProvider? timeProvider = null,
+        StubOrchestratorControl? orchestratorControl = null)
     {
         var builder = WebApplication.CreateBuilder();
         builder.WebHost.UseUrls("http://127.0.0.1:0");
         builder.Services.AddSingleton<IOrchestratorRuntimeService>(runtimeService);
+        var resolvedControl = orchestratorControl ?? new StubOrchestratorControl();
+        builder.Services.AddSingleton<IOrchestratorControl>(resolvedControl);
+        builder.Services.AddSingleton<IOrchestratorControlStatusReader>(resolvedControl);
         builder.Services.AddSingleton(pollingStatusTracker ?? new PollingStatusTracker());
         builder.Services.AddSingleton<IWorkflowLoadStatusReader>(
             workflowLoadStatusReader
@@ -235,6 +299,49 @@ public sealed class SymphonyApiEndpointRouteBuilderExtensionsTests
         public WorkflowLoadStatusSnapshot GetSnapshot()
         {
             return snapshot;
+        }
+    }
+
+    private sealed class StubOrchestratorControl : IOrchestratorControl, IOrchestratorControlStatusReader
+    {
+        public OrchestratorControlSnapshot Snapshot { get; set; } = new(
+            OrchestratorControlState.Started,
+            DateTimeOffset.UtcNow);
+
+        public int PauseCalls { get; private set; }
+
+        public int ResumeCalls { get; private set; }
+
+        public Task RequestRefreshAsync(CancellationToken cancellationToken = default)
+        {
+            return Task.CompletedTask;
+        }
+
+        public Task PauseAsync(CancellationToken cancellationToken = default)
+        {
+            PauseCalls++;
+            Snapshot = Snapshot with
+            {
+                State = OrchestratorControlState.Stopped,
+                ChangedAt = DateTimeOffset.UtcNow
+            };
+            return Task.CompletedTask;
+        }
+
+        public Task ResumeAsync(CancellationToken cancellationToken = default)
+        {
+            ResumeCalls++;
+            Snapshot = Snapshot with
+            {
+                State = OrchestratorControlState.Started,
+                ChangedAt = DateTimeOffset.UtcNow
+            };
+            return Task.CompletedTask;
+        }
+
+        public OrchestratorControlSnapshot GetSnapshot()
+        {
+            return Snapshot;
         }
     }
 

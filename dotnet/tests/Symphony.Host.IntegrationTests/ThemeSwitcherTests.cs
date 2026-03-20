@@ -3,6 +3,7 @@ using Flowbite.Components;
 using Flowbite.Services;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.AspNetCore.Components;
+using Symphony.Abstractions.Orchestration;
 using Symphony.Host.Components.Shell;
 using Symphony.Host.Components.Layout;
 using Symphony.Host.Dashboard;
@@ -71,6 +72,7 @@ public sealed class ThemeSwitcherTests : BunitContext
 
         Services.AddSingleton<IThemeService>(themeService);
         Services.AddSingleton<IDashboardStateService>(new StaticDashboardStateService());
+        Services.AddSingleton<IOrchestratorControl>(new TestOrchestratorControl());
 
         var cut = Render<MainLayout>(
             parameters => parameters.Add(
@@ -79,6 +81,29 @@ public sealed class ThemeSwitcherTests : BunitContext
 
         cut.WaitForAssertion(() =>
             Assert.Equal("Light Blue", cut.Find("[data-testid=\"theme-switcher\"] button").TextContent.Trim()));
+    }
+
+    [Fact]
+    public async Task MainLayout_start_and_stop_controls_call_orchestrator_control()
+    {
+        var themeService = new TestThemeService();
+        var orchestratorControl = new TestOrchestratorControl();
+        var dashboardStateService = new MutableDashboardStateService(() => orchestratorControl.State);
+
+        Services.AddSingleton<IThemeService>(themeService);
+        Services.AddSingleton<IDashboardStateService>(dashboardStateService);
+        Services.AddSingleton<IOrchestratorControl>(orchestratorControl);
+
+        var cut = Render<MainLayout>(
+            parameters => parameters.Add(
+                component => component.Body,
+                (RenderFragment)(builder => builder.AddMarkupContent(0, "<div>Body</div>"))));
+
+        await cut.InvokeAsync(() => cut.Find("[data-testid=\"orchestrator-start-button\"]").Click());
+        await cut.InvokeAsync(() => cut.Find("[data-testid=\"orchestrator-stop-button\"]").Click());
+
+        Assert.Equal(1, orchestratorControl.ResumeCalls);
+        Assert.Equal(1, orchestratorControl.PauseCalls);
     }
 
     private sealed class TestThemeService : IThemeService
@@ -124,7 +149,8 @@ public sealed class ThemeSwitcherTests : BunitContext
         }
     }
 
-    private sealed class StaticDashboardStateService : IDashboardStateService
+    private sealed class StaticDashboardStateService(
+        OrchestratorControlState orchestratorState = OrchestratorControlState.Started) : IDashboardStateService
     {
         public Task<DashboardSnapshot> GetSnapshotAsync(CancellationToken cancellationToken = default)
         {
@@ -133,6 +159,66 @@ public sealed class ThemeSwitcherTests : BunitContext
                     DateTimeOffset.UtcNow,
                     "Healthy",
                     "Single-process in-memory",
+                    orchestratorState,
+                    DateTimeOffset.UtcNow,
+                    DateTimeOffset.UtcNow,
+                    DateTimeOffset.UtcNow,
+                    0d,
+                    "Loaded",
+                    DateTimeOffset.UtcNow,
+                    RunningCount: 0,
+                    RetryingCount: 0,
+                    InputTokens: 0,
+                    OutputTokens: 0,
+                    TotalTokens: 0,
+                    SecondsRunning: 0d,
+                    ActiveSessions: [],
+                    RetryQueue: [],
+                    RecentAttempts: [],
+                    LastError: null,
+                    WorkflowLastError: null));
+        }
+    }
+
+    private sealed class TestOrchestratorControl : IOrchestratorControl
+    {
+        public int PauseCalls { get; private set; }
+
+        public int ResumeCalls { get; private set; }
+
+        public OrchestratorControlState State { get; private set; } = OrchestratorControlState.Stopped;
+
+        public Task RequestRefreshAsync(CancellationToken cancellationToken = default)
+        {
+            return Task.CompletedTask;
+        }
+
+        public Task PauseAsync(CancellationToken cancellationToken = default)
+        {
+            PauseCalls++;
+            State = OrchestratorControlState.Stopped;
+            return Task.CompletedTask;
+        }
+
+        public Task ResumeAsync(CancellationToken cancellationToken = default)
+        {
+            ResumeCalls++;
+            State = OrchestratorControlState.Started;
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class MutableDashboardStateService(Func<OrchestratorControlState> getState) : IDashboardStateService
+    {
+        public Task<DashboardSnapshot> GetSnapshotAsync(CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(
+                new DashboardSnapshot(
+                    DateTimeOffset.UtcNow,
+                    "Healthy",
+                    "Single-process in-memory",
+                    getState(),
+                    DateTimeOffset.UtcNow,
                     DateTimeOffset.UtcNow,
                     DateTimeOffset.UtcNow,
                     0d,
