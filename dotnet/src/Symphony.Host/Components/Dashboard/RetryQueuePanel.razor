@@ -14,8 +14,12 @@
 
     @if (Entries.Count == 0)
     {
-        <EmptyState Title="Retry queue is empty"
-                    Description="Queued continuation and failure retries will appear here when they are scheduled." />
+        <div class="rounded-[var(--shell-radius-lg)] border border-dashed border-[var(--shell-border)]/80 bg-[color:var(--color-surface-overlay)]/50 p-4">
+            <p class="text-base font-semibold text-[color:var(--color-on-surface-primary)]">Retry queue is empty</p>
+            <p class="mt-2 text-sm leading-6 text-[color:var(--color-on-surface-secondary)]">
+                Queued continuation and failure retries will appear here when they are scheduled.
+            </p>
+        </div>
     }
     else
     {

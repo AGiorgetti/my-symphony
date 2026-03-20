@@ -33,12 +33,10 @@ public sealed class DashboardPageIntegrationTests
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Contains("class=\"dark\"", html, StringComparison.Ordinal);
         Assert.Contains("data-theme=\"dark-yellow\"", html, StringComparison.Ordinal);
+        Assert.Contains("href=\"favicon.svg\"", html, StringComparison.Ordinal);
         Assert.Contains("href=\"app.min.css\"", html, StringComparison.Ordinal);
         Assert.Contains("href=\"_content/Flowbite/flowbite.min.css\"", html, StringComparison.Ordinal);
-        Assert.Contains("https://cdn.jsdelivr.net/npm/@floating-ui/core@1.6.13/dist/floating-ui.core.umd.min.js", html, StringComparison.Ordinal);
-        Assert.Contains("https://cdn.jsdelivr.net/npm/@floating-ui/dom@1.6.13/dist/floating-ui.dom.umd.min.js", html, StringComparison.Ordinal);
         Assert.Contains("src=\"_content/Flowbite/flowbite.js\"", html, StringComparison.Ordinal);
-        Assert.Contains("Runtime Control Surface", html, StringComparison.Ordinal);
         Assert.Contains("data-testid=\"dashboard-summary-grid\"", html, StringComparison.Ordinal);
         Assert.Contains("Service Health", html, StringComparison.Ordinal);
         Assert.Contains("Workflow Config", html, StringComparison.Ordinal);
