@@ -220,9 +220,14 @@ public sealed class WorkflowOptionsProviderTests
             await Task.Delay(TimeSpan.FromMilliseconds(50));
         }
 
-        return (
-            latestOptions ?? await provider.GetCurrentAsync(),
-            latestDefinition ?? await provider.GetCurrentDefinitionAsync());
+        var finalOptions = latestOptions ?? await provider.GetCurrentAsync();
+        var finalDefinition = latestDefinition ?? await provider.GetCurrentDefinitionAsync();
+        var finalSnapshot = workflowLoadStatusTracker.GetSnapshot();
+
+        throw new Xunit.Sdk.XunitException(
+            $"Timed out waiting for workflow reload. Last observed interval was {finalOptions.Polling.IntervalMs}, " +
+            $"last prompt was '{finalDefinition.PromptTemplate}', last status was '{finalSnapshot.Status}', " +
+            $"last tracked interval was {finalSnapshot.PollingIntervalMs?.ToString() ?? "<null>"}.");
     }
 
     private static async Task<(
