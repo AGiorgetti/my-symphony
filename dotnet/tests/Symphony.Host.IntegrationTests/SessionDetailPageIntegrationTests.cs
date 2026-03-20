@@ -20,10 +20,13 @@ namespace Symphony.Host.IntegrationTests;
 public sealed class SessionDetailPageIntegrationTests
 {
     [Fact]
-    public async Task Session_detail_page_renders_breadcrumb_header_and_timeline()
+    public async Task Session_detail_page_renders_breadcrumb_tabs_and_live_metadata()
     {
         var store = CreateStoreWithActiveSession();
-        using var app = await StartSessionDetailApplicationAsync(store, new StaticDashboardStateService(CreateSnapshot()));
+        using var app = await StartSessionDetailApplicationAsync(
+            store,
+            new StaticDashboardStateService(CreateSnapshot()),
+            CreateActiveRuntimeService());
         var client = CreateHttpClient(app);
 
         var response = await client.GetAsync("/sessions/ABC-1");
@@ -35,7 +38,14 @@ public sealed class SessionDetailPageIntegrationTests
         Assert.Contains("data-testid=\"session-detail-header\"", html, StringComparison.Ordinal);
         Assert.Contains("Open tracker issue", html, StringComparison.Ordinal);
         Assert.Contains("data-testid=\"session-header-active-indicator\"", html, StringComparison.Ordinal);
-        Assert.Contains("data-testid=\"session-detail-timeline\"", html, StringComparison.Ordinal);
+        Assert.Contains("data-testid=\"session-detail-tabs\"", html, StringComparison.Ordinal);
+        Assert.Contains("Activity", html, StringComparison.Ordinal);
+        Assert.Contains("Details", html, StringComparison.Ordinal);
+        Assert.Contains("data-testid=\"session-detail-details-panel\"", html, StringComparison.Ordinal);
+        Assert.Contains("data-testid=\"session-detail-metadata\"", html, StringComparison.Ordinal);
+        Assert.Contains("thread-1-turn-2", html, StringComparison.Ordinal);
+        Assert.Contains("Attempt 2", html, StringComparison.Ordinal);
+        Assert.Contains("110", html, StringComparison.Ordinal);
         Assert.Contains("data-testid=\"session-detail-latest-attention-alert\"", html, StringComparison.Ordinal);
 
         var startedIndex = html.IndexOf("Session started", StringComparison.Ordinal);
@@ -48,10 +58,26 @@ public sealed class SessionDetailPageIntegrationTests
     }
 
     [Fact]
-    public async Task Session_detail_page_renders_failure_alert_for_final_error()
+    public async Task Session_detail_page_renders_failure_alert_and_ended_metadata_note()
     {
         var store = CreateStoreWithFailedSession();
-        using var app = await StartSessionDetailApplicationAsync(store, new StaticDashboardStateService(CreateSnapshot(activeSessions: [])));
+        using var app = await StartSessionDetailApplicationAsync(
+            store,
+            new StaticDashboardStateService(
+                CreateSnapshot(
+                    activeSessions: [],
+                    recentAttempts:
+                    [
+                        new DashboardRecentAttemptSnapshot(
+                            "ABC-2",
+                            1,
+                            "Failed",
+                            new DateTimeOffset(2026, 3, 20, 8, 5, 0, TimeSpan.Zero),
+                            300d,
+                            "Prompt build failed",
+                            "thread-2-turn-3")
+                    ])),
+            new StaticRuntimeService(issueSnapshot: null));
         var client = CreateHttpClient(app);
 
         var response = await client.GetAsync("/sessions/ABC-2");
@@ -61,13 +87,19 @@ public sealed class SessionDetailPageIntegrationTests
         Assert.Contains("Failed", html, StringComparison.Ordinal);
         Assert.Contains("data-testid=\"session-detail-failure-alert\"", html, StringComparison.Ordinal);
         Assert.Contains("Prompt build failed", html, StringComparison.Ordinal);
+        Assert.Contains("thread-2-turn-3", html, StringComparison.Ordinal);
+        Assert.Contains("Attempt 1", html, StringComparison.Ordinal);
+        Assert.Contains("Finished sessions keep the last known session ID and attempt when available.", html, StringComparison.Ordinal);
     }
 
     [Fact]
     public async Task Session_detail_page_renders_not_found_message_for_unknown_session()
     {
         var store = new SessionActivityStore(NullLogger<SessionActivityStore>.Instance);
-        using var app = await StartSessionDetailApplicationAsync(store, new StaticDashboardStateService(CreateSnapshot(activeSessions: [])));
+        using var app = await StartSessionDetailApplicationAsync(
+            store,
+            new StaticDashboardStateService(CreateSnapshot(activeSessions: [])),
+            new StaticRuntimeService(issueSnapshot: null));
         var client = CreateHttpClient(app);
 
         var response = await client.GetAsync("/sessions/ABC-404");
@@ -82,7 +114,10 @@ public sealed class SessionDetailPageIntegrationTests
     public async Task Session_detail_page_keeps_api_routes_available_when_rendering_succeeds()
     {
         var store = CreateStoreWithActiveSession();
-        using var app = await StartSessionDetailApplicationAsync(store, new StaticDashboardStateService(CreateSnapshot()));
+        using var app = await StartSessionDetailApplicationAsync(
+            store,
+            new StaticDashboardStateService(CreateSnapshot()),
+            CreateActiveRuntimeService());
         var client = CreateHttpClient(app);
 
         var pageResponse = await client.GetAsync("/sessions/ABC-1");
@@ -119,7 +154,9 @@ public sealed class SessionDetailPageIntegrationTests
         return store;
     }
 
-    private static DashboardSnapshot CreateSnapshot(IReadOnlyList<DashboardActiveSessionSnapshot>? activeSessions = null)
+    private static DashboardSnapshot CreateSnapshot(
+        IReadOnlyList<DashboardActiveSessionSnapshot>? activeSessions = null,
+        IReadOnlyList<DashboardRecentAttemptSnapshot>? recentAttempts = null)
     {
         return new DashboardSnapshot(
             new DateTimeOffset(2026, 3, 20, 9, 5, 0, TimeSpan.Zero),
@@ -150,7 +187,7 @@ public sealed class SessionDetailPageIntegrationTests
                     110)
             ],
             RetryQueue: [],
-            RecentAttempts: [],
+            RecentAttempts: recentAttempts ?? [],
             LastError: null,
             WorkflowLastError: null);
     }
@@ -170,13 +207,15 @@ public sealed class SessionDetailPageIntegrationTests
 
     private static async Task<WebApplication> StartSessionDetailApplicationAsync(
         ISessionActivityStore sessionActivityStore,
-        IDashboardStateService dashboardStateService)
+        IDashboardStateService dashboardStateService,
+        IOrchestratorRuntimeService runtimeService)
     {
         var builder = WebApplication.CreateBuilder();
         builder.WebHost.UseUrls("http://127.0.0.1:0");
         builder.Services.AddRazorComponents().AddInteractiveServerComponents();
         builder.Services.AddFlowbite();
-        builder.Services.AddSingleton<IOrchestratorRuntimeService>(new StubRuntimeService());
+        builder.Services.AddSingleton(runtimeService);
+        builder.Services.AddSingleton<IOrchestratorRuntimeService>(runtimeService);
         builder.Services.AddSingleton(sessionActivityStore);
         builder.Services.AddSingleton<ISessionActivityStore>(sessionActivityStore);
         builder.Services.AddSingleton<IDashboardStateService>(dashboardStateService);
@@ -228,6 +267,33 @@ public sealed class SessionDetailPageIntegrationTests
         return app;
     }
 
+    private static StaticRuntimeService CreateActiveRuntimeService()
+    {
+        return new StaticRuntimeService(
+            new OrchestratorIssueSnapshot(
+                "ABC-1",
+                "1",
+                "running",
+                RestartCount: 1,
+                CurrentRetryAttempt: 2,
+                new RunningIssueSnapshot(
+                    "1",
+                    "ABC-1",
+                    "StreamingTurn",
+                    "thread-1-turn-2",
+                    2,
+                    "turn_completed",
+                    "Applied changes",
+                    new DateTimeOffset(2026, 3, 20, 9, 0, 0, TimeSpan.Zero),
+                    new DateTimeOffset(2026, 3, 20, 9, 2, 0, TimeSpan.Zero),
+                    80,
+                    30,
+                    110),
+                Retry: null,
+                LastError: null,
+                RecentEvents: []));
+    }
+
     private sealed class StaticDashboardStateService(DashboardSnapshot snapshot) : IDashboardStateService
     {
         public Task<DashboardSnapshot> GetSnapshotAsync(CancellationToken cancellationToken = default)
@@ -244,7 +310,7 @@ public sealed class SessionDetailPageIntegrationTests
         }
     }
 
-    private sealed class StubRuntimeService : IOrchestratorRuntimeService
+    private sealed class StaticRuntimeService(OrchestratorIssueSnapshot? issueSnapshot) : IOrchestratorRuntimeService
     {
         public Task<OrchestratorStateSnapshot> GetStateSnapshotAsync(CancellationToken cancellationToken = default)
         {
@@ -259,7 +325,7 @@ public sealed class SessionDetailPageIntegrationTests
 
         public Task<OrchestratorIssueSnapshot?> GetIssueSnapshotAsync(string issueIdentifier, CancellationToken cancellationToken = default)
         {
-            return Task.FromResult<OrchestratorIssueSnapshot?>(null);
+            return Task.FromResult(issueSnapshot);
         }
 
         public PollingRefreshReceipt RequestRefresh()

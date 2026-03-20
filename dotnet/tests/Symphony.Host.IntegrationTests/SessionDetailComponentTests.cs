@@ -2,6 +2,10 @@ using Bunit;
 using Flowbite.Components;
 using Flowbite.Services;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
+using Symphony.Application.Polling;
+using Symphony.Application.Runtime;
+using Symphony.Host.Components.Pages;
 using Symphony.Host.Components.SessionDetail;
 using Symphony.Host.Dashboard;
 
@@ -64,5 +68,191 @@ public sealed class SessionDetailComponentTests : BunitContext
         Assert.Contains("data-testid=\"session-detail-failure-alert\"", cut.Markup, StringComparison.Ordinal);
         Assert.Contains("Session started", cut.Markup, StringComparison.Ordinal);
         Assert.Contains("Queued for retry", cut.Markup, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void SessionMetadataPanel_renders_metadata_fields_and_attempt_label()
+    {
+        var cut = Render<SessionMetadataPanel>(
+            parameters => parameters.Add(
+                component => component.Metadata,
+                new SessionMetadataPanelModel(
+                    120,
+                    45,
+                    165,
+                    4,
+                    "thread-1-turn-4",
+                    2,
+                    true,
+                    "Finished sessions keep the last known session ID and attempt when available.")));
+
+        Assert.Contains("165", cut.Markup, StringComparison.Ordinal);
+        Assert.Contains("thread-1-turn-4", cut.Markup, StringComparison.Ordinal);
+        Assert.Contains("Attempt 2", cut.Markup, StringComparison.Ordinal);
+        Assert.Contains("Finished sessions keep the last known session ID and attempt when available.", cut.Markup, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void SessionDetailPage_starts_refresh_loop_for_active_sessions_only()
+    {
+        var startedAt = new DateTimeOffset(2026, 3, 20, 9, 0, 0, TimeSpan.Zero);
+        var store = new SessionActivityStore(NullLogger<SessionActivityStore>.Instance);
+        store.RecordSessionStart("ABC-1", startedAt, "https://github.com/AGiorgetti/my-symphony/issues/ABC-1");
+        store.RecordActivity("ABC-1", new SessionActivityEntry(SessionActivityKind.LifecycleMilestone, startedAt, "Session started", "Tracker moved to In Progress"));
+
+        var dashboardStateService = new CountingDashboardStateService(
+            new DashboardSnapshot(
+                startedAt.AddMinutes(1),
+                "Healthy",
+                "Single-process in-memory",
+                startedAt.AddMinutes(1),
+                startedAt.AddMinutes(1),
+                5d,
+                "Loaded",
+                startedAt,
+                RunningCount: 1,
+                RetryingCount: 0,
+                InputTokens: 120,
+                OutputTokens: 45,
+                TotalTokens: 165,
+                SecondsRunning: 60d,
+                [
+                    new DashboardActiveSessionSnapshot(
+                        "ABC-1",
+                        "StreamingTurn",
+                        "thread-1-turn-4",
+                        4,
+                        "turn_completed",
+                        "Applied changes",
+                        startedAt,
+                        startedAt.AddMinutes(1),
+                        165)
+                ],
+                RetryQueue: [],
+                RecentAttempts: [],
+                LastError: null,
+                WorkflowLastError: null));
+        var runtimeService = new StaticRuntimeService(
+            new OrchestratorIssueSnapshot(
+                "ABC-1",
+                "1",
+                "running",
+                RestartCount: 1,
+                CurrentRetryAttempt: 2,
+                new RunningIssueSnapshot(
+                    "1",
+                    "ABC-1",
+                    "StreamingTurn",
+                    "thread-1-turn-4",
+                    4,
+                    "turn_completed",
+                    "Applied changes",
+                    startedAt,
+                    startedAt.AddMinutes(1),
+                    120,
+                    45,
+                    165),
+                Retry: null,
+                LastError: null,
+                RecentEvents: []));
+
+        Services.AddSingleton<ISessionActivityStore>(store);
+        Services.AddSingleton<IDashboardStateService>(dashboardStateService);
+        Services.AddSingleton<IOrchestratorRuntimeService>(runtimeService);
+
+        using var cut = Render<SessionDetailPage>(
+            parameters => parameters.Add(component => component.Identifier, "ABC-1"));
+
+        cut.WaitForAssertion(
+            () => Assert.True(dashboardStateService.CallCount >= 2),
+            TimeSpan.FromSeconds(5));
+    }
+
+    [Fact]
+    public async Task SessionDetailPage_skips_refresh_loop_for_ended_sessions()
+    {
+        var startedAt = new DateTimeOffset(2026, 3, 20, 8, 0, 0, TimeSpan.Zero);
+        var store = new SessionActivityStore(NullLogger<SessionActivityStore>.Instance);
+        store.RecordSessionStart("ABC-2", startedAt, "https://github.com/AGiorgetti/my-symphony/issues/ABC-2");
+        store.RecordSessionEnd("ABC-2", startedAt.AddMinutes(4), "Succeeded");
+
+        var dashboardStateService = new CountingDashboardStateService(
+            new DashboardSnapshot(
+                startedAt.AddMinutes(5),
+                "Healthy",
+                "Single-process in-memory",
+                startedAt.AddMinutes(5),
+                startedAt.AddMinutes(5),
+                5d,
+                "Loaded",
+                startedAt,
+                RunningCount: 0,
+                RetryingCount: 0,
+                InputTokens: 0,
+                OutputTokens: 0,
+                TotalTokens: 0,
+                SecondsRunning: 0d,
+                ActiveSessions: [],
+                RetryQueue: [],
+                RecentAttempts:
+                [
+                    new DashboardRecentAttemptSnapshot(
+                        "ABC-2",
+                        1,
+                        "Succeeded",
+                        startedAt.AddMinutes(4),
+                        240d,
+                        null,
+                        "thread-2-turn-3")
+                ],
+                LastError: null,
+                WorkflowLastError: null));
+
+        Services.AddSingleton<ISessionActivityStore>(store);
+        Services.AddSingleton<IDashboardStateService>(dashboardStateService);
+        Services.AddSingleton<IOrchestratorRuntimeService>(new StaticRuntimeService(issueSnapshot: null));
+
+        using var cut = Render<SessionDetailPage>(
+            parameters => parameters.Add(component => component.Identifier, "ABC-2"));
+
+        await Task.Delay(TimeSpan.FromSeconds(3));
+
+        Assert.Equal(1, dashboardStateService.CallCount);
+        Assert.Contains("data-testid=\"session-detail-metadata\"", cut.Markup, StringComparison.Ordinal);
+    }
+
+    private sealed class CountingDashboardStateService(DashboardSnapshot snapshot) : IDashboardStateService
+    {
+        public int CallCount { get; private set; }
+
+        public Task<DashboardSnapshot> GetSnapshotAsync(CancellationToken cancellationToken = default)
+        {
+            CallCount++;
+            return Task.FromResult(snapshot);
+        }
+    }
+
+    private sealed class StaticRuntimeService(OrchestratorIssueSnapshot? issueSnapshot) : IOrchestratorRuntimeService
+    {
+        public Task<OrchestratorStateSnapshot> GetStateSnapshotAsync(CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(
+                new OrchestratorStateSnapshot(
+                    DateTimeOffset.UtcNow,
+                    Array.Empty<RunningIssueSnapshot>(),
+                    Array.Empty<Symphony.Abstractions.Orchestration.RetryDispatchSnapshot>(),
+                    new CodexTotalsSnapshot(0, 0, 0, 0d),
+                    RateLimits: null));
+        }
+
+        public Task<OrchestratorIssueSnapshot?> GetIssueSnapshotAsync(string issueIdentifier, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(issueSnapshot);
+        }
+
+        public PollingRefreshReceipt RequestRefresh()
+        {
+            return new PollingRefreshReceipt(true, false, DateTimeOffset.UtcNow, ["poll", "reconcile"]);
+        }
     }
 }

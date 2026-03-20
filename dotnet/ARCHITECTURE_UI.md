@@ -369,7 +369,8 @@ Sections:
    activity exists.
 
 Implementation note: EU7-S1 delivers the breadcrumb, session header card, and activity
-timeline first. The metadata/details tab and active-session auto-refresh follow in EU7-S2.
+timeline first. EU7-S2 adds the metadata/details tab and starts a 2-second refresh loop only
+for active sessions, while ended sessions render once without a timer.
 
 Back navigation uses `Breadcrumb`: Home → Sessions → {Identifier}.
 
