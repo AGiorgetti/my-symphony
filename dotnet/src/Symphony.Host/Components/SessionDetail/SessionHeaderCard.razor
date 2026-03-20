@@ -1,0 +1,61 @@
+@using Symphony.Host.Components.Sessions
+
+<div data-testid="session-detail-header">
+<Card Slots="@HeaderCardSlots">
+    <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div class="space-y-3">
+            <div>
+                <p class="text-xs font-bold uppercase tracking-[0.24em] text-[color:var(--color-primary-DEFAULT)]">Session</p>
+                <h1 class="mt-2 text-3xl font-semibold text-[color:var(--color-on-surface-primary)]">@Session.Identifier</h1>
+            </div>
+            <div class="flex flex-wrap items-center gap-3">
+                <SessionStatusBadge Status="@Session.Status"
+                                   Text="@Session.StatusText"
+                                   ColorOverride="@(Session.Status is null ? Session.StatusColor : null)" />
+                @if (Session.IsActive)
+                {
+                    <div class="inline-flex items-center gap-2 text-sm font-medium text-[color:var(--color-on-surface-secondary)]"
+                         data-testid="session-header-active-indicator">
+                        <Spinner Size="SpinnerSize.Sm" Color="SpinnerColor.Info" />
+                        <span>Session is active</span>
+                    </div>
+                }
+            </div>
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(Session.IssueUrl))
+        {
+            <a class="inline-flex items-center justify-center rounded-lg border border-[var(--shell-border)] px-4 py-2 text-sm font-semibold text-[color:var(--color-on-surface-primary)] transition hover:border-[color:var(--color-primary-DEFAULT)] hover:text-[color:var(--color-primary-DEFAULT)]"
+               href="@Session.IssueUrl"
+               data-testid="session-header-tracker-link">
+                Open tracker issue
+            </a>
+        }
+    </div>
+
+    <div class="grid gap-4 sm:grid-cols-2">
+        <div class="rounded-[var(--shell-radius-lg)] border border-[var(--shell-border)] bg-[color:var(--color-surface-base)] p-4">
+            <p class="text-xs font-bold uppercase tracking-[0.2em] text-[color:var(--color-on-surface-secondary)]">Started</p>
+            <p class="mt-2 text-base font-semibold text-[color:var(--color-on-surface-primary)]">@SessionDetailDisplay.FormatTimestamp(Session.StartedAt)</p>
+        </div>
+        <div class="rounded-[var(--shell-radius-lg)] border border-[var(--shell-border)] bg-[color:var(--color-surface-base)] p-4">
+            <p class="text-xs font-bold uppercase tracking-[0.2em] text-[color:var(--color-on-surface-secondary)]">Ended</p>
+            <p class="mt-2 text-base font-semibold text-[color:var(--color-on-surface-primary)]">
+                @(Session.EndedAt is null ? "Still running" : SessionDetailDisplay.FormatTimestamp(Session.EndedAt.Value))
+            </p>
+        </div>
+    </div>
+</Card>
+</div>
+
+@code {
+    private static readonly CardSlots HeaderCardSlots = new()
+    {
+        Base = "rounded-[var(--shell-radius-xl)] border border-[var(--shell-border)] bg-[color:var(--color-surface-raised)] shadow-[var(--shell-shadow)]",
+        Body = "flex flex-col gap-6 p-6"
+    };
+
+    [Parameter]
+    [EditorRequired]
+    public required SessionHeaderDisplayModel Session { get; set; }
+}

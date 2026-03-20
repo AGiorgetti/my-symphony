@@ -1,0 +1,79 @@
+<div data-testid="session-detail-timeline">
+<Card Slots="@TimelineCardSlots">
+    <div class="space-y-2">
+        <p class="text-xs font-bold uppercase tracking-[0.24em] text-[color:var(--color-primary-DEFAULT)]">Timeline</p>
+        <h2 class="text-2xl font-semibold text-[color:var(--color-on-surface-primary)]">Session activity</h2>
+        <p class="text-sm leading-6 text-[color:var(--color-on-surface-secondary)]">
+            Lifecycle milestones, agent messages, warnings, and outcomes in chronological order.
+        </p>
+    </div>
+
+    @if (Timeline.LatestAttentionAlert is not null)
+    {
+        <div data-testid="session-detail-latest-attention-alert">
+            <Alert Color="@Timeline.LatestAttentionAlert.Color"
+                   Rounded="true"
+                   WithBorderAccent="true"
+                   TextEmphasis="@Timeline.LatestAttentionAlert.Emphasis"
+                   Text="@Timeline.LatestAttentionAlert.Message" />
+        </div>
+    }
+
+    @if (Timeline.FailureAlert is not null)
+    {
+        <div data-testid="session-detail-failure-alert">
+            <Alert Color="@Timeline.FailureAlert.Color"
+                   Rounded="true"
+                   WithBorderAccent="true"
+                   TextEmphasis="@Timeline.FailureAlert.Emphasis"
+                   Text="@Timeline.FailureAlert.Message" />
+        </div>
+    }
+
+    @if (Timeline.Entries.Count == 0)
+    {
+        <EmptyState Title="No session activity recorded"
+                    Description="The session exists, but no timeline entries are available yet." />
+    }
+    else
+    {
+        <Timeline Order="TimelineOrder.Vertical">
+            @for (var index = 0; index < Timeline.Entries.Count; index++)
+            {
+                var entry = Timeline.Entries[index];
+                <TimelineItem Title="@entry.Title"
+                              Date="@SessionDetailDisplay.FormatTimestamp(entry.Timestamp)"
+                              Color="@entry.Color"
+                              IsLast="@(index == Timeline.Entries.Count - 1)"
+                              DatePrefix="Logged at">
+                    <ChildContent>
+                        <div class="space-y-3" data-testid="session-detail-timeline-entry">
+                            <div class="inline-flex">
+                                <Badge Color="@SessionDetailDisplay.GetKindBadgeColor(entry.Kind)">
+                                    @SessionDetailDisplay.GetKindLabel(entry.Kind)
+                                </Badge>
+                            </div>
+                            @if (!string.IsNullOrWhiteSpace(entry.Detail))
+                            {
+                                <p class="text-sm leading-6 text-[color:var(--color-on-surface-secondary)]">@entry.Detail</p>
+                            }
+                        </div>
+                    </ChildContent>
+                </TimelineItem>
+            }
+        </Timeline>
+    }
+</Card>
+</div>
+
+@code {
+    private static readonly CardSlots TimelineCardSlots = new()
+    {
+        Base = "rounded-[var(--shell-radius-xl)] border border-[var(--shell-border)] bg-[color:var(--color-surface-raised)] shadow-[var(--shell-shadow)]",
+        Body = "flex flex-col gap-6 p-6"
+    };
+
+    [Parameter]
+    [EditorRequired]
+    public required SessionActivityTimelineModel Timeline { get; set; }
+}

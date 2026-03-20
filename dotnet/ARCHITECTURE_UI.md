@@ -368,6 +368,9 @@ Sections:
 4. **Error panel** — `Alert Color="AlertColor.Failure"` when `FinalError` or any `Error`
    activity exists.
 
+Implementation note: EU7-S1 delivers the breadcrumb, session header card, and activity
+timeline first. The metadata/details tab and active-session auto-refresh follow in EU7-S2.
+
 Back navigation uses `Breadcrumb`: Home → Sessions → {Identifier}.
 
 Auto-refresh: 2 seconds for active sessions; no timer for ended sessions (render once).

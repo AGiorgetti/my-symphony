@@ -37,4 +37,18 @@ public sealed class SessionStatusBadgeTests : BunitContext
         Assert.Equal(expectedColor, badge.Instance.Color);
         Assert.Contains(status.ToString(), cut.Markup, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void SessionStatusBadge_uses_custom_text_and_color_override_when_status_is_not_available()
+    {
+        var cut = Render<SessionStatusBadge>(
+            parameters => parameters
+                .Add(component => component.Text, "Active")
+                .Add(component => component.ColorOverride, Badge.BadgeColor.Info));
+
+        var badge = cut.FindComponent<Badge>();
+
+        Assert.Equal(Badge.BadgeColor.Info, badge.Instance.Color);
+        Assert.Contains("Active", cut.Markup, StringComparison.Ordinal);
+    }
 }

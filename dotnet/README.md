@@ -302,7 +302,8 @@ surface only: if dashboard rendering fails, the orchestrator and JSON API contin
 - The dashboard now includes active-session, retry-queue, and recent-attempt panels so operators
   can see live execution, next retry ETA, and concise outcome/error summaries without reading raw logs.
 - The session explorer is now available at `/sessions`, with All / Active / Ended filters and deep
-  links into `/sessions/{identifier}` for individual run inspection.
+  links into `/sessions/{identifier}` for individual run inspection, breadcrumb navigation, and a
+  chronological activity timeline.
 - The dashboard health cards now expose last poll tick, last successful poll age, and workflow load
   status so degraded polling or workflow-reload fallback is visible without reading logs.
 - The sidebar footer includes a theme switcher for the built-in `dark-yellow`, `dark-blue`, and
