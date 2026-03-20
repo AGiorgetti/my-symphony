@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.Json;
 using Flowbite.Components;
 using Symphony.Domain.Runs;
 using Symphony.Host.Dashboard;
@@ -101,6 +102,26 @@ internal static class SessionDetailDisplay
         };
     }
 
+    internal static SessionActivityTimelineEntryModel CreateTimelineEntry(SessionActivityEntry entry)
+    {
+        var detail = NormalizeDetail(entry.Detail);
+        var detailPresentation = BuildDetailPresentation(detail);
+
+        return new SessionActivityTimelineEntryModel(
+            entry.Kind,
+            entry.Timestamp,
+            FormatTimestamp(entry.Timestamp),
+            entry.Title,
+            GetKindLabel(entry.Kind),
+            GetKindBadgeColor(entry.Kind),
+            detailPresentation.Summary,
+            detailPresentation.Detail,
+            detailPresentation.DetailPreview,
+            detailPresentation.HasExpandableDetail,
+            detailPresentation.IsStructuredDetail,
+            GetTimelineColor(entry));
+    }
+
     internal static int? TryParseTurnCount(string? sessionId)
     {
         if (string.IsNullOrWhiteSpace(sessionId))
@@ -125,5 +146,150 @@ internal static class SessionDetailDisplay
         var combined = $"{entry.Title} {entry.Detail}".Trim().ToLowerInvariant();
         return combined.Contains("succeeded", StringComparison.Ordinal)
             || combined.Contains("completed", StringComparison.Ordinal);
+    }
+
+    private static string? NormalizeDetail(string? detail)
+    {
+        return string.IsNullOrWhiteSpace(detail) ? null : detail.Trim();
+    }
+
+    private static ActivityDetailPresentation BuildDetailPresentation(string? detail)
+    {
+        if (string.IsNullOrWhiteSpace(detail))
+        {
+            return ActivityDetailPresentation.Empty;
+        }
+
+        if (TryFormatJson(detail, out var formattedJson, out var structuredSummary))
+        {
+            return new ActivityDetailPresentation(
+                structuredSummary,
+                formattedJson,
+                "Expand payload",
+                HasExpandableDetail: true,
+                IsStructuredDetail: true);
+        }
+
+        var normalized = detail.ReplaceLineEndings("\n");
+        var isMultiline = normalized.Contains('\n', StringComparison.Ordinal);
+        var isLong = normalized.Length > 180;
+
+        if (!isMultiline && !isLong)
+        {
+            return new ActivityDetailPresentation(
+                Summary: null,
+                Detail: normalized,
+                DetailPreview: null,
+                HasExpandableDetail: false,
+                IsStructuredDetail: false);
+        }
+
+        var preview = TruncateText(FirstMeaningfulLine(normalized), 160);
+        return new ActivityDetailPresentation(
+            preview,
+            normalized,
+            "Expand detail",
+            HasExpandableDetail: true,
+            IsStructuredDetail: false);
+    }
+
+    private static bool TryFormatJson(string detail, out string formattedJson, out string summary)
+    {
+        formattedJson = string.Empty;
+        summary = string.Empty;
+
+        var trimmed = detail.Trim();
+        if (!(trimmed.StartsWith('{') || trimmed.StartsWith('[')))
+        {
+            return false;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(trimmed);
+            formattedJson = JsonSerializer.Serialize(
+                document.RootElement,
+                new JsonSerializerOptions
+                {
+                    WriteIndented = true
+                });
+            summary = DescribeJson(document.RootElement);
+            return true;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
+    private static string DescribeJson(JsonElement element)
+    {
+        return element.ValueKind switch
+        {
+            JsonValueKind.Object => DescribeObject(element),
+            JsonValueKind.Array => DescribeArray(element),
+            _ => "Structured payload"
+        };
+    }
+
+    private static string DescribeObject(JsonElement element)
+    {
+        var propertyNames = element.EnumerateObject()
+            .Select(property => property.Name)
+            .Take(3)
+            .ToArray();
+        var propertyCount = element.EnumerateObject().Count();
+
+        if (propertyCount == 0)
+        {
+            return "JSON object payload";
+        }
+
+        var preview = string.Join(", ", propertyNames);
+        return propertyCount > propertyNames.Length
+            ? $"JSON object payload with {propertyCount} properties: {preview}, ..."
+            : $"JSON object payload with {propertyCount} properties: {preview}";
+    }
+
+    private static string DescribeArray(JsonElement element)
+    {
+        var count = element.GetArrayLength();
+        return count == 1
+            ? "JSON array payload with 1 item"
+            : $"JSON array payload with {count} items";
+    }
+
+    private static string FirstMeaningfulLine(string detail)
+    {
+        foreach (var line in detail.Split('\n'))
+        {
+            var trimmed = line.Trim();
+            if (!string.IsNullOrWhiteSpace(trimmed))
+            {
+                return trimmed;
+            }
+        }
+
+        return detail.Trim();
+    }
+
+    private static string TruncateText(string value, int maxLength)
+    {
+        if (value.Length <= maxLength)
+        {
+            return value;
+        }
+
+        return $"{value[..(maxLength - 1)].TrimEnd()}…";
+    }
+
+    private sealed record ActivityDetailPresentation(
+        string? Summary,
+        string? Detail,
+        string? DetailPreview,
+        bool HasExpandableDetail,
+        bool IsStructuredDetail)
+    {
+        public static ActivityDetailPresentation Empty { get; } = new(null, null, null, false, false);
     }
 }

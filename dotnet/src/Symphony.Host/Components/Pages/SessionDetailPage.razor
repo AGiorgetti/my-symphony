@@ -238,13 +238,7 @@
     {
         var orderedActivities = activities
             .OrderBy(activity => activity.Timestamp)
-            .Select(
-                activity => new SessionActivityTimelineEntryModel(
-                    activity.Kind,
-                    activity.Timestamp,
-                    activity.Title,
-                    activity.Detail,
-                    SessionDetailDisplay.GetTimelineColor(activity)))
+            .Select(SessionDetailDisplay.CreateTimelineEntry)
             .ToArray();
 
         var latestWarning = activities

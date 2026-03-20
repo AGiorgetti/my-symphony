@@ -52,20 +52,41 @@ public sealed class SessionDetailComponentTests : BunitContext
                         new SessionActivityTimelineEntryModel(
                             SessionActivityKind.LifecycleMilestone,
                             new DateTimeOffset(2026, 3, 20, 9, 0, 0, TimeSpan.Zero),
+                            "2026-03-20 09:00:00 UTC",
                             "Session started",
+                            "Lifecycle",
+                            Badge.BadgeColor.Gray,
+                            null,
                             "Tracker moved to In Progress",
+                            null,
+                            false,
+                            false,
                             TimelineColor.Gray),
                         new SessionActivityTimelineEntryModel(
                             SessionActivityKind.AgentMessage,
                             new DateTimeOffset(2026, 3, 20, 9, 0, 30, TimeSpan.Zero),
+                            "2026-03-20 09:00:30 UTC",
                             "turn_started",
+                            "Agent message",
+                            Badge.BadgeColor.Info,
+                            null,
                             "Agent picked up the first turn",
+                            null,
+                            false,
+                            false,
                             TimelineColor.Blue),
                         new SessionActivityTimelineEntryModel(
                             SessionActivityKind.Warning,
                             new DateTimeOffset(2026, 3, 20, 9, 1, 0, TimeSpan.Zero),
+                            "2026-03-20 09:01:00 UTC",
                             "Queued for retry",
+                            "Warning",
+                            Badge.BadgeColor.Warning,
+                            null,
                             "Waiting for the next dispatcher slot",
+                            null,
+                            false,
+                            false,
                             TimelineColor.Orange)
                     ],
                     new SessionActivityTimelineAlertModel(AlertColor.Warning, "Latest warning:", "Queued for retry - Waiting for the next dispatcher slot"),
@@ -95,6 +116,38 @@ public sealed class SessionDetailComponentTests : BunitContext
                 Assert.Equal("Queued for retry", item.Instance.Title);
                 Assert.Equal(TimelineColor.Orange, item.Instance.Color);
             });
+    }
+
+    [Fact]
+    public void SessionActivityTimeline_renders_expandable_json_payloads_compactly()
+    {
+        var cut = Render<SessionActivityTimeline>(
+            parameters => parameters.Add(
+                component => component.Timeline,
+                new SessionActivityTimelineModel(
+                    [
+                        new SessionActivityTimelineEntryModel(
+                            SessionActivityKind.AgentMessage,
+                            new DateTimeOffset(2026, 3, 20, 9, 2, 0, TimeSpan.Zero),
+                            "2026-03-20 09:02:00 UTC",
+                            "turn_completed",
+                            "Agent message",
+                            Badge.BadgeColor.Info,
+                            "JSON object payload with 3 properties: event, files, stats",
+                            "{\n  \"event\": \"turn_completed\",\n  \"files\": [\"Program.cs\"],\n  \"stats\": { \"input\": 12 }\n}",
+                            "Expand payload",
+                            true,
+                            true,
+                            TimelineColor.Blue)
+                    ],
+                    LatestAttentionAlert: null,
+                    FailureAlert: null)));
+
+        var details = cut.Find("[data-testid=\"session-detail-timeline-detail\"]");
+
+        Assert.Contains("JSON object payload with 3 properties", cut.Markup, StringComparison.Ordinal);
+        Assert.Contains("Expand payload", cut.Markup, StringComparison.Ordinal);
+        Assert.Contains("\"turn_completed\"", details.TextContent, StringComparison.Ordinal);
     }
 
     [Fact]

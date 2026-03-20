@@ -94,6 +94,26 @@ public sealed class SessionDetailPageIntegrationTests
     }
 
     [Fact]
+    public async Task Session_detail_page_renders_structured_payloads_inside_collapsible_timeline_blocks()
+    {
+        var store = CreateStoreWithStructuredPayloadSession();
+        using var app = await StartSessionDetailApplicationAsync(
+            store,
+            new StaticDashboardStateService(CreateSnapshot()),
+            CreateActiveRuntimeService());
+        var client = CreateHttpClient(app);
+
+        var response = await client.GetAsync("/sessions/ABC-3");
+        var html = await response.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains("JSON object payload with 3 properties", html, StringComparison.Ordinal);
+        Assert.Contains("data-testid=\"session-detail-timeline-detail\"", html, StringComparison.Ordinal);
+        Assert.Contains("Expand payload", html, StringComparison.Ordinal);
+        Assert.Contains("&quot;event&quot;: &quot;turn_completed&quot;", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Session_detail_page_renders_not_found_message_for_unknown_session()
     {
         var store = new SessionActivityStore(NullLogger<SessionActivityStore>.Instance);
@@ -137,6 +157,33 @@ public sealed class SessionDetailPageIntegrationTests
         store.RecordActivity("ABC-1", new SessionActivityEntry(SessionActivityKind.LifecycleMilestone, startedAt, "Session started", "Tracker moved to In Progress"));
         store.RecordActivity("ABC-1", new SessionActivityEntry(SessionActivityKind.AgentMessage, startedAt.AddMinutes(1), "turn_completed", "Applied changes"));
         store.RecordActivity("ABC-1", new SessionActivityEntry(SessionActivityKind.Warning, startedAt.AddMinutes(2), "Queued for retry", "Waiting for the next dispatcher slot"));
+
+        return store;
+    }
+
+    private static SessionActivityStore CreateStoreWithStructuredPayloadSession()
+    {
+        var store = new SessionActivityStore(NullLogger<SessionActivityStore>.Instance);
+        var startedAt = new DateTimeOffset(2026, 3, 20, 10, 0, 0, TimeSpan.Zero);
+
+        store.RecordSessionStart("ABC-3", startedAt, "https://github.com/AGiorgetti/my-symphony/issues/ABC-3");
+        store.RecordActivity(
+            "ABC-3",
+            new SessionActivityEntry(
+                SessionActivityKind.AgentMessage,
+                startedAt.AddMinutes(1),
+                "turn_completed",
+                """
+                {
+                  "event": "turn_completed",
+                  "files": [
+                    "Program.cs"
+                  ],
+                  "stats": {
+                    "input": 12
+                  }
+                }
+                """));
 
         return store;
     }
