@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Hosting.Server;
+using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
@@ -11,6 +13,8 @@ using Symphony.Domain.Issues;
 using Symphony.Domain.Runs;
 using Symphony.Domain.Workspaces;
 using Symphony.Host.Composition;
+using Symphony.Host.Dashboard;
+using Symphony.Host.Theming;
 
 namespace Symphony.Host.IntegrationTests;
 
@@ -69,6 +73,33 @@ public sealed class SymphonyHostLifecycleIntegrationTests
         Assert.True(Directory.Exists(expectedWorkspacePath));
     }
 
+    [Fact]
+    public async Task StartAsync_exposes_ui_routes_and_ui_services_from_di()
+    {
+        await using var host = await StartedSymphonyHost.StartAsync(
+            tempDirectory => CreateWorkflowContents(Path.Combine(tempDirectory, "workspaces")),
+            services =>
+            {
+                services.RemoveAll<IIssueTrackerClient>();
+                services.AddSingleton<IIssueTrackerClient>(new EmptyIssueTrackerClient());
+
+                RemoveHostedService<RetryDispatchBackgroundService>(services);
+            });
+        using var client = CreateHttpClient(host.App);
+        using var scope = host.App.Services.CreateScope();
+
+        Assert.NotNull(scope.ServiceProvider.GetService<ISessionActivityStore>());
+        Assert.NotNull(scope.ServiceProvider.GetService<IThemeService>());
+
+        var rootResponse = await client.GetAsync("/");
+        var sessionsResponse = await client.GetAsync("/sessions");
+        var unknownSessionResponse = await client.GetAsync("/sessions/nonexistent-id");
+
+        Assert.Equal(System.Net.HttpStatusCode.OK, rootResponse.StatusCode);
+        Assert.Equal(System.Net.HttpStatusCode.OK, sessionsResponse.StatusCode);
+        Assert.Equal(System.Net.HttpStatusCode.OK, unknownSessionResponse.StatusCode);
+    }
+
     private static string CreateWorkflowContents(string workspaceRoot)
     {
         var normalizedWorkspaceRoot = workspaceRoot.Replace('\\', '/');
@@ -97,6 +128,19 @@ public sealed class SymphonyHostLifecycleIntegrationTests
             """
             + Environment.NewLine
             + "Smoke prompt for {{ issue.identifier }} on attempt {{ attempt }}.";
+    }
+
+    private static HttpClient CreateHttpClient(WebApplication app)
+    {
+        var server = app.Services.GetRequiredService<IServer>();
+        var addresses = server.Features.Get<IServerAddressesFeature>()
+            ?? throw new InvalidOperationException("Test server addresses are unavailable.");
+        var address = Assert.Single(addresses.Addresses);
+
+        return new HttpClient
+        {
+            BaseAddress = new Uri(address)
+        };
     }
 
     private static void RemoveHostedService<TImplementation>(IServiceCollection services)
@@ -253,6 +297,28 @@ public sealed class SymphonyHostLifecycleIntegrationTests
         {
             Interlocked.Increment(ref _fetchCandidateIssuesCallCount);
             return Task.FromResult(_issues);
+        }
+
+        public Task<IReadOnlyList<Issue>> FetchIssuesByStatesAsync(
+            IReadOnlyCollection<string> stateNames,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<IReadOnlyList<Issue>>(Array.Empty<Issue>());
+        }
+
+        public Task<IReadOnlyList<Issue>> FetchIssueStatesByIdsAsync(
+            IReadOnlyCollection<string> issueIds,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<IReadOnlyList<Issue>>(Array.Empty<Issue>());
+        }
+    }
+
+    private sealed class EmptyIssueTrackerClient : IIssueTrackerClient
+    {
+        public Task<IReadOnlyList<Issue>> FetchCandidateIssuesAsync(CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<IReadOnlyList<Issue>>(Array.Empty<Issue>());
         }
 
         public Task<IReadOnlyList<Issue>> FetchIssuesByStatesAsync(
