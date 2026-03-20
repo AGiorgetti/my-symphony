@@ -2,7 +2,10 @@ using Bunit;
 using Flowbite.Components;
 using Flowbite.Services;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.AspNetCore.Components;
 using Symphony.Host.Components.Shell;
+using Symphony.Host.Components.Layout;
+using Symphony.Host.Dashboard;
 using Symphony.Host.Theming;
 
 namespace Symphony.Host.IntegrationTests;
@@ -58,6 +61,26 @@ public sealed class ThemeSwitcherTests : BunitContext
             Assert.Equal("Light Blue", cut.Find("[data-testid=\"theme-switcher\"] button").TextContent.Trim()));
     }
 
+    [Fact]
+    public void MainLayout_initializes_theme_service_in_the_same_circuit_as_the_theme_switcher()
+    {
+        var themeService = new TestThemeService
+        {
+            StoredTheme = "light-blue"
+        };
+
+        Services.AddSingleton<IThemeService>(themeService);
+        Services.AddSingleton<IDashboardStateService>(new StaticDashboardStateService());
+
+        var cut = Render<MainLayout>(
+            parameters => parameters.Add(
+                component => component.Body,
+                (RenderFragment)(builder => builder.AddMarkupContent(0, "<div>Body</div>"))));
+
+        cut.WaitForAssertion(() =>
+            Assert.Equal("Light Blue", cut.Find("[data-testid=\"theme-switcher\"] button").TextContent.Trim()));
+    }
+
     private sealed class TestThemeService : IThemeService
     {
         private static readonly ThemeDescriptor[] Themes =
@@ -73,7 +96,19 @@ public sealed class ThemeSwitcherTests : BunitContext
 
         public event Action? OnThemeChanged;
 
+        public string? StoredTheme { get; init; }
+
         public List<string> SelectedThemes { get; } = [];
+
+        public Task InitializeAsync()
+        {
+            if (!string.IsNullOrWhiteSpace(StoredTheme))
+            {
+                ChangeTheme(StoredTheme);
+            }
+
+            return Task.CompletedTask;
+        }
 
         public Task SetThemeAsync(string key)
         {
@@ -86,6 +121,34 @@ public sealed class ThemeSwitcherTests : BunitContext
         {
             CurrentTheme = key;
             OnThemeChanged?.Invoke();
+        }
+    }
+
+    private sealed class StaticDashboardStateService : IDashboardStateService
+    {
+        public Task<DashboardSnapshot> GetSnapshotAsync(CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(
+                new DashboardSnapshot(
+                    DateTimeOffset.UtcNow,
+                    "Healthy",
+                    "Single-process in-memory",
+                    DateTimeOffset.UtcNow,
+                    DateTimeOffset.UtcNow,
+                    0d,
+                    "Loaded",
+                    DateTimeOffset.UtcNow,
+                    RunningCount: 0,
+                    RetryingCount: 0,
+                    InputTokens: 0,
+                    OutputTokens: 0,
+                    TotalTokens: 0,
+                    SecondsRunning: 0d,
+                    ActiveSessions: [],
+                    RetryQueue: [],
+                    RecentAttempts: [],
+                    LastError: null,
+                    WorkflowLastError: null));
         }
     }
 

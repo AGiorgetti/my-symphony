@@ -8,5 +8,7 @@ public interface IThemeService
 
     event Action? OnThemeChanged;
 
+    Task InitializeAsync();
+
     Task SetThemeAsync(string key);
 }

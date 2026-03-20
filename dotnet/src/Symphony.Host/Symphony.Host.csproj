@@ -23,6 +23,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Remove="output\**\*.cs" />
     <UpToDateCheckBuilt Include="wwwroot\app.css" />
     <UpToDateCheckBuilt Include="wwwroot\app.min.css" />
     <None Update="wwwroot\**\*">
