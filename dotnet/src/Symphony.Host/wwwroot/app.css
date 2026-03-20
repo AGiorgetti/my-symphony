@@ -132,8 +132,9 @@ a {
 }
 
 .dashboard-page {
-    width: min(var(--shell-max-width), calc(100vw - 2rem));
-    margin: 0 auto;
+    width: 100%;
+    max-width: var(--shell-max-width);
+    margin: 0;
     padding: 2.5rem 0 3rem;
 }
 
@@ -214,7 +215,6 @@ code {
     }
 
     .dashboard-page {
-        width: min(100vw - 1.25rem, var(--shell-max-width));
         padding-top: 1.25rem;
     }
 
