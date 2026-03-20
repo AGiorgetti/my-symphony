@@ -1,0 +1,16 @@
+fix(tests): widen workflow reload wait window
+
+Extend the WorkflowOptionsProvider test wait helpers so Linux CI has enough
+time to observe the rewritten workflow file and the load-status tracker.
+
+- wait up to 5 seconds for the reload state instead of 500 ms
+- require the load-status tracker to report the updated polling interval
+- keep the change scoped to infrastructure test code only
+
+Tests:
+- dotnet test -c Release dotnet/tests/Symphony.Infrastructure.Tests/Symphony.Infrastructure.Tests.csproj --no-restore --filter "FullyQualifiedName~WorkflowOptionsProviderTests"
+- dotnet build -c Release dotnet/Symphony.sln --no-restore
+- dotnet test -c Release --no-build dotnet/Symphony.sln
+- dotnet format --verify-no-changes dotnet/Symphony.sln --no-restore
+
+Co-authored-by: Agent <agent@github.com>

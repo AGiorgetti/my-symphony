@@ -61,7 +61,7 @@ public sealed class WorkflowOptionsProviderTests
                     Updated prompt for {{ issue.title }}
                     """);
 
-                var reloadedSnapshot = await WaitForReloadAsync(provider);
+                var reloadedSnapshot = await WaitForReloadAsync(provider, workflowLoadStatusTracker);
 
                 Assert.Equal(125, initialOptions.Polling.IntervalMs);
                 Assert.Equal("Initial prompt for {{ issue.identifier }}", initialDefinition.PromptTemplate);
@@ -191,28 +191,38 @@ public sealed class WorkflowOptionsProviderTests
     }
 
     private static async Task<(WorkflowServiceOptions Options, WorkflowDefinition Definition)> WaitForReloadAsync(
-        WorkflowOptionsProvider provider)
+        WorkflowOptionsProvider provider,
+        WorkflowLoadStatusTracker workflowLoadStatusTracker)
     {
-        for (var attempt = 0; attempt < 20; attempt++)
+        var deadline = TimeProvider.System.GetUtcNow() + TimeSpan.FromSeconds(5);
+        WorkflowServiceOptions? latestOptions = null;
+        WorkflowDefinition? latestDefinition = null;
+
+        while (TimeProvider.System.GetUtcNow() < deadline)
         {
             var options = await provider.GetCurrentAsync();
             var definition = await provider.GetCurrentDefinitionAsync();
+            var snapshot = workflowLoadStatusTracker.GetSnapshot();
+            latestOptions = options;
+            latestDefinition = definition;
 
             if (options.Polling.IntervalMs == 250
                 && string.Equals(
                     definition.PromptTemplate,
                     "Updated prompt for {{ issue.title }}",
-                    StringComparison.Ordinal))
+                    StringComparison.Ordinal)
+                && string.Equals(snapshot.Status, "Loaded", StringComparison.Ordinal)
+                && snapshot.PollingIntervalMs == 250)
             {
                 return (options, definition);
             }
 
-            await Task.Delay(TimeSpan.FromMilliseconds(25));
+            await Task.Delay(TimeSpan.FromMilliseconds(50));
         }
 
-        var finalOptions = await provider.GetCurrentAsync();
-        var finalDefinition = await provider.GetCurrentDefinitionAsync();
-        return (finalOptions, finalDefinition);
+        return (
+            latestOptions ?? await provider.GetCurrentAsync(),
+            latestDefinition ?? await provider.GetCurrentDefinitionAsync());
     }
 
     private static async Task<(
@@ -222,24 +232,32 @@ public sealed class WorkflowOptionsProviderTests
         WorkflowOptionsProvider provider,
         WorkflowLoadStatusTracker workflowLoadStatusTracker)
     {
-        for (var attempt = 0; attempt < 20; attempt++)
+        var deadline = TimeProvider.System.GetUtcNow() + TimeSpan.FromSeconds(5);
+        WorkflowServiceOptions? latestOptions = null;
+        WorkflowDefinition? latestDefinition = null;
+        WorkflowLoadStatusSnapshot? latestSnapshot = null;
+
+        while (TimeProvider.System.GetUtcNow() < deadline)
         {
             var options = await provider.GetCurrentAsync();
             var definition = await provider.GetCurrentDefinitionAsync();
             var snapshot = workflowLoadStatusTracker.GetSnapshot();
+            latestOptions = options;
+            latestDefinition = definition;
+            latestSnapshot = snapshot;
 
             if (string.Equals(snapshot.Status, "ReloadFailedUsingLastKnownGood", StringComparison.Ordinal))
             {
                 return (options, definition, snapshot);
             }
 
-            await Task.Delay(TimeSpan.FromMilliseconds(25));
+            await Task.Delay(TimeSpan.FromMilliseconds(50));
         }
 
         return (
-            await provider.GetCurrentAsync(),
-            await provider.GetCurrentDefinitionAsync(),
-            workflowLoadStatusTracker.GetSnapshot());
+            latestOptions ?? await provider.GetCurrentAsync(),
+            latestDefinition ?? await provider.GetCurrentDefinitionAsync(),
+            latestSnapshot ?? workflowLoadStatusTracker.GetSnapshot());
     }
 
     private sealed class TestLogger<T> : ILogger<T>
