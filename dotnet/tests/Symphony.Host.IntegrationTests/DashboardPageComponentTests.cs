@@ -47,6 +47,17 @@ public sealed class DashboardPageComponentTests : BunitContext
         Assert.Contains("Workflow reload warning:", cut.Markup, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void ActiveSessionsPanel_renders_empty_state_when_no_sessions_are_running()
+    {
+        var cut = Render<ActiveSessionsPanel>(parameters => parameters
+            .Add(component => component.Sessions, Array.Empty<DashboardActiveSessionSnapshot>())
+            .Add(component => component.GeneratedAt, new DateTimeOffset(2026, 3, 20, 9, 0, 0, TimeSpan.Zero)));
+
+        Assert.Contains("No active sessions", cut.Markup, StringComparison.Ordinal);
+        Assert.Contains("New in-flight work will appear here", cut.Markup, StringComparison.Ordinal);
+    }
+
     private sealed class DeferredDashboardStateService(Task<DashboardSnapshot> snapshotTask) : IDashboardStateService
     {
         public Task<DashboardSnapshot> GetSnapshotAsync(CancellationToken cancellationToken = default)
