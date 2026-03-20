@@ -213,6 +213,7 @@ A session detail view should provide enough information for an operator to under
 The detail view should include:
 
 - a clear session summary
+- breadcrumb navigation back to the dashboard and session list
 - the related issue or work item information
 - session status and outcome
 - timestamps relevant to the session lifecycle

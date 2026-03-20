@@ -1,0 +1,151 @@
+@page "/sessions/{Identifier}"
+@using Symphony.Host.Components.SessionDetail
+@inject ISessionActivityStore SessionActivityStore
+
+<main class="dashboard-page flex flex-col gap-6">
+    <div data-testid="session-detail-breadcrumb">
+        <Breadcrumb>
+            <BreadcrumbItem Href="/">Home</BreadcrumbItem>
+            <BreadcrumbItem Href="/sessions">Sessions</BreadcrumbItem>
+            <BreadcrumbItem>@_requestedIdentifier</BreadcrumbItem>
+        </Breadcrumb>
+    </div>
+
+    @if (_isLoading)
+    {
+        <Card Slots="@ShellCardSlots" data-testid="session-detail-skeleton">
+            <Skeleton Variant="SkeletonVariant.Text" Lines="1" Width="w-40" />
+            <Skeleton Variant="SkeletonVariant.Text" Lines="1" Width="w-72" />
+            <Skeleton Variant="SkeletonVariant.Card" Width="w-full" Height="h-80" />
+        </Card>
+    }
+    else if (_header is null || _timeline is null)
+    {
+        <div data-testid="session-detail-not-found">
+            <Alert Color="AlertColor.Warning"
+                   Rounded="true"
+                   WithBorderAccent="true"
+                   TextEmphasis="Session not found:"
+                   Text="@($"No session with identifier '{_requestedIdentifier}' is available in the current application run.")" />
+        </div>
+    }
+    else
+    {
+        <SessionHeaderCard Session="_header" />
+        <SessionActivityTimeline Timeline="_timeline" />
+    }
+</main>
+
+@code {
+    private static readonly CardSlots ShellCardSlots = new()
+    {
+        Base = "rounded-[var(--shell-radius-xl)] border border-[var(--shell-border)] bg-[color:var(--color-surface-raised)] shadow-[var(--shell-shadow)]",
+        Body = "flex flex-col gap-6 p-6"
+    };
+
+    [Parameter]
+    public string Identifier { get; set; } = string.Empty;
+
+    private bool _isLoading = true;
+    private string _requestedIdentifier = string.Empty;
+    private SessionHeaderDisplayModel? _header;
+    private SessionActivityTimelineModel? _timeline;
+
+    protected override Task OnParametersSetAsync()
+    {
+        _requestedIdentifier = Identifier?.Trim() ?? string.Empty;
+        _isLoading = false;
+
+        var session = string.IsNullOrWhiteSpace(_requestedIdentifier)
+            ? null
+            : SessionActivityStore.GetSession(_requestedIdentifier);
+
+        if (session is null)
+        {
+            _header = null;
+            _timeline = null;
+            return Task.CompletedTask;
+        }
+
+        _header = BuildHeader(session);
+        _timeline = BuildTimeline(session, SessionActivityStore.GetActivities(session.IssueIdentifier));
+        return Task.CompletedTask;
+    }
+
+    private static SessionHeaderDisplayModel BuildHeader(SessionRecord session)
+    {
+        var statusText = session.IsActive ? "Active" : session.FinalOutcome ?? "Ended";
+        var parsedStatus = SessionDetailDisplay.TryParseStatus(statusText);
+        var statusColor = parsedStatus is null
+            ? SessionDetailDisplay.GetFallbackStatusColor(statusText, session.IsActive)
+            : Badge.BadgeColor.Primary;
+
+        return new SessionHeaderDisplayModel(
+            session.IssueIdentifier,
+            session.IssueUrl,
+            session.IsActive,
+            statusText,
+            parsedStatus,
+            statusColor,
+            session.StartedAt,
+            session.EndedAt);
+    }
+
+    private static SessionActivityTimelineModel BuildTimeline(
+        SessionRecord session,
+        IReadOnlyList<SessionActivityEntry> activities)
+    {
+        var orderedActivities = activities
+            .OrderBy(activity => activity.Timestamp)
+            .Select(
+                activity => new SessionActivityTimelineEntryModel(
+                    activity.Kind,
+                    activity.Timestamp,
+                    activity.Title,
+                    activity.Detail,
+                    SessionDetailDisplay.GetTimelineColor(activity)))
+            .ToArray();
+
+        var latestWarning = activities
+            .Where(activity => activity.Kind == SessionActivityKind.Warning)
+            .OrderByDescending(activity => activity.Timestamp)
+            .FirstOrDefault();
+        var latestError = activities
+            .Where(activity => activity.Kind == SessionActivityKind.Error)
+            .OrderByDescending(activity => activity.Timestamp)
+            .FirstOrDefault();
+
+        SessionActivityTimelineAlertModel? latestAttentionAlert = null;
+        if (latestWarning is not null && latestError is null)
+        {
+            latestAttentionAlert = new SessionActivityTimelineAlertModel(
+                AlertColor.Warning,
+                "Latest warning:",
+                ComposeAlertMessage(latestWarning));
+        }
+
+        SessionActivityTimelineAlertModel? failureAlert = null;
+        var failureMessage = !string.IsNullOrWhiteSpace(session.FinalError)
+            ? session.FinalError
+            : latestError is null
+                ? null
+                : ComposeAlertMessage(latestError);
+
+        if (!string.IsNullOrWhiteSpace(failureMessage))
+        {
+            failureAlert = new SessionActivityTimelineAlertModel(
+                AlertColor.Failure,
+                "Failure detail:",
+                failureMessage);
+        }
+
+        return new SessionActivityTimelineModel(orderedActivities, latestAttentionAlert, failureAlert);
+    }
+
+    private static string ComposeAlertMessage(SessionActivityEntry entry)
+    {
+        return string.IsNullOrWhiteSpace(entry.Detail)
+            ? entry.Title
+            : $"{entry.Title} - {entry.Detail}";
+    }
+}

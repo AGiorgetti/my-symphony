@@ -1,13 +1,40 @@
 @using Symphony.Domain.Runs
 
-<Badge Color="@GetColor(Status)">
-    @Status
+<Badge Color="@ResolveColor()">
+    @ResolveText()
 </Badge>
 
 @code {
     [Parameter]
-    [EditorRequired]
-    public RunAttemptStatus Status { get; set; }
+    public RunAttemptStatus? Status { get; set; }
+
+    [Parameter]
+    public string? Text { get; set; }
+
+    [Parameter]
+    public Badge.BadgeColor? ColorOverride { get; set; }
+
+    private Badge.BadgeColor ResolveColor()
+    {
+        if (ColorOverride is not null)
+        {
+            return ColorOverride.Value;
+        }
+
+        return Status is null
+            ? Badge.BadgeColor.Primary
+            : GetColor(Status.Value);
+    }
+
+    private string ResolveText()
+    {
+        if (!string.IsNullOrWhiteSpace(Text))
+        {
+            return Text;
+        }
+
+        return Status?.ToString() ?? string.Empty;
+    }
 
     private static Badge.BadgeColor GetColor(RunAttemptStatus status)
     {
