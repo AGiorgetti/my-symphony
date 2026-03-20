@@ -3,15 +3,6 @@
 @inject IDashboardStateService DashboardStateService
 
 <main class="dashboard-page flex flex-col gap-6">
-    <section class="hero">
-        <p class="eyebrow">Symphony</p>
-        <h1>Runtime Control Surface</h1>
-        <p class="lede">
-            Operator-facing dashboard for the in-memory orchestrator. The UI reflects runtime state but
-            is not required for orchestration correctness.
-        </p>
-    </section>
-
     @if (_isLoading)
     {
         <section class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4" data-testid="dashboard-skeleton">

@@ -37,7 +37,6 @@ public sealed class DashboardPageIntegrationTests
         Assert.Contains("href=\"app.min.css\"", html, StringComparison.Ordinal);
         Assert.Contains("href=\"_content/Flowbite/flowbite.min.css\"", html, StringComparison.Ordinal);
         Assert.Contains("src=\"_content/Flowbite/flowbite.js\"", html, StringComparison.Ordinal);
-        Assert.Contains("Runtime Control Surface", html, StringComparison.Ordinal);
         Assert.Contains("data-testid=\"dashboard-summary-grid\"", html, StringComparison.Ordinal);
         Assert.Contains("Service Health", html, StringComparison.Ordinal);
         Assert.Contains("Workflow Config", html, StringComparison.Ordinal);
