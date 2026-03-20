@@ -1,0 +1,62 @@
+@using Symphony.Host.Dashboard
+
+<Card Slots="@PanelSlots" data-testid="dashboard-recent-attempts">
+    <div class="flex items-start justify-between gap-4">
+        <div>
+            <p class="text-xs font-bold uppercase tracking-[0.24em] text-[color:var(--color-primary-DEFAULT)]">Recent Attempts</p>
+            <h2 class="mt-2 text-2xl font-semibold text-[color:var(--color-on-surface-primary)]">Latest outcomes</h2>
+            <p class="mt-2 text-sm leading-6 text-[color:var(--color-on-surface-secondary)]">
+                Most recent run outcomes with concise error summaries for operator triage.
+            </p>
+        </div>
+        <Badge Color="Badge.BadgeColor.Primary">@Attempts.Count</Badge>
+    </div>
+
+    @if (Attempts.Count == 0)
+    {
+        <EmptyState Title="No recent attempts yet"
+                    Description="Completed worker attempts will appear here after the first run finishes." />
+    }
+    else
+    {
+        <ul class="space-y-4">
+            @foreach (var attempt in Attempts)
+            {
+                <li class="rounded-[var(--shell-radius-lg)] border border-[var(--shell-border)] bg-[color:var(--color-surface-overlay)] p-4">
+                    <div class="flex flex-wrap items-center justify-between gap-3">
+                        <span class="text-base font-semibold text-[color:var(--color-on-surface-primary)]">@attempt.IssueIdentifier</span>
+                        <Badge Color="@DashboardDisplay.GetOutcomeBadgeColor(attempt.Outcome)">@attempt.Outcome</Badge>
+                    </div>
+                    <div class="mt-3 space-y-2 text-sm text-[color:var(--color-on-surface-secondary)]">
+                        <p>@GetAttemptLabel(attempt.Attempt) · finished @DashboardDisplay.FormatTimestamp(attempt.CompletedAt) · @DashboardDisplay.FormatDuration(attempt.DurationSeconds)</p>
+                        @if (!string.IsNullOrWhiteSpace(attempt.SessionId))
+                        {
+                            <p>Session @attempt.SessionId</p>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(attempt.Error))
+                        {
+                            <p>@attempt.Error</p>
+                        }
+                    </div>
+                </li>
+            }
+        </ul>
+    }
+</Card>
+
+@code {
+    private static readonly CardSlots PanelSlots = new()
+    {
+        Base = "h-full rounded-[var(--shell-radius-lg)] border border-[var(--shell-border)] bg-[color:var(--color-surface-raised)] shadow-[var(--shell-shadow)]",
+        Body = "flex h-full flex-col gap-6 p-5"
+    };
+
+    [Parameter]
+    [EditorRequired]
+    public required IReadOnlyList<DashboardRecentAttemptSnapshot> Attempts { get; set; }
+
+    private static string GetAttemptLabel(int? attempt)
+    {
+        return attempt is null ? "Initial run" : $"Attempt {attempt}";
+    }
+}

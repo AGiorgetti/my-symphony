@@ -1,0 +1,57 @@
+@using Symphony.Host.Dashboard
+
+<Card Slots="@PanelSlots" data-testid="dashboard-retry-queue">
+    <div class="flex items-start justify-between gap-4">
+        <div>
+            <p class="text-xs font-bold uppercase tracking-[0.24em] text-[color:var(--color-primary-DEFAULT)]">Retry Queue</p>
+            <h2 class="mt-2 text-2xl font-semibold text-[color:var(--color-on-surface-primary)]">Scheduled retries</h2>
+            <p class="mt-2 text-sm leading-6 text-[color:var(--color-on-surface-secondary)]">
+                Continuation and failure retries with their next retry ETA and failure reason.
+            </p>
+        </div>
+        <Badge Color="Badge.BadgeColor.Warning">@Entries.Count</Badge>
+    </div>
+
+    @if (Entries.Count == 0)
+    {
+        <EmptyState Title="Retry queue is empty"
+                    Description="Queued continuation and failure retries will appear here when they are scheduled." />
+    }
+    else
+    {
+        <ul class="space-y-4">
+            @foreach (var entry in Entries)
+            {
+                <li class="rounded-[var(--shell-radius-lg)] border border-[var(--shell-border)] bg-[color:var(--color-surface-overlay)] p-4">
+                    <div class="flex flex-wrap items-center justify-between gap-3">
+                        <span class="text-base font-semibold text-[color:var(--color-on-surface-primary)]">@entry.IssueIdentifier</span>
+                        <Badge Color="Badge.BadgeColor.Warning">Retry @entry.Attempt</Badge>
+                    </div>
+                    <div class="mt-3 space-y-2 text-sm text-[color:var(--color-on-surface-secondary)]">
+                        <p>ETA @DashboardDisplay.FormatRetryEta(entry.DueAt, GeneratedAt) · due @DashboardDisplay.FormatTimestamp(entry.DueAt)</p>
+                        @if (!string.IsNullOrWhiteSpace(entry.Error))
+                        {
+                            <p>@entry.Error</p>
+                        }
+                    </div>
+                </li>
+            }
+        </ul>
+    }
+</Card>
+
+@code {
+    private static readonly CardSlots PanelSlots = new()
+    {
+        Base = "h-full rounded-[var(--shell-radius-lg)] border border-[var(--shell-border)] bg-[color:var(--color-surface-raised)] shadow-[var(--shell-shadow)]",
+        Body = "flex h-full flex-col gap-6 p-5"
+    };
+
+    [Parameter]
+    [EditorRequired]
+    public required IReadOnlyList<DashboardRetrySnapshot> Entries { get; set; }
+
+    [Parameter]
+    [EditorRequired]
+    public DateTimeOffset GeneratedAt { get; set; }
+}
