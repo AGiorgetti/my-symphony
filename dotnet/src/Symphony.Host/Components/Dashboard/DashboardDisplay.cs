@@ -1,3 +1,4 @@
+using Symphony.Abstractions.Orchestration;
 using System.Globalization;
 using Flowbite.Components;
 using Symphony.Host.Dashboard;
@@ -43,6 +44,7 @@ internal static class DashboardDisplay
         {
             "healthy" => Badge.BadgeColor.Success,
             "degraded" => Badge.BadgeColor.Warning,
+            "paused" => Badge.BadgeColor.Gray,
             _ => Badge.BadgeColor.Gray
         };
     }
@@ -90,6 +92,11 @@ internal static class DashboardDisplay
 
     internal static string GetHealthMessage(DashboardSnapshot snapshot)
     {
+        if (snapshot.OrchestratorState == OrchestratorControlState.Stopped)
+        {
+            return "Polling and new issue assignment are paused until the orchestrator is started.";
+        }
+
         if (string.Equals(snapshot.WorkflowLoadStatus, "ReloadFailedUsingLastKnownGood", StringComparison.Ordinal))
         {
             return "Workflow reload failed; the service is using the last-known-good configuration.";
@@ -116,6 +123,16 @@ internal static class DashboardDisplay
 
     internal static string GetPollMessage(DashboardSnapshot snapshot)
     {
+        if (snapshot.OrchestratorState == OrchestratorControlState.Stopped && snapshot.LastSuccessfulPollAt is null)
+        {
+            return "Polling is paused before the first orchestrator tick.";
+        }
+
+        if (snapshot.OrchestratorState == OrchestratorControlState.Stopped)
+        {
+            return $"Paused after {FormatTimestamp(snapshot.LastSuccessfulPollAt)}.";
+        }
+
         if (snapshot.LastSuccessfulPollAt is null)
         {
             return "Waiting for the first successful orchestrator poll.";

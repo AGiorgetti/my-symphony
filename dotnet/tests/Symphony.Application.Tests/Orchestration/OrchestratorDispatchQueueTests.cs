@@ -2,9 +2,11 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using Symphony.Abstractions.Orchestration;
 using Symphony.Application.Configuration;
 using Symphony.Application.Orchestration;
+using Symphony.Application.Polling;
 using Symphony.Application.Runtime;
 using Symphony.Application.Tests.Logging;
 using Symphony.Domain.Issues;
@@ -272,6 +274,67 @@ public sealed class OrchestratorDispatchQueueTests
     }
 
     [Fact]
+    public async Task DispatchWorker_waits_for_resume_before_starting_queued_work()
+    {
+        var queue = CreateQueue(maxConcurrentAgents: 1);
+        var registry = CreateRegistry();
+        var worker = new BlockingQueuedIssueWorker();
+        var executionGate = CreateExecutionGate(initialState: OrchestratorControlState.Stopped);
+        var hostedService = CreateHostedService(
+            queue,
+            registry,
+            new AttemptHistoryTracker(),
+            worker,
+            timeProvider: null,
+            executionGate);
+
+        await hostedService.StartAsync(CancellationToken.None);
+        var enqueueResult = await queue.QueueAsync(CreateIssue("1", "ABC-1"));
+
+        Assert.Equal(DispatchEnqueueResult.Enqueued, enqueueResult);
+        await Task.Delay(150);
+        Assert.False(worker.ExecutionStarted.Task.IsCompleted);
+        Assert.Single(queue.GetSnapshot().Queued);
+
+        await executionGate.ResumeAsync();
+        await worker.ExecutionStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+        worker.AllowCompletion("ABC-1");
+        await worker.WaitForCompletionAsync("ABC-1", TimeSpan.FromSeconds(2));
+        await hostedService.StopAsync(CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task RetryDispatchBackgroundService_waits_for_resume_before_dispatching_due_retry_attempts()
+    {
+        var timeProvider = TimeProvider.System;
+        var queue = CreateQueue(
+            new StaticWorkflowOptionsProvider(CreateWorkflowOptions(maxConcurrentAgents: 1, maxRetryBackoffMs: 25)),
+            new RetryDelayPlanner(() => 1d),
+            timeProvider);
+        var registry = CreateRegistry(timeProvider);
+        var attemptHistoryTracker = new AttemptHistoryTracker();
+        var worker = new FailOnceQueuedIssueWorker();
+        var executionGate = CreateExecutionGate(timeProvider, OrchestratorControlState.Stopped);
+        var dispatchHostedService = CreateHostedService(queue, registry, attemptHistoryTracker, worker, timeProvider, executionGate);
+        var retryHostedService = CreateRetryHostedService(queue, timeProvider, executionGate);
+
+        await dispatchHostedService.StartAsync(CancellationToken.None);
+        await retryHostedService.StartAsync(CancellationToken.None);
+        await queue.QueueAsync(CreateIssue("1", "ABC-1"));
+
+        await Task.Delay(150);
+        Assert.Empty(worker.Attempts);
+
+        await executionGate.ResumeAsync();
+        await worker.RetryExecutionCompleted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        await retryHostedService.StopAsync(CancellationToken.None);
+        await dispatchHostedService.StopAsync(CancellationToken.None);
+
+        Assert.Equal(new int?[] { null, 1 }, worker.Attempts.ToArray());
+    }
+
+    [Fact]
     public async Task DispatchWorker_records_successful_attempts_for_dashboard_history()
     {
         var timeProvider = TimeProvider.System;
@@ -386,10 +449,12 @@ public sealed class OrchestratorDispatchQueueTests
         ActiveSessionRegistry registry,
         AttemptHistoryTracker attemptHistoryTracker,
         IQueuedIssueWorker queuedIssueWorker,
-        TimeProvider? timeProvider = null)
+        TimeProvider? timeProvider = null,
+        IOrchestratorExecutionGate? executionGate = null)
     {
         return new DispatchWorkerBackgroundService(
             queue,
+            executionGate ?? CreateExecutionGate(timeProvider),
             registry,
             attemptHistoryTracker,
             timeProvider ?? TimeProvider.System,
@@ -399,10 +464,12 @@ public sealed class OrchestratorDispatchQueueTests
 
     private static RetryDispatchBackgroundService CreateRetryHostedService(
         OrchestratorDispatchQueue queue,
-        TimeProvider? timeProvider = null)
+        TimeProvider? timeProvider = null,
+        IOrchestratorExecutionGate? executionGate = null)
     {
         return new RetryDispatchBackgroundService(
             queue,
+            executionGate ?? CreateExecutionGate(timeProvider),
             timeProvider ?? TimeProvider.System,
             NullLogger<RetryDispatchBackgroundService>.Instance);
     }
@@ -495,6 +562,23 @@ public sealed class OrchestratorDispatchQueueTests
         {
             return Task.FromResult(Current);
         }
+    }
+
+    private static OrchestratorControlService CreateExecutionGate(
+        TimeProvider? timeProvider = null,
+        OrchestratorControlState initialState = OrchestratorControlState.Started)
+    {
+        var resolvedTimeProvider = timeProvider ?? TimeProvider.System;
+
+        return new OrchestratorControlService(
+            Options.Create(
+                new OrchestratorControlOptions
+                {
+                    InitialState = initialState.ToString()
+                }),
+            new PollingRefreshTrigger(resolvedTimeProvider),
+            resolvedTimeProvider,
+            NullLogger<OrchestratorControlService>.Instance);
     }
 
     private sealed class BlockingQueuedIssueWorker : IQueuedIssueWorker

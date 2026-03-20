@@ -7,6 +7,7 @@ namespace Symphony.Application.Orchestration;
 
 public sealed class DispatchWorkerBackgroundService(
     OrchestratorDispatchQueue dispatchQueue,
+    IOrchestratorExecutionGate orchestratorExecutionGate,
     ActiveSessionRegistry activeSessionRegistry,
     AttemptHistoryTracker attemptHistoryTracker,
     TimeProvider timeProvider,
@@ -21,6 +22,7 @@ public sealed class DispatchWorkerBackgroundService(
         {
             await foreach (var workItem in dispatchQueue.ReadAllAsync(stoppingToken).ConfigureAwait(false))
             {
+                await orchestratorExecutionGate.WaitUntilStartedAsync(stoppingToken).ConfigureAwait(false);
                 var executionTask = ExecuteQueuedWorkItemAsync(workItem, stoppingToken);
 
                 lock (inFlightTasks)

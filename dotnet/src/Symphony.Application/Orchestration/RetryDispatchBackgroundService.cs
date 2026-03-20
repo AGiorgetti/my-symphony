@@ -5,6 +5,7 @@ namespace Symphony.Application.Orchestration;
 
 public sealed class RetryDispatchBackgroundService(
     OrchestratorDispatchQueue dispatchQueue,
+    IOrchestratorExecutionGate orchestratorExecutionGate,
     TimeProvider timeProvider,
     ILogger<RetryDispatchBackgroundService> logger) : BackgroundService
 {
@@ -14,6 +15,7 @@ public sealed class RetryDispatchBackgroundService(
         {
             while (!stoppingToken.IsCancellationRequested)
             {
+                await orchestratorExecutionGate.WaitUntilStartedAsync(stoppingToken).ConfigureAwait(false);
                 await dispatchQueue.ProcessDueRetriesAsync(stoppingToken).ConfigureAwait(false);
 
                 var delay = dispatchQueue.GetTimeUntilNextRetry();

@@ -251,6 +251,9 @@ Notes:
 - If a value is missing, defaults are used where defined by the implementation/spec.
 - `polling.interval_ms` controls the delay between poll ticks. After startup validation succeeds,
   Symphony runs an immediate tick and then continues on the configured interval.
+- `Orchestration:InitialState` in `appsettings*.json` controls whether the host boots in
+  `Started` or `Stopped` mode. `Stopped` blocks new poll ticks and new issue assignment until an
+  operator resumes orchestration.
 - Each poll tick reconciles currently running issues before fetching new candidates. Terminal
   tracker transitions cancel the active worker and trigger workspace cleanup; non-active,
   non-terminal transitions cancel the worker without deleting the workspace.
@@ -308,10 +311,15 @@ surface only: if dashboard rendering fails, the orchestrator and JSON API contin
   status so degraded polling or workflow-reload fallback is visible without reading logs.
 - The sidebar footer includes a theme switcher for the built-in `dark-yellow`, `dark-blue`, and
   `light-blue` palettes; the current browser choice is restored from `localStorage` on refresh.
+- The sidebar footer also exposes `Start` / `Stop` controls for orchestration. `Stop` pauses new
+  polling, queue dispatch, and retry dispatch while allowing already running work to finish.
 - `GET /api/v1/state` for the current running/retrying snapshot, live token totals, runtime counts,
-  and operator health fields such as poll staleness and workflow reload status
+  and operator health fields such as poll staleness, workflow reload status, and orchestration state
 - `GET /api/v1/{issueIdentifier}` for issue-specific runtime details with a `404` JSON error envelope when the issue is not tracked
 - `POST /api/v1/refresh` to queue an immediate poll-and-reconcile cycle; repeated requests coalesce while one is already pending
+- `GET /api/v1/orchestration` for the current started/stopped control state
+- `POST /api/v1/orchestration/start` to resume polling and new issue assignment
+- `POST /api/v1/orchestration/stop` to pause polling and new issue assignment
 
 ## Project Layout
 

@@ -3,6 +3,7 @@ using Flowbite.Components;
 using Flowbite.Services;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Symphony.Abstractions.Orchestration;
 using Symphony.Application.Polling;
 using Symphony.Application.Runtime;
 using Symphony.Host.Components.Pages;
@@ -131,6 +132,8 @@ public sealed class SessionDetailComponentTests : BunitContext
                 startedAt.AddMinutes(1),
                 "Healthy",
                 "Single-process in-memory",
+                OrchestratorControlState.Started,
+                startedAt.AddMinutes(1),
                 startedAt.AddMinutes(1),
                 startedAt.AddMinutes(1),
                 5d,
@@ -207,6 +210,8 @@ public sealed class SessionDetailComponentTests : BunitContext
                 startedAt.AddMinutes(5),
                 "Healthy",
                 "Single-process in-memory",
+                OrchestratorControlState.Started,
+                startedAt.AddMinutes(5),
                 startedAt.AddMinutes(5),
                 startedAt.AddMinutes(5),
                 5d,

@@ -1,6 +1,7 @@
 using Bunit;
 using Flowbite.Services;
 using Microsoft.Extensions.DependencyInjection;
+using Symphony.Abstractions.Orchestration;
 using Symphony.Host.Components.Dashboard;
 using Symphony.Host.Components.Pages;
 using Symphony.Host.Dashboard;
@@ -75,6 +76,8 @@ public sealed class DashboardPageComponentTests : BunitContext
             new DateTimeOffset(2026, 3, 16, 15, 0, 0, TimeSpan.Zero),
             serviceHealth,
             "Single-process in-memory",
+            OrchestratorControlState.Started,
+            new DateTimeOffset(2026, 3, 16, 15, 0, 0, TimeSpan.Zero),
             new DateTimeOffset(2026, 3, 16, 15, 0, 0, TimeSpan.Zero),
             new DateTimeOffset(2026, 3, 16, 14, 59, 30, TimeSpan.Zero),
             30d,

@@ -55,6 +55,8 @@ public sealed class DashboardStateService(
             runtimeSnapshot.GeneratedAt,
             healthSnapshot.Status,
             InMemoryMode,
+            healthSnapshot.OrchestratorState,
+            healthSnapshot.OrchestratorStateChangedAt,
             healthSnapshot.LastPollTickAt,
             healthSnapshot.LastSuccessfulPollAt,
             healthSnapshot.LastSuccessfulPollAgeSeconds,

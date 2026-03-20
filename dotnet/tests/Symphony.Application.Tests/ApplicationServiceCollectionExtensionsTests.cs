@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
 using Symphony.Abstractions.Orchestration;
 using Symphony.Abstractions.Trackers;
 using Symphony.Abstractions.Workspaces;
@@ -56,6 +57,8 @@ public class ApplicationServiceCollectionExtensionsTests
                         300_000))));
         services.AddSingleton<IIssueTrackerClient, StubIssueTrackerClient>();
         services.AddSingleton<IWorkspaceManager, StubWorkspaceManager>();
+        services.Configure<OrchestratorControlOptions>(
+            options => options.InitialState = nameof(OrchestratorControlState.Started));
 
         services.AddSymphonyApplication();
 
@@ -67,6 +70,8 @@ public class ApplicationServiceCollectionExtensionsTests
         Assert.NotNull(serviceProvider.GetService<AttemptHistoryTracker>());
         Assert.NotNull(serviceProvider.GetService<RetryDelayPlanner>());
         Assert.IsType<ActiveSessionRegistry>(serviceProvider.GetRequiredService<IActiveSessionRegistry>());
+        Assert.IsType<OrchestratorControlService>(serviceProvider.GetRequiredService<IOrchestratorControl>());
+        Assert.IsType<OrchestratorControlService>(serviceProvider.GetRequiredService<IOrchestratorControlStatusReader>());
         Assert.IsType<OrchestratorDispatchQueue>(serviceProvider.GetRequiredService<IOrchestratorDispatchQueue>());
         Assert.IsType<OrchestratorDispatchQueue>(serviceProvider.GetRequiredService<IOrchestratorDispatchStatusReader>());
         Assert.IsType<OrchestratorRuntimeService>(serviceProvider.GetRequiredService<IOrchestratorRuntimeService>());

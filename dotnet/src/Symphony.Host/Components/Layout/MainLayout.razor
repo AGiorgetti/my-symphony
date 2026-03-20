@@ -1,8 +1,10 @@
 @inherits LayoutComponentBase
 @implements IAsyncDisposable
 @using System.Globalization
+@using Symphony.Abstractions.Orchestration
 @using Flowbite.Layout
 @inject IDashboardStateService DashboardStateService
+@inject IOrchestratorControl OrchestratorControl
 @inject IThemeService ThemeService
 
 <div class="min-h-screen bg-transparent text-[var(--color-on-surface-primary)] lg:flex">
@@ -75,6 +77,9 @@
     private Task? _refreshLoopTask;
     private bool _isSidebarCollapsed = true;
     private string _runningSessionsLabel = "0";
+    private OrchestratorControlState _orchestratorState = OrchestratorControlState.Started;
+    private string _orchestratorStateLabel = "Started";
+    private bool _isUpdatingOrchestratorState;
 
     protected override async Task OnInitializedAsync()
     {
@@ -143,7 +148,36 @@
             </SidebarItem>
         </SidebarItemGroup>
 
-        <div class="mt-auto border-t border-[var(--shell-border)] px-3 pb-4 pt-4">
+        <div class="mt-auto space-y-4 border-t border-[var(--shell-border)] px-3 pb-4 pt-4">
+            <section class="space-y-3" data-testid="orchestrator-control-panel">
+                <div class="space-y-1">
+                    <p class="text-xs font-bold uppercase tracking-[0.24em] text-[color:var(--color-primary-DEFAULT)]">Orchestrator</p>
+                    <div class="flex items-center justify-between gap-2">
+                        <span class="@GetOrchestratorStateBadgeClasses()" data-testid="orchestrator-control-state">
+                            @_orchestratorStateLabel
+                        </span>
+                        <span class="text-xs text-[color:var(--color-on-surface-secondary)]">
+                            New assignments
+                        </span>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-2">
+                    <button class="@GetOrchestratorActionButtonClasses(_orchestratorState == OrchestratorControlState.Started)"
+                            data-testid="orchestrator-start-button"
+                            disabled="@(_isUpdatingOrchestratorState || _orchestratorState == OrchestratorControlState.Started)"
+                            @onclick="StartOrchestratorAsync">
+                        Start
+                    </button>
+                    <button class="@GetOrchestratorActionButtonClasses(_orchestratorState == OrchestratorControlState.Stopped)"
+                            data-testid="orchestrator-stop-button"
+                            disabled="@(_isUpdatingOrchestratorState || _orchestratorState == OrchestratorControlState.Stopped)"
+                            @onclick="StopOrchestratorAsync">
+                        Stop
+                    </button>
+                </div>
+            </section>
+
             <ThemeSwitcher ThemeService="ThemeService" />
         </div>
     </text>;
@@ -174,6 +208,10 @@
         {
             var snapshot = await DashboardStateService.GetSnapshotAsync(cancellationToken);
             _runningSessionsLabel = snapshot.RunningCount.ToString(CultureInfo.InvariantCulture);
+            _orchestratorState = snapshot.OrchestratorState;
+            _orchestratorStateLabel = snapshot.OrchestratorState == OrchestratorControlState.Started
+                ? "Started"
+                : "Stopped";
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -185,4 +223,59 @@
         }
     }
 
+    private async Task StartOrchestratorAsync()
+    {
+        if (_isUpdatingOrchestratorState || _orchestratorState == OrchestratorControlState.Started)
+        {
+            return;
+        }
+
+        _isUpdatingOrchestratorState = true;
+
+        try
+        {
+            await OrchestratorControl.ResumeAsync();
+            await RefreshRunningCountAsync();
+        }
+        finally
+        {
+            _isUpdatingOrchestratorState = false;
+        }
+    }
+
+    private async Task StopOrchestratorAsync()
+    {
+        if (_isUpdatingOrchestratorState || _orchestratorState == OrchestratorControlState.Stopped)
+        {
+            return;
+        }
+
+        _isUpdatingOrchestratorState = true;
+
+        try
+        {
+            await OrchestratorControl.PauseAsync();
+            await RefreshRunningCountAsync();
+        }
+        finally
+        {
+            _isUpdatingOrchestratorState = false;
+        }
+    }
+
+    private string GetOrchestratorStateBadgeClasses()
+    {
+        return _orchestratorState == OrchestratorControlState.Started
+            ? "inline-flex items-center rounded-full bg-emerald-500/15 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-emerald-300"
+            : "inline-flex items-center rounded-full bg-amber-400/15 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-amber-200";
+    }
+
+    private string GetOrchestratorActionButtonClasses(bool isActiveAction)
+    {
+        var baseClasses = "inline-flex w-full items-center justify-center rounded-xl border px-3 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50";
+
+        return isActiveAction
+            ? $"{baseClasses} border-[color:var(--color-primary-DEFAULT)] bg-[color:var(--color-primary-DEFAULT)] text-slate-950"
+            : $"{baseClasses} border-[var(--shell-border)] bg-[color:var(--color-surface-overlay)] text-[color:var(--color-on-surface-primary)] hover:border-[color:var(--color-primary-DEFAULT)]";
+    }
 }

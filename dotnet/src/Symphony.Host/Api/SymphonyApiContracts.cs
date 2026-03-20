@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Symphony.Abstractions.Orchestration;
 
 namespace Symphony.Host.Api;
 
@@ -6,6 +7,7 @@ public sealed record StateResponseDto(
     [property: JsonPropertyName("generated_at")] DateTimeOffset GeneratedAt,
     [property: JsonPropertyName("counts")] StateCountsDto Counts,
     [property: JsonPropertyName("health")] HealthStatusDto Health,
+    [property: JsonPropertyName("orchestration")] OrchestrationStatusDto Orchestration,
     [property: JsonPropertyName("running")] IReadOnlyList<RunningIssueDto> Running,
     [property: JsonPropertyName("retrying")] IReadOnlyList<RetryingIssueDto> Retrying,
     [property: JsonPropertyName("codex_totals")] CodexTotalsDto CodexTotals,
@@ -17,6 +19,8 @@ public sealed record StateCountsDto(
 
 public sealed record HealthStatusDto(
     [property: JsonPropertyName("status")] string Status,
+    [property: JsonPropertyName("orchestrator_state")] OrchestratorControlState OrchestratorState,
+    [property: JsonPropertyName("orchestrator_state_changed_at")] DateTimeOffset OrchestratorStateChangedAt,
     [property: JsonPropertyName("last_poll_tick_at")] DateTimeOffset? LastPollTickAt,
     [property: JsonPropertyName("last_successful_poll_at")] DateTimeOffset? LastSuccessfulPollAt,
     [property: JsonPropertyName("last_successful_poll_age_seconds")] double? LastSuccessfulPollAgeSeconds,
@@ -95,6 +99,10 @@ public sealed record RefreshResponseDto(
     [property: JsonPropertyName("coalesced")] bool Coalesced,
     [property: JsonPropertyName("requested_at")] DateTimeOffset RequestedAt,
     [property: JsonPropertyName("operations")] IReadOnlyList<string> Operations);
+
+public sealed record OrchestrationStatusDto(
+    [property: JsonPropertyName("state")] OrchestratorControlState State,
+    [property: JsonPropertyName("changed_at")] DateTimeOffset ChangedAt);
 
 public sealed record ErrorEnvelopeDto(
     [property: JsonPropertyName("error")] ErrorDetailsDto Error);

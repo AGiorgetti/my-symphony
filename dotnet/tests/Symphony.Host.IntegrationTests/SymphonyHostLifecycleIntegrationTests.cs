@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
@@ -48,7 +49,15 @@ public sealed class SymphonyHostLifecycleIntegrationTests
 
         await using var host = await StartedSymphonyHost.StartAsync(
             tempDirectory => CreateWorkflowContents(Path.Combine(tempDirectory, "workspaces")),
-            services =>
+            configureBuilder: builder =>
+            {
+                builder.Configuration.AddInMemoryCollection(
+                    new Dictionary<string, string?>
+                    {
+                        ["Orchestration:InitialState"] = "Started"
+                    });
+            },
+            configureServices: services =>
             {
                 services.RemoveAll<IIssueTrackerClient>();
                 services.AddSingleton<IIssueTrackerClient>(trackerClient);
@@ -173,8 +182,16 @@ public sealed class SymphonyHostLifecycleIntegrationTests
 
         public string TempDirectory { get; }
 
+        public static Task<StartedSymphonyHost> StartAsync(
+            Func<string, string?> workflowFactory,
+            Action<IServiceCollection>? configureServices)
+        {
+            return StartAsync(workflowFactory, configureBuilder: null, configureServices);
+        }
+
         public static async Task<StartedSymphonyHost> StartAsync(
             Func<string, string?> workflowFactory,
+            Action<WebApplicationBuilder>? configureBuilder = null,
             Action<IServiceCollection>? configureServices = null)
         {
             ArgumentNullException.ThrowIfNull(workflowFactory);
@@ -200,6 +217,7 @@ public sealed class SymphonyHostLifecycleIntegrationTests
 
                 var builder = WebApplication.CreateBuilder();
                 builder.WebHost.UseUrls("http://127.0.0.1:0");
+                configureBuilder?.Invoke(builder);
                 builder.AddSymphonyHost();
                 configureServices?.Invoke(builder.Services);
 

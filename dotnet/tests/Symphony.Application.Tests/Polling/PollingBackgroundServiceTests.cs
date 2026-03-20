@@ -1,5 +1,8 @@
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
+using Symphony.Abstractions.Orchestration;
 using Symphony.Application.Configuration;
+using Symphony.Application.Orchestration;
 using Symphony.Application.Polling;
 using Symphony.Application.Tests.Logging;
 
@@ -34,6 +37,7 @@ public sealed class PollingBackgroundServiceTests
                 }),
             new PollingRefreshTrigger(TimeProvider.System),
             new PollingStatusTracker(),
+            CreateExecutionGate(),
             TimeProvider.System,
             NullLogger<PollingBackgroundService>.Instance);
 
@@ -75,6 +79,7 @@ public sealed class PollingBackgroundServiceTests
                 }),
             new PollingRefreshTrigger(TimeProvider.System),
             new PollingStatusTracker(),
+            CreateExecutionGate(),
             TimeProvider.System,
             NullLogger<PollingBackgroundService>.Instance);
 
@@ -104,6 +109,7 @@ public sealed class PollingBackgroundServiceTests
                 }),
             new PollingRefreshTrigger(TimeProvider.System),
             pollingStatusTracker,
+            CreateExecutionGate(),
             TimeProvider.System,
             logger);
 
@@ -141,6 +147,7 @@ public sealed class PollingBackgroundServiceTests
                 }),
             new PollingRefreshTrigger(timeProvider),
             pollingStatusTracker,
+            CreateExecutionGate(timeProvider),
             timeProvider,
             NullLogger<PollingBackgroundService>.Instance);
 
@@ -172,6 +179,7 @@ public sealed class PollingBackgroundServiceTests
                 }),
             new PollingRefreshTrigger(timeProvider),
             pollingStatusTracker,
+            CreateExecutionGate(timeProvider),
             timeProvider,
             NullLogger<PollingBackgroundService>.Instance);
 
@@ -214,6 +222,7 @@ public sealed class PollingBackgroundServiceTests
                 }),
             refreshTrigger,
             new PollingStatusTracker(),
+            CreateExecutionGate(),
             TimeProvider.System,
             NullLogger<PollingBackgroundService>.Instance);
 
@@ -255,6 +264,7 @@ public sealed class PollingBackgroundServiceTests
                 }),
             new PollingRefreshTrigger(TimeProvider.System),
             new PollingStatusTracker(),
+            CreateExecutionGate(),
             TimeProvider.System,
             NullLogger<PollingBackgroundService>.Instance);
 
@@ -263,6 +273,38 @@ public sealed class PollingBackgroundServiceTests
         Assert.Equal(200, await firstTick.Task.WaitAsync(TimeSpan.FromSeconds(2)));
         Assert.Equal(40, await secondTick.Task.WaitAsync(TimeSpan.FromSeconds(2)));
 
+        await service.StopAsync(CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task StartAsync_waits_for_resume_when_initial_state_is_stopped()
+    {
+        var firstInvocation = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var refreshTrigger = new PollingRefreshTrigger(TimeProvider.System);
+        var executionGate = CreateExecutionGate(
+            initialState: OrchestratorControlState.Stopped,
+            pollingRefreshTrigger: refreshTrigger);
+        var service = new PollingBackgroundService(
+            new StaticWorkflowOptionsProvider(CreateWorkflowOptions(intervalMs: 30_000)),
+            new DelegatePollingIterationHandler(
+                (_, _) =>
+                {
+                    firstInvocation.TrySetResult();
+                    return Task.CompletedTask;
+                }),
+            refreshTrigger,
+            new PollingStatusTracker(),
+            executionGate,
+            TimeProvider.System,
+            NullLogger<PollingBackgroundService>.Instance);
+
+        await service.StartAsync(CancellationToken.None);
+
+        await Task.Delay(150);
+        Assert.False(firstInvocation.Task.IsCompleted);
+
+        await executionGate.ResumeAsync();
+        await firstInvocation.Task.WaitAsync(TimeSpan.FromSeconds(2));
         await service.StopAsync(CancellationToken.None);
     }
 
@@ -337,5 +379,23 @@ public sealed class PollingBackgroundServiceTests
         {
             return currentTime;
         }
+    }
+
+    private static OrchestratorControlService CreateExecutionGate(
+        TimeProvider? timeProvider = null,
+        OrchestratorControlState initialState = OrchestratorControlState.Started,
+        PollingRefreshTrigger? pollingRefreshTrigger = null)
+    {
+        var resolvedTimeProvider = timeProvider ?? TimeProvider.System;
+
+        return new OrchestratorControlService(
+            Options.Create(
+                new OrchestratorControlOptions
+                {
+                    InitialState = initialState.ToString()
+                }),
+            pollingRefreshTrigger ?? new PollingRefreshTrigger(resolvedTimeProvider),
+            resolvedTimeProvider,
+            NullLogger<OrchestratorControlService>.Instance);
     }
 }

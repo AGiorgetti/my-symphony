@@ -1,6 +1,7 @@
 using Symphony.Application.Configuration;
 using Symphony.Application.Polling;
 using Symphony.Application.Runtime;
+using Symphony.Abstractions.Orchestration;
 using Symphony.Host.Dashboard;
 using Symphony.Host.Health;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -60,6 +61,7 @@ public sealed class DashboardStateServiceTests
             attemptHistoryTracker,
             new ServiceHealthSnapshotProvider(
                 pollingStatusTracker,
+                new StaticOrchestratorControlStatusReader(OrchestratorControlState.Started),
                 new StaticWorkflowLoadStatusReader(
                     new WorkflowLoadStatusSnapshot(
                         "Loaded",
@@ -76,6 +78,7 @@ public sealed class DashboardStateServiceTests
 
         Assert.Equal("Healthy", snapshot.ServiceHealth);
         Assert.Equal("Single-process in-memory", snapshot.OrchestratorMode);
+        Assert.Equal(OrchestratorControlState.Started, snapshot.OrchestratorState);
         Assert.Equal(new DateTimeOffset(2026, 3, 16, 15, 0, 0, TimeSpan.Zero), snapshot.LastPollTickAt);
         Assert.Equal(new DateTimeOffset(2026, 3, 16, 15, 0, 0, TimeSpan.Zero), snapshot.LastSuccessfulPollAt);
         Assert.Equal(5d, snapshot.LastSuccessfulPollAgeSeconds);
@@ -103,6 +106,7 @@ public sealed class DashboardStateServiceTests
             attemptHistoryTracker,
             new ServiceHealthSnapshotProvider(
                 pollingStatusTracker,
+                new StaticOrchestratorControlStatusReader(OrchestratorControlState.Started),
                 new StaticWorkflowLoadStatusReader(
                     new WorkflowLoadStatusSnapshot(
                         "ReloadFailedUsingLastKnownGood",
@@ -172,6 +176,7 @@ public sealed class DashboardStateServiceTests
             attemptHistoryTracker,
             new ServiceHealthSnapshotProvider(
                 pollingStatusTracker,
+                new StaticOrchestratorControlStatusReader(OrchestratorControlState.Started),
                 new StaticWorkflowLoadStatusReader(
                     new WorkflowLoadStatusSnapshot(
                         "Loaded",
@@ -308,6 +313,14 @@ public sealed class DashboardStateServiceTests
         public WorkflowLoadStatusSnapshot GetSnapshot()
         {
             return snapshot;
+        }
+    }
+
+    private sealed class StaticOrchestratorControlStatusReader(OrchestratorControlState state) : IOrchestratorControlStatusReader
+    {
+        public OrchestratorControlSnapshot GetSnapshot()
+        {
+            return new OrchestratorControlSnapshot(state, new DateTimeOffset(2026, 3, 16, 14, 58, 0, TimeSpan.Zero));
         }
     }
 

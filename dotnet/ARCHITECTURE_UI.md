@@ -217,6 +217,7 @@ Replace the current minimal `LayoutComponentBase` with a Flowbite-based shell us
 - `Sidebar` with `CollapseMode="SidebarCollapseMode.Responsive"` (fixed, full height)
 - `SidebarLogo`, `SidebarItemGroup`, `SidebarItem` for navigation entries
 - Sidebar item for Sessions shows a live `Badge` with the running session count
+- Sidebar footer exposes the current orchestration state plus `Start` / `Stop` controls
 - Top `<nav>` bar with a mobile hamburger `Button` and app title
 - `<main>` content area offset from the fixed sidebar
 - `ErrorBoundary` wrapping `@Body` — rendering failures here must not affect the

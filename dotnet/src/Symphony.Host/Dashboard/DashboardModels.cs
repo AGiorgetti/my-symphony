@@ -1,9 +1,13 @@
+using Symphony.Abstractions.Orchestration;
+
 namespace Symphony.Host.Dashboard;
 
 public sealed record DashboardSnapshot(
     DateTimeOffset GeneratedAt,
     string ServiceHealth,
     string OrchestratorMode,
+    OrchestratorControlState OrchestratorState,
+    DateTimeOffset OrchestratorStateChangedAt,
     DateTimeOffset? LastPollTickAt,
     DateTimeOffset? LastSuccessfulPollAt,
     double? LastSuccessfulPollAgeSeconds,
