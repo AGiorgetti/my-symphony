@@ -34,7 +34,9 @@ public sealed record WorkflowAgentOptions(
     int MaxConcurrentAgents,
     int MaxTurns,
     int MaxRetryBackoffMs,
-    IReadOnlyDictionary<string, int> MaxConcurrentAgentsByState);
+    IReadOnlyDictionary<string, int> MaxConcurrentAgentsByState,
+    bool RequireExecMarker,
+    string ExecMarker);
 
 public sealed record WorkflowCodexOptions(
     string Command,

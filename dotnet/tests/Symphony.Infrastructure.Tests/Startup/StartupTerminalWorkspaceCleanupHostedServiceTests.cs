@@ -128,7 +128,9 @@ public sealed class StartupTerminalWorkspaceCleanupHostedServiceTests
                 4,
                 20,
                 300_000,
-                new Dictionary<string, int>(StringComparer.Ordinal)),
+                new Dictionary<string, int>(StringComparer.Ordinal),
+                false,
+                "exec:agent"),
             new WorkflowCodexOptions(
                 "codex app-server",
                 null,

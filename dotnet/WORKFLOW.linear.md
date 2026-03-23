@@ -30,6 +30,8 @@ hooks:
 agent:
   max_concurrent_agents: 10
   max_turns: 20
+  require_exec_marker: false
+  exec_marker: "exec:agent"
 codex:
   command: codex --config shell_environment_policy.inherit=all --config model_reasoning_effort=xhigh --model gpt-5.3-codex app-server
   approval_policy: never
@@ -91,6 +93,8 @@ The agent should be able to talk to Linear, either via a configured Linear MCP s
   `Backlog`, be assigned to the same project as the current issue, link the
   current issue as `related`, and use `blockedBy` when the follow-up depends on
   the current issue.
+- If `agent.require_exec_marker` is `true`, any Linear issue or sub-issue you create must also
+  include the `agent.exec_marker` label.
 - Move status only when the matching quality bar is met.
 - Operate autonomously end-to-end unless blocked by missing requirements, secrets, or permissions.
 - Use the blocked-access escape hatch only for true external blockers (missing required tools/auth) after exhausting documented fallbacks.

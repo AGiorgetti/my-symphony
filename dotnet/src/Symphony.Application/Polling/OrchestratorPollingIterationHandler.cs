@@ -35,7 +35,15 @@ public sealed class OrchestratorPollingIterationHandler(
 
         foreach (var issue in SortForDispatch(candidates))
         {
-            if (!ShouldDispatch(issue, activeStates, terminalStates, workflowOptions.Agent.MaxConcurrentAgentsByState, plannedByState, out var skipReason))
+            if (!ShouldDispatch(
+                    issue,
+                    activeStates,
+                    terminalStates,
+                    workflowOptions.Agent.MaxConcurrentAgentsByState,
+                    workflowOptions.Agent.RequireExecMarker,
+                    workflowOptions.Agent.ExecMarker,
+                    plannedByState,
+                    out var skipReason))
             {
                 logger.LogDebug(
                     "poll_dispatch skipped issue_id={issue_id} issue_identifier={issue_identifier} issue_state={issue_state} reason={reason} outcome=skipped",
@@ -227,6 +235,8 @@ public sealed class OrchestratorPollingIterationHandler(
         HashSet<string> activeStates,
         HashSet<string> terminalStates,
         IReadOnlyDictionary<string, int> maxConcurrentAgentsByState,
+        bool requireExecMarker,
+        string execMarker,
         Dictionary<string, int> plannedByState,
         out string skipReason)
     {
@@ -240,6 +250,12 @@ public sealed class OrchestratorPollingIterationHandler(
             && issue.BlockedBy.Any(blocker => blocker.NormalizedState is null || !terminalStates.Contains(blocker.NormalizedState)))
         {
             skipReason = "blocked_by_dependency";
+            return false;
+        }
+
+        if (requireExecMarker && !issue.Labels.Contains(execMarker, StringComparer.Ordinal))
+        {
+            skipReason = "missing_exec_marker";
             return false;
         }
 

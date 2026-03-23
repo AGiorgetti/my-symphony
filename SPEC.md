@@ -592,6 +592,9 @@ This section is intentionally redundant so a coding agent can implement the conf
 - `agent.max_turns`: integer, default `20`
 - `agent.max_retry_backoff_ms`: integer, default `300000` (5m)
 - `agent.max_concurrent_agents_by_state`: map of positive integers, default `{}`
+- `agent.require_exec_marker`: boolean, default `false`
+- `agent.exec_marker`: string, default `"exec:agent"`; normalized to lowercase and required only
+  when execution-marker-gated scheduling is enabled
 - `codex.command`: shell command string, default `codex app-server`
 - `codex.approval_policy`: Codex `AskForApproval` value, default implementation-defined
 - `codex.thread_sandbox`: Codex `SandboxMode` value, default implementation-defined
@@ -731,6 +734,8 @@ An issue is dispatch-eligible only if all are true:
 - It is not already in `claimed`.
 - Global concurrency slots are available.
 - Per-state concurrency slots are available.
+- If `agent.require_exec_marker` is `true`, `issue.labels` includes the normalized
+  `agent.exec_marker`.
 - Blocker rule for `Todo` state passes:
   - If the issue state is `Todo`, do not dispatch when any blocker is non-terminal.
 
@@ -1260,6 +1265,8 @@ Candidate issue normalization should produce fields listed in Section 4.1.1.
 Additional normalization details:
 
 - `labels` -> lowercase strings
+- Execution-marker gating is evaluated against normalized `labels`, so GitHub labels, Linear
+  labels, and Azure DevOps tags all participate through the same lowercase label set.
 - `blocked_by` -> derived from inverse relations where relation type is `blocks`
 - For `tracker.kind == "github"`, `blocked_by` should be derived from issue dependency links when
   available; if unavailable, return an empty list.
@@ -1336,6 +1343,9 @@ Symphony does not require first-class tracker write APIs in the orchestrator.
 - The service remains a scheduler/runner and tracker reader.
 - Workflow-specific success often means "reached the next handoff state" (for example
   `Human Review`) rather than tracker terminal state `Done`.
+- When `agent.require_exec_marker` is `true`, any follow-up issue or sub-issue created by the
+  coding agent must also be created with the normalized `agent.exec_marker` so it remains eligible
+  for future agent scheduling.
 - If the optional `linear_graphql` client-side tool extension is implemented, it is still part of
   the agent toolchain rather than orchestrator business logic.
 
