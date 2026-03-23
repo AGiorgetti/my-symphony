@@ -305,10 +305,18 @@ Notes:
 
 ## Web dashboard
 
-When enabled via service configuration (for example `server.port`), Symphony exposes:
+When enabled via service configuration, Symphony exposes:
 
 - Dashboard at `/`
 - JSON APIs under `/api/v1/*`
+
+Host binding notes:
+
+- `server.port` in `WORKFLOW.md` enables host binding when the dashboard/API surface is shipped.
+- CLI `--port` overrides `server.port`.
+- `0` requests an ephemeral local port, which is useful for development and tests.
+- The current host binds loopback (`127.0.0.1`) by default when an explicit port is selected.
+- Listener changes are restart-applied; runtime workflow reload does not hot-rebind HTTP ports.
 
 The dashboard shell is implemented as an interactive-server Blazor page. It is an operator-facing
 surface only: if dashboard rendering fails, the orchestrator and JSON API continue running.

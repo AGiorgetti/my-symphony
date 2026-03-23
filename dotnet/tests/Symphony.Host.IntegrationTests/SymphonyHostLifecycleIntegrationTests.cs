@@ -34,6 +34,92 @@ public sealed class SymphonyHostLifecycleIntegrationTests
     }
 
     [Fact]
+    public async Task StartAsync_uses_workflow_server_port_when_configured()
+    {
+        await using var host = await StartedSymphonyHost.StartAsync(
+            tempDirectory => CreateWorkflowContents(
+                Path.Combine(tempDirectory, "workspaces"),
+                serverSection:
+                """
+                server:
+                  port: 0
+                """),
+            configureServices: services =>
+            {
+                services.RemoveAll<IIssueTrackerClient>();
+                services.AddSingleton<IIssueTrackerClient>(new EmptyIssueTrackerClient());
+
+                RemoveHostedService<RetryDispatchBackgroundService>(services);
+            },
+            useEphemeralLoopbackUrl: false);
+
+        var address = GetServerAddress(host.App);
+
+        Assert.Equal("127.0.0.1", address.Host);
+        Assert.True(address.Port > 0);
+    }
+
+    [Fact]
+    public async Task StartAsync_cli_port_overrides_workflow_server_port()
+    {
+        await using var host = await StartedSymphonyHost.StartAsync(
+            tempDirectory => CreateWorkflowContents(
+                Path.Combine(tempDirectory, "workspaces"),
+                serverSection:
+                """
+                server:
+                  port: nope
+                """),
+            configureServices: services =>
+            {
+                services.RemoveAll<IIssueTrackerClient>();
+                services.AddSingleton<IIssueTrackerClient>(new EmptyIssueTrackerClient());
+
+                RemoveHostedService<RetryDispatchBackgroundService>(services);
+            },
+            args: ["--port", "0"],
+            useEphemeralLoopbackUrl: false);
+
+        var address = GetServerAddress(host.App);
+
+        Assert.Equal("127.0.0.1", address.Host);
+        Assert.True(address.Port > 0);
+    }
+
+    [Fact]
+    public async Task StartAsync_invalid_workflow_server_port_fails_cleanly()
+    {
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => StartedSymphonyHost.StartAsync(
+                tempDirectory => CreateWorkflowContents(
+                    Path.Combine(tempDirectory, "workspaces"),
+                    serverSection:
+                    """
+                    server:
+                      port: nope
+                    """),
+                configureServices: null,
+                useEphemeralLoopbackUrl: false));
+
+        Assert.Contains("invalid_server_port", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("server.port", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task StartAsync_invalid_cli_port_fails_cleanly()
+    {
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => StartedSymphonyHost.StartAsync(
+                tempDirectory => CreateWorkflowContents(Path.Combine(tempDirectory, "workspaces")),
+                configureServices: null,
+                args: ["--port", "nope"],
+                useEphemeralLoopbackUrl: false));
+
+        Assert.Contains("invalid_cli_port", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("--port", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task StartAsync_runs_smoke_flow_from_workflow_load_to_workspace_create_and_worker_attempt()
     {
         var issue = new Issue(
@@ -170,13 +256,17 @@ public sealed class SymphonyHostLifecycleIntegrationTests
         Assert.Equal(System.Net.HttpStatusCode.OK, unknownSessionResponse.StatusCode);
     }
 
-    private static string CreateWorkflowContents(string workspaceRoot)
+    private static string CreateWorkflowContents(string workspaceRoot, string? serverSection = null)
     {
         var normalizedWorkspaceRoot = workspaceRoot.Replace('\\', '/');
+        var serverBlock = serverSection is null
+            ? string.Empty
+            : serverSection.TrimEnd() + Environment.NewLine;
 
         return
-            $$"""
-            ---
+            "---" + Environment.NewLine
+            + serverBlock
+            + $$"""
             tracker:
               kind: github
               api_key: test-token
@@ -202,15 +292,20 @@ public sealed class SymphonyHostLifecycleIntegrationTests
 
     private static HttpClient CreateHttpClient(WebApplication app)
     {
+        return new HttpClient
+        {
+            BaseAddress = GetServerAddress(app)
+        };
+    }
+
+    private static Uri GetServerAddress(WebApplication app)
+    {
         var server = app.Services.GetRequiredService<IServer>();
         var addresses = server.Features.Get<IServerAddressesFeature>()
             ?? throw new InvalidOperationException("Test server addresses are unavailable.");
         var address = Assert.Single(addresses.Addresses);
 
-        return new HttpClient
-        {
-            BaseAddress = new Uri(address)
-        };
+        return new Uri(address);
     }
 
     private static void RemoveHostedService<TImplementation>(IServiceCollection services)
@@ -253,7 +348,9 @@ public sealed class SymphonyHostLifecycleIntegrationTests
         public static async Task<StartedSymphonyHost> StartAsync(
             Func<string, string?> workflowFactory,
             Action<WebApplicationBuilder>? configureBuilder = null,
-            Action<IServiceCollection>? configureServices = null)
+            Action<IServiceCollection>? configureServices = null,
+            string[]? args = null,
+            bool useEphemeralLoopbackUrl = true)
         {
             ArgumentNullException.ThrowIfNull(workflowFactory);
 
@@ -276,8 +373,12 @@ public sealed class SymphonyHostLifecycleIntegrationTests
             {
                 Directory.SetCurrentDirectory(tempDirectory);
 
-                var builder = WebApplication.CreateBuilder();
-                builder.WebHost.UseUrls("http://127.0.0.1:0");
+                var builder = WebApplication.CreateBuilder(args ?? Array.Empty<string>());
+                if (useEphemeralLoopbackUrl)
+                {
+                    builder.WebHost.UseUrls("http://127.0.0.1:0");
+                }
+
                 configureBuilder?.Invoke(builder);
                 builder.AddSymphonyHost();
                 configureServices?.Invoke(builder.Services);

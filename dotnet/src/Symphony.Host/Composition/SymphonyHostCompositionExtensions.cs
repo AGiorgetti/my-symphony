@@ -3,6 +3,7 @@ using Symphony.Application.Orchestration;
 using Symphony.Application.DependencyInjection;
 using Symphony.Host.Api;
 using Symphony.Host.Components;
+using Symphony.Host.Configuration;
 using Symphony.Host.Dashboard;
 using Symphony.Host.Health;
 using Symphony.Host.Theming;
@@ -16,6 +17,7 @@ public static class SymphonyHostCompositionExtensions
     {
         ArgumentNullException.ThrowIfNull(builder);
 
+        builder.ApplyConfiguredHttpServerPort();
         builder.Logging.AddSymphonyLogging(builder.Configuration);
         builder.Services.Configure<OrchestratorControlOptions>(
             builder.Configuration.GetSection(OrchestratorControlOptions.SectionName));
