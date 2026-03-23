@@ -13,6 +13,7 @@ public sealed class OrchestratorPollingIterationHandler(
     OrchestratorDispatchQueue dispatchQueue,
     ActiveSessionRegistry activeSessionRegistry,
     IWorkspaceManager workspaceManager,
+    TimeProvider timeProvider,
     ILogger<OrchestratorPollingIterationHandler> logger) : IPollingIterationHandler
 {
     public async Task ExecuteAsync(WorkflowServiceOptions workflowOptions, CancellationToken cancellationToken)
@@ -22,7 +23,12 @@ public sealed class OrchestratorPollingIterationHandler(
         var activeStates = CreateStateSet(workflowOptions.Tracker.ActiveStates);
         var terminalStates = CreateStateSet(workflowOptions.Tracker.TerminalStates);
 
-        await ReconcileRunningIssuesAsync(activeStates, terminalStates, cancellationToken).ConfigureAwait(false);
+        await ReconcileRunningIssuesAsync(
+                activeStates,
+                terminalStates,
+                workflowOptions.Codex.StallTimeoutMs,
+                cancellationToken)
+            .ConfigureAwait(false);
 
         var candidates = await issueTrackerClient.FetchCandidateIssuesAsync(cancellationToken).ConfigureAwait(false);
         var plannedByState = CountRunningStates(activeSessionRegistry.GetActiveSessions());
@@ -73,8 +79,11 @@ public sealed class OrchestratorPollingIterationHandler(
     private async Task ReconcileRunningIssuesAsync(
         HashSet<string> activeStates,
         HashSet<string> terminalStates,
+        int stallTimeoutMs,
         CancellationToken cancellationToken)
     {
+        await DetectAndRecoverStalledRunsAsync(stallTimeoutMs, cancellationToken).ConfigureAwait(false);
+
         var activeSessions = activeSessionRegistry.GetActiveSessions();
         if (activeSessions.Count == 0)
         {
@@ -160,6 +169,48 @@ public sealed class OrchestratorPollingIterationHandler(
                 issue.Identifier,
                 issue.State,
                 false);
+        }
+    }
+
+    private async Task DetectAndRecoverStalledRunsAsync(int stallTimeoutMs, CancellationToken cancellationToken)
+    {
+        if (stallTimeoutMs <= 0)
+        {
+            return;
+        }
+
+        var stallTimeout = TimeSpan.FromMilliseconds(stallTimeoutMs);
+        var observedAt = timeProvider.GetUtcNow();
+
+        foreach (var activeSession in activeSessionRegistry.GetActiveSessions())
+        {
+            var lastActivityAt = activeSession.Session?.LastCodexTimestamp ?? activeSession.StartedAt;
+            var elapsed = observedAt - lastActivityAt;
+            if (elapsed <= stallTimeout)
+            {
+                continue;
+            }
+
+            var error = $"Session stalled after {Math.Ceiling(elapsed.TotalMilliseconds)} ms of Codex inactivity.";
+            var canceled = await activeSessionRegistry.TryMarkStalledAndWaitAsync(
+                    activeSession.IssueId,
+                    error,
+                    cancellationToken)
+                .ConfigureAwait(false);
+            if (!canceled)
+            {
+                continue;
+            }
+
+            logger.LogWarning(
+                "poll_reconcile stalled issue_id={issue_id} issue_identifier={issue_identifier} session_id={session_id} started_at={started_at:O} last_codex_timestamp={last_codex_timestamp:O} elapsed_ms={elapsed_ms} stall_timeout_ms={stall_timeout_ms} outcome=stalled",
+                activeSession.IssueId,
+                activeSession.IssueIdentifier,
+                activeSession.Session?.SessionId,
+                activeSession.StartedAt,
+                activeSession.Session?.LastCodexTimestamp,
+                Math.Ceiling(elapsed.TotalMilliseconds),
+                stallTimeoutMs);
         }
     }
 

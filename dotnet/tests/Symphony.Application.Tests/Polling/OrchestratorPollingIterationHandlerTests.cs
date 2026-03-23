@@ -4,7 +4,9 @@ using Symphony.Abstractions.Workspaces;
 using Symphony.Application.Configuration;
 using Symphony.Application.Orchestration;
 using Symphony.Application.Polling;
+using Symphony.Application.Tests.Logging;
 using Symphony.Domain.Issues;
+using Symphony.Domain.Sessions;
 using Symphony.Domain.Workspaces;
 
 namespace Symphony.Application.Tests.Polling;
@@ -121,18 +123,113 @@ public sealed class OrchestratorPollingIterationHandlerTests
         Assert.Empty(workspaceManager.DeletedIssueIdentifiers);
     }
 
+    [Fact]
+    public async Task ExecuteAsync_marks_stalled_sessions_before_tracker_refresh()
+    {
+        var timeProvider = new FakeTimeProvider(new DateTimeOffset(2026, 3, 18, 12, 0, 0, TimeSpan.Zero));
+        var workflowOptions = CreateWorkflowOptions(stallTimeoutMs: 300_000);
+        var trackerClient = new StubIssueTrackerClient();
+        var queue = CreateQueue(workflowOptions, timeProvider);
+        var registry = CreateRegistry(timeProvider);
+        var workspaceManager = new StubWorkspaceManager();
+        var logger = new TestLogger<OrchestratorPollingIterationHandler>();
+        var handler = CreateHandler(trackerClient, queue, registry, workspaceManager, timeProvider, logger);
+        var trackedSession = registry.BeginSession(CreateIssue("1", "ABC-1", state: "In Progress"), attempt: null, CancellationToken.None);
+        var context = trackedSession.CreateExecutionContext();
+        context.UpdateSession(
+            new LiveSessionMetadata(
+                "thread-1",
+                "turn-1",
+                lastCodexTimestamp: timeProvider.GetUtcNow().AddMinutes(-6),
+                lastCodexMessage: "still running",
+                turnCount: 1));
+        var sessionTask = RunUntilCanceledAsync(trackedSession);
+
+        await handler.ExecuteAsync(workflowOptions, CancellationToken.None);
+        await sessionTask.WaitAsync(TimeSpan.FromSeconds(2));
+
+        Assert.Empty(registry.GetActiveSessions());
+        Assert.Empty(trackerClient.LastRefreshedIssueIds);
+
+        var stallEntry = Assert.Single(
+            logger.Entries,
+            entry => entry.Message.Contains("poll_reconcile stalled", StringComparison.Ordinal));
+        Assert.Equal("1", Assert.IsType<string>(stallEntry.State["issue_id"]));
+        Assert.Equal("ABC-1", Assert.IsType<string>(stallEntry.State["issue_identifier"]));
+        Assert.Equal(300000d, Convert.ToDouble(stallEntry.State["stall_timeout_ms"]));
+        Assert.Equal(360000d, Convert.ToDouble(stallEntry.State["elapsed_ms"]));
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_uses_started_at_when_no_codex_event_has_been_seen()
+    {
+        var timeProvider = new FakeTimeProvider(new DateTimeOffset(2026, 3, 18, 11, 54, 0, TimeSpan.Zero));
+        var workflowOptions = CreateWorkflowOptions(stallTimeoutMs: 300_000);
+        var trackerClient = new StubIssueTrackerClient();
+        var queue = CreateQueue(workflowOptions, timeProvider);
+        var registry = CreateRegistry(timeProvider);
+        var handler = CreateHandler(trackerClient, queue, registry, new StubWorkspaceManager(), timeProvider);
+        var trackedSession = registry.BeginSession(CreateIssue("1", "ABC-1", state: "In Progress"), attempt: null, CancellationToken.None);
+        var sessionTask = RunUntilCanceledAsync(trackedSession);
+
+        timeProvider.SetUtcNow(new DateTimeOffset(2026, 3, 18, 12, 0, 0, TimeSpan.Zero));
+
+        await handler.ExecuteAsync(workflowOptions, CancellationToken.None);
+        await sessionTask.WaitAsync(TimeSpan.FromSeconds(2));
+
+        Assert.Empty(registry.GetActiveSessions());
+        Assert.Empty(trackerClient.LastRefreshedIssueIds);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_skips_stall_detection_when_timeout_is_disabled()
+    {
+        var timeProvider = new FakeTimeProvider(new DateTimeOffset(2026, 3, 18, 12, 0, 0, TimeSpan.Zero));
+        var workflowOptions = CreateWorkflowOptions(stallTimeoutMs: 0);
+        var trackerClient = new StubIssueTrackerClient
+        {
+            RefreshedIssues =
+            [
+                CreateIssue("1", "ABC-1", state: "In Progress")
+            ]
+        };
+        var queue = CreateQueue(workflowOptions, timeProvider);
+        var registry = CreateRegistry(timeProvider);
+        var trackedSession = registry.BeginSession(CreateIssue("1", "ABC-1", state: "In Progress"), attempt: null, CancellationToken.None);
+        var context = trackedSession.CreateExecutionContext();
+        context.UpdateSession(
+            new LiveSessionMetadata(
+                "thread-1",
+                "turn-1",
+                lastCodexTimestamp: timeProvider.GetUtcNow().AddMinutes(-10),
+                lastCodexMessage: "still running",
+                turnCount: 1));
+        var handler = CreateHandler(trackerClient, queue, registry, new StubWorkspaceManager(), timeProvider);
+
+        await handler.ExecuteAsync(workflowOptions, CancellationToken.None);
+
+        var snapshot = Assert.Single(registry.GetActiveSessions());
+        Assert.Equal("In Progress", snapshot.IssueState);
+        Assert.Equal(["1"], trackerClient.LastRefreshedIssueIds);
+
+        trackedSession.Dispose();
+    }
+
     private static OrchestratorPollingIterationHandler CreateHandler(
         IIssueTrackerClient issueTrackerClient,
         OrchestratorDispatchQueue dispatchQueue,
         ActiveSessionRegistry activeSessionRegistry,
-        IWorkspaceManager workspaceManager)
+        IWorkspaceManager workspaceManager,
+        TimeProvider? timeProvider = null,
+        Microsoft.Extensions.Logging.ILogger<OrchestratorPollingIterationHandler>? logger = null)
     {
         return new OrchestratorPollingIterationHandler(
             issueTrackerClient,
             dispatchQueue,
             activeSessionRegistry,
             workspaceManager,
-            NullLogger<OrchestratorPollingIterationHandler>.Instance);
+            timeProvider ?? TimeProvider.System,
+            logger ?? NullLogger<OrchestratorPollingIterationHandler>.Instance);
     }
 
     private static OrchestratorDispatchQueue CreateQueue(
@@ -155,7 +252,8 @@ public sealed class OrchestratorPollingIterationHandlerTests
 
     private static WorkflowServiceOptions CreateWorkflowOptions(
         int maxConcurrentAgents = 4,
-        IReadOnlyDictionary<string, int>? maxConcurrentAgentsByState = null)
+        IReadOnlyDictionary<string, int>? maxConcurrentAgentsByState = null,
+        int stallTimeoutMs = 300_000)
     {
         return new WorkflowServiceOptions(
             new WorkflowTrackerOptions(
@@ -188,7 +286,7 @@ public sealed class OrchestratorPollingIterationHandlerTests
                 null,
                 3_600_000,
                 5_000,
-                300_000));
+                stallTimeoutMs));
     }
 
     private static Issue CreateIssue(
@@ -278,6 +376,21 @@ public sealed class OrchestratorPollingIterationHandlerTests
         {
             DeletedIssueIdentifiers.Add(issueIdentifier);
             return Task.CompletedTask;
+        }
+    }
+
+    private sealed class FakeTimeProvider(DateTimeOffset currentTime) : TimeProvider
+    {
+        private DateTimeOffset _currentTime = currentTime;
+
+        public override DateTimeOffset GetUtcNow()
+        {
+            return _currentTime;
+        }
+
+        public void SetUtcNow(DateTimeOffset currentTime)
+        {
+            _currentTime = currentTime;
         }
     }
 }
