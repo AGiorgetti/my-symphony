@@ -78,9 +78,18 @@ public sealed class WorkflowOptionsProvider : IWorkflowOptionsProvider, IWorkflo
                 return currentSnapshot;
             }
 
-            if (!StringComparer.Ordinal.Equals(currentSnapshot.WorkflowPath, workflowPath)
-                || Volatile.Read(ref _reloadRequested) == 1
-                || HasWorkflowFileChanged(currentSnapshot.FileState, workflowPath))
+            var workflowPathChanged = !StringComparer.Ordinal.Equals(currentSnapshot.WorkflowPath, workflowPath);
+            var currentFileState = GetWorkflowFileState(workflowPath);
+            var fileStateChanged = currentSnapshot.FileState != currentFileState;
+            var reloadRequested = Volatile.Read(ref _reloadRequested) == 1;
+
+            if (reloadRequested && !workflowPathChanged && !fileStateChanged)
+            {
+                Volatile.Write(ref _reloadRequested, 0);
+                return currentSnapshot;
+            }
+
+            if (workflowPathChanged || fileStateChanged)
             {
                 currentSnapshot = await TryReloadSnapshotAsync(currentSnapshot, workflowPath, cancellationToken).ConfigureAwait(false);
             }
@@ -187,11 +196,6 @@ public sealed class WorkflowOptionsProvider : IWorkflowOptionsProvider, IWorkflo
     private static string GetWorkflowPath()
     {
         return Path.Combine(Directory.GetCurrentDirectory(), "WORKFLOW.md");
-    }
-
-    private static bool HasWorkflowFileChanged(WorkflowFileState fileState, string workflowPath)
-    {
-        return fileState != GetWorkflowFileState(workflowPath);
     }
 
     private static WorkflowFileState GetWorkflowFileState(string workflowPath)

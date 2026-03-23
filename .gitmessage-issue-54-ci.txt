@@ -1,0 +1,6 @@
+fix(config): ignore redundant workflow watcher reloads
+
+Guard workflow reload requests that do not correspond to a real file
+change so watcher churn does not degrade the last-known-good status.
+
+Co-authored-by: Agent <agent@github.com>
