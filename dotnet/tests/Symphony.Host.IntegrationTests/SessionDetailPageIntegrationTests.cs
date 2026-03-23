@@ -107,9 +107,11 @@ public sealed class SessionDetailPageIntegrationTests
         var html = await response.Content.ReadAsStringAsync();
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Contains("JSON object payload with 3 properties", html, StringComparison.Ordinal);
+        Assert.Contains("Event: turn_completed", html, StringComparison.Ordinal);
+        Assert.Contains("Files: Program.cs", html, StringComparison.Ordinal);
+        Assert.Contains("Input: 12", html, StringComparison.Ordinal);
         Assert.Contains("data-testid=\"session-detail-timeline-detail\"", html, StringComparison.Ordinal);
-        Assert.Contains("Expand payload", html, StringComparison.Ordinal);
+        Assert.Contains("View structured payload", html, StringComparison.Ordinal);
         Assert.Contains("&quot;event&quot;: &quot;turn_completed&quot;", html, StringComparison.Ordinal);
     }
 
@@ -175,12 +177,12 @@ public sealed class SessionDetailPageIntegrationTests
                 "turn_completed",
                 """
                 {
-                  "event": "turn_completed",
-                  "files": [
-                    "Program.cs"
+                  \"event\": \"turn_completed\",
+                  \"files\": [
+                    \"Program.cs\"
                   ],
-                  "stats": {
-                    "input": 12
+                  \"stats\": {
+                    \"input\": 12
                   }
                 }
                 """));

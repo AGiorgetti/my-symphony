@@ -115,8 +115,10 @@ internal static class SessionDetailDisplay
             GetKindLabel(entry.Kind),
             GetKindBadgeColor(entry.Kind),
             detailPresentation.Summary,
+            detailPresentation.Facts,
             detailPresentation.Detail,
             detailPresentation.DetailPreview,
+            detailPresentation.DetailToggleLabel,
             detailPresentation.HasExpandableDetail,
             detailPresentation.IsStructuredDetail,
             GetTimelineColor(entry));
@@ -160,12 +162,14 @@ internal static class SessionDetailDisplay
             return ActivityDetailPresentation.Empty;
         }
 
-        if (TryFormatJson(detail, out var formattedJson, out var structuredSummary))
+        if (TryFormatJson(detail, out var formattedJson, out var structuredSummary, out var facts))
         {
             return new ActivityDetailPresentation(
                 structuredSummary,
+                facts,
                 formattedJson,
-                "Expand payload",
+                structuredSummary,
+                "View structured payload",
                 HasExpandableDetail: true,
                 IsStructuredDetail: true);
         }
@@ -178,8 +182,10 @@ internal static class SessionDetailDisplay
         {
             return new ActivityDetailPresentation(
                 Summary: null,
+                Facts: Array.Empty<SessionActivityFactModel>(),
                 Detail: normalized,
                 DetailPreview: null,
+                DetailToggleLabel: null,
                 HasExpandableDetail: false,
                 IsStructuredDetail: false);
         }
@@ -187,16 +193,23 @@ internal static class SessionDetailDisplay
         var preview = TruncateText(FirstMeaningfulLine(normalized), 160);
         return new ActivityDetailPresentation(
             preview,
+            Array.Empty<SessionActivityFactModel>(),
             normalized,
-            "Expand detail",
+            preview,
+            "View full detail",
             HasExpandableDetail: true,
             IsStructuredDetail: false);
     }
 
-    private static bool TryFormatJson(string detail, out string formattedJson, out string summary)
+    private static bool TryFormatJson(
+        string detail,
+        out string formattedJson,
+        out string summary,
+        out IReadOnlyList<SessionActivityFactModel> facts)
     {
         formattedJson = string.Empty;
         summary = string.Empty;
+        facts = Array.Empty<SessionActivityFactModel>();
 
         var trimmed = detail.Trim();
         if (!(trimmed.StartsWith('{') || trimmed.StartsWith('[')))
@@ -213,7 +226,8 @@ internal static class SessionDetailDisplay
                 {
                     WriteIndented = true
                 });
-            summary = DescribeJson(document.RootElement);
+            facts = ExtractFacts(document.RootElement);
+            summary = DescribeJson(document.RootElement, facts);
             return true;
         }
         catch (JsonException)
@@ -222,17 +236,17 @@ internal static class SessionDetailDisplay
         }
     }
 
-    private static string DescribeJson(JsonElement element)
+    private static string DescribeJson(JsonElement element, IReadOnlyList<SessionActivityFactModel> facts)
     {
         return element.ValueKind switch
         {
-            JsonValueKind.Object => DescribeObject(element),
+            JsonValueKind.Object => DescribeObject(element, facts),
             JsonValueKind.Array => DescribeArray(element),
             _ => "Structured payload"
         };
     }
 
-    private static string DescribeObject(JsonElement element)
+    private static string DescribeObject(JsonElement element, IReadOnlyList<SessionActivityFactModel> facts)
     {
         var propertyNames = element.EnumerateObject()
             .Select(property => property.Name)
@@ -243,6 +257,14 @@ internal static class SessionDetailDisplay
         if (propertyCount == 0)
         {
             return "JSON object payload";
+        }
+
+        if (facts.Count > 0)
+        {
+            var keyFacts = string.Join(" | ", facts.Take(3).Select(fact => $"{fact.Label}: {fact.Value}"));
+            return propertyCount > 3
+                ? $"{keyFacts} | {propertyCount} fields"
+                : keyFacts;
         }
 
         var preview = string.Join(", ", propertyNames);
@@ -280,16 +302,128 @@ internal static class SessionDetailDisplay
             return value;
         }
 
-        return $"{value[..(maxLength - 1)].TrimEnd()}…";
+        return $"{value[..(maxLength - 1)].TrimEnd()}...";
+    }
+
+    private static IReadOnlyList<SessionActivityFactModel> ExtractFacts(JsonElement element)
+    {
+        if (element.ValueKind == JsonValueKind.Array)
+        {
+            return
+            [
+                new SessionActivityFactModel("Items", element.GetArrayLength().ToString(CultureInfo.InvariantCulture))
+            ];
+        }
+
+        if (element.ValueKind != JsonValueKind.Object)
+        {
+            return Array.Empty<SessionActivityFactModel>();
+        }
+
+        var facts = new List<SessionActivityFactModel>();
+
+        if (TryGetString(element, "event", out var eventName))
+        {
+            facts.Add(new SessionActivityFactModel("Event", eventName));
+        }
+
+        if (element.TryGetProperty("files", out var files) && files.ValueKind == JsonValueKind.Array)
+        {
+            var fileNames = files.EnumerateArray()
+                .Where(item => item.ValueKind == JsonValueKind.String)
+                .Select(item => item.GetString())
+                .Where(value => !string.IsNullOrWhiteSpace(value))
+                .Take(2)
+                .Cast<string>()
+                .ToArray();
+
+            if (fileNames.Length > 0)
+            {
+                var value = files.GetArrayLength() > fileNames.Length
+                    ? $"{string.Join(", ", fileNames)}, +{files.GetArrayLength() - fileNames.Length}"
+                    : string.Join(", ", fileNames);
+                facts.Add(new SessionActivityFactModel("Files", value));
+            }
+        }
+
+        if (element.TryGetProperty("stats", out var stats) && stats.ValueKind == JsonValueKind.Object)
+        {
+            if (TryGetNumeric(stats, "input", out var input))
+            {
+                facts.Add(new SessionActivityFactModel("Input", input));
+            }
+
+            if (TryGetNumeric(stats, "output", out var output))
+            {
+                facts.Add(new SessionActivityFactModel("Output", output));
+            }
+
+            if (TryGetNumeric(stats, "total", out var total))
+            {
+                facts.Add(new SessionActivityFactModel("Total", total));
+            }
+        }
+
+        if (TryGetString(element, "error", out var error))
+        {
+            facts.Add(new SessionActivityFactModel("Error", TruncateText(error, 80)));
+        }
+        else if (TryGetString(element, "message", out var message))
+        {
+            facts.Add(new SessionActivityFactModel("Message", TruncateText(message, 80)));
+        }
+
+        return facts;
+    }
+
+    private static bool TryGetString(JsonElement element, string propertyName, out string value)
+    {
+        value = string.Empty;
+
+        if (!element.TryGetProperty(propertyName, out var property) || property.ValueKind != JsonValueKind.String)
+        {
+            return false;
+        }
+
+        value = property.GetString() ?? string.Empty;
+        return !string.IsNullOrWhiteSpace(value);
+    }
+
+    private static bool TryGetNumeric(JsonElement element, string propertyName, out string value)
+    {
+        value = string.Empty;
+
+        if (!element.TryGetProperty(propertyName, out var property))
+        {
+            return false;
+        }
+
+        value = property.ValueKind switch
+        {
+            JsonValueKind.Number => property.GetRawText(),
+            JsonValueKind.String when !string.IsNullOrWhiteSpace(property.GetString()) => property.GetString()!,
+            _ => string.Empty
+        };
+
+        return !string.IsNullOrWhiteSpace(value);
     }
 
     private sealed record ActivityDetailPresentation(
         string? Summary,
+        IReadOnlyList<SessionActivityFactModel> Facts,
         string? Detail,
         string? DetailPreview,
+        string? DetailToggleLabel,
         bool HasExpandableDetail,
         bool IsStructuredDetail)
     {
-        public static ActivityDetailPresentation Empty { get; } = new(null, null, null, false, false);
+        public static ActivityDetailPresentation Empty { get; } = new(
+            null,
+            Array.Empty<SessionActivityFactModel>(),
+            null,
+            null,
+            null,
+            false,
+            false);
     }
 }

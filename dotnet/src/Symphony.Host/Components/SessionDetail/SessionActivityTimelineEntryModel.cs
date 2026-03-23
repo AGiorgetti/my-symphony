@@ -11,8 +11,14 @@ public sealed record SessionActivityTimelineEntryModel(
     string KindLabel,
     Badge.BadgeColor KindBadgeColor,
     string? Summary,
+    IReadOnlyList<SessionActivityFactModel> Facts,
     string? Detail,
     string? DetailPreview,
+    string? DetailToggleLabel,
     bool HasExpandableDetail,
     bool IsStructuredDetail,
     TimelineColor Color);
+
+public sealed record SessionActivityFactModel(
+    string Label,
+    string Value);
