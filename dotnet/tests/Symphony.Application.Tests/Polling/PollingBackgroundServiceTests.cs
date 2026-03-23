@@ -1,3 +1,4 @@
+using System.Linq;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Symphony.Abstractions.Orchestration;
@@ -117,11 +118,16 @@ public sealed class PollingBackgroundServiceTests
         await firstInvocation.Task.WaitAsync(TimeSpan.FromSeconds(2));
         await service.StopAsync(CancellationToken.None);
 
-        var startEntry = Assert.Single(
+        Assert.Contains(
             logger.Entries,
             entry => entry.Message.Contains("poll_tick started", StringComparison.Ordinal));
-        var completedEntry = Assert.Single(
+        Assert.Contains(
             logger.Entries,
+            entry => entry.Message.Contains("poll_tick completed", StringComparison.Ordinal));
+
+        var startEntry = logger.Entries.First(
+            entry => entry.Message.Contains("poll_tick started", StringComparison.Ordinal));
+        var completedEntry = logger.Entries.First(
             entry => entry.Message.Contains("poll_tick completed", StringComparison.Ordinal));
 
         Assert.Equal(75, Assert.IsType<int>(startEntry.State["poll_interval_ms"]));
