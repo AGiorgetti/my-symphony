@@ -83,6 +83,67 @@ public sealed class SymphonyHostLifecycleIntegrationTests
     }
 
     [Fact]
+    public async Task StartAsync_runs_terminal_workspace_cleanup_before_polling_dispatch()
+    {
+        var activeIssue = new Issue(
+            id: "42",
+            identifier: "ABC-42",
+            title: "Smoke flow",
+            description: "Validate the orchestration path",
+            priority: 1,
+            state: "Todo",
+            createdAt: new DateTimeOffset(2026, 3, 18, 9, 0, 0, TimeSpan.Zero));
+        var terminalIssue = new Issue(
+            id: "9",
+            identifier: "DONE-9",
+            title: "Completed",
+            description: "Cleanup target",
+            priority: 1,
+            state: "Done",
+            createdAt: new DateTimeOffset(2026, 3, 17, 9, 0, 0, TimeSpan.Zero));
+        var trackerClient = new StartupCleanupTrackerClient(activeIssue, terminalIssue);
+        var probe = new SmokeRunProbe();
+        var staleWorkspacePath = string.Empty;
+
+        await using var host = await StartedSymphonyHost.StartAsync(
+            tempDirectory =>
+            {
+                staleWorkspacePath = Path.Combine(tempDirectory, "workspaces", terminalIssue.Identifier);
+                Directory.CreateDirectory(staleWorkspacePath);
+                return CreateWorkflowContents(Path.Combine(tempDirectory, "workspaces"));
+            },
+            configureBuilder: builder =>
+            {
+                builder.Configuration.AddInMemoryCollection(
+                    new Dictionary<string, string?>
+                    {
+                        ["Orchestration:InitialState"] = "Started"
+                    });
+            },
+            configureServices: services =>
+            {
+                services.RemoveAll<IIssueTrackerClient>();
+                services.AddSingleton<IIssueTrackerClient>(trackerClient);
+
+                services.RemoveAll<IQueuedIssueWorker>();
+                services.AddSingleton(probe);
+                services.AddSingleton<IQueuedIssueWorker, SmokeQueuedIssueWorker>();
+
+                RemoveHostedService<RetryDispatchBackgroundService>(services);
+            });
+
+        await probe.AttemptObserved.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.False(Directory.Exists(staleWorkspacePath));
+        Assert.Equal(["Done"], trackerClient.LastFetchedStates);
+        Assert.Equal("terminal_fetch", trackerClient.CallOrder[0]);
+        Assert.Contains("candidate_fetch", trackerClient.CallOrder);
+        Assert.True(
+            trackerClient.CallOrder.IndexOf("terminal_fetch") < trackerClient.CallOrder.IndexOf("candidate_fetch"),
+            "Startup terminal cleanup should run before polling fetches candidates.");
+    }
+
+    [Fact]
     public async Task StartAsync_exposes_ui_routes_and_ui_services_from_di()
     {
         await using var host = await StartedSymphonyHost.StartAsync(
@@ -322,6 +383,35 @@ public sealed class SymphonyHostLifecycleIntegrationTests
             CancellationToken cancellationToken = default)
         {
             return Task.FromResult<IReadOnlyList<Issue>>(Array.Empty<Issue>());
+        }
+
+        public Task<IReadOnlyList<Issue>> FetchIssueStatesByIdsAsync(
+            IReadOnlyCollection<string> issueIds,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<IReadOnlyList<Issue>>(Array.Empty<Issue>());
+        }
+    }
+
+    private sealed class StartupCleanupTrackerClient(Issue activeIssue, Issue terminalIssue) : IIssueTrackerClient
+    {
+        public List<string> CallOrder { get; } = [];
+
+        public IReadOnlyList<string> LastFetchedStates { get; private set; } = Array.Empty<string>();
+
+        public Task<IReadOnlyList<Issue>> FetchCandidateIssuesAsync(CancellationToken cancellationToken = default)
+        {
+            CallOrder.Add("candidate_fetch");
+            return Task.FromResult<IReadOnlyList<Issue>>([activeIssue]);
+        }
+
+        public Task<IReadOnlyList<Issue>> FetchIssuesByStatesAsync(
+            IReadOnlyCollection<string> stateNames,
+            CancellationToken cancellationToken = default)
+        {
+            CallOrder.Add("terminal_fetch");
+            LastFetchedStates = stateNames.ToArray();
+            return Task.FromResult<IReadOnlyList<Issue>>([terminalIssue]);
         }
 
         public Task<IReadOnlyList<Issue>> FetchIssueStatesByIdsAsync(

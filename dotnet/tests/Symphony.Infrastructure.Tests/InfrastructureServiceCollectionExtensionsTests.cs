@@ -12,6 +12,7 @@ using Symphony.Infrastructure.Configuration;
 using Symphony.Infrastructure.Orchestration;
 using Symphony.Infrastructure.DependencyInjection;
 using Symphony.Infrastructure.Processes;
+using Symphony.Infrastructure.Startup;
 using Symphony.Infrastructure.Workflows;
 using Symphony.Infrastructure.Workspaces;
 
@@ -51,7 +52,16 @@ public class InfrastructureServiceCollectionExtensionsTests
         var hostedServices = serviceProvider.GetServices<IHostedService>().ToArray();
 
         Assert.Contains(hostedServices, service => service is WorkflowStartupValidationHostedService);
+        Assert.Contains(hostedServices, service => service is StartupTerminalWorkspaceCleanupHostedService);
         Assert.Contains(hostedServices, service => service is PollingBackgroundService);
+
+        var startupValidationIndex = Array.FindIndex(hostedServices, static service => service is WorkflowStartupValidationHostedService);
+        var startupCleanupIndex = Array.FindIndex(hostedServices, static service => service is StartupTerminalWorkspaceCleanupHostedService);
+        var pollingIndex = Array.FindIndex(hostedServices, static service => service is PollingBackgroundService);
+
+        Assert.True(startupValidationIndex >= 0);
+        Assert.True(startupCleanupIndex > startupValidationIndex);
+        Assert.True(pollingIndex > startupCleanupIndex);
     }
 
     private sealed class StubIssueTrackerClient : IIssueTrackerClient

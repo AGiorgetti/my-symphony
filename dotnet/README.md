@@ -250,10 +250,14 @@ Notes:
 
 - If a value is missing, defaults are used where defined by the implementation/spec.
 - `polling.interval_ms` controls the delay between poll ticks. After startup validation succeeds,
-  Symphony runs an immediate tick and then continues on the configured interval.
+  Symphony performs a best-effort terminal workspace cleanup sweep, runs an immediate tick, and
+  then continues on the configured interval.
 - `Orchestration:InitialState` in `appsettings*.json` controls whether the host boots in
   `Started` or `Stopped` mode. `Stopped` blocks new poll ticks and new issue assignment until an
   operator resumes orchestration.
+- Startup cleanup queries the tracker for issues already in terminal states and deletes their
+  matching workspaces before polling starts. Fetch or deletion failures are logged as warnings and
+  do not block host startup.
 - Each poll tick reconciles currently running issues before fetching new candidates. Terminal
   tracker transitions cancel the active worker and trigger workspace cleanup; non-active,
   non-terminal transitions cancel the worker without deleting the workspace.

@@ -10,6 +10,7 @@ using Symphony.Infrastructure.Configuration;
 using Symphony.Infrastructure.Codex;
 using Symphony.Infrastructure.Orchestration;
 using Symphony.Infrastructure.Processes;
+using Symphony.Infrastructure.Startup;
 using Symphony.Infrastructure.Workflows;
 using Symphony.Infrastructure.Workspaces;
 
@@ -31,6 +32,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddSingleton<ITrackerClientOptionsProvider, TrackerClientOptionsProvider>();
         services.AddSingleton<IWorkflowLoader, YamlWorkflowLoader>();
         services.AddHostedService<WorkflowStartupValidationHostedService>();
+        services.AddHostedService<StartupTerminalWorkspaceCleanupHostedService>();
         services.AddHostedService<PollingBackgroundService>();
         services.AddSingleton<IProcessRunner, ProcessRunner>();
         services.AddSingleton<IWorkspaceManager, WorkspaceManager>();
