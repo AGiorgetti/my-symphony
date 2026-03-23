@@ -49,6 +49,16 @@ public sealed class DashboardPageComponentTests : BunitContext
     }
 
     [Fact]
+    public void HealthSummaryCards_renders_exec_marker_dispatch_policy_alert_when_enabled()
+    {
+        var cut = Render<HealthSummaryCards>(parameters => parameters
+            .Add(component => component.Snapshot, CreateDashboardSnapshot(requireExecMarker: true)));
+
+        Assert.Contains("Dispatch policy:", cut.Markup, StringComparison.Ordinal);
+        Assert.Contains("Only issues labeled or tagged `exec:agent` are eligible for agent scheduling.", cut.Markup, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ActiveSessionsPanel_renders_empty_state_when_no_sessions_are_running()
     {
         var cut = Render<ActiveSessionsPanel>(parameters => parameters
@@ -70,7 +80,8 @@ public sealed class DashboardPageComponentTests : BunitContext
     private static DashboardSnapshot CreateDashboardSnapshot(
         string serviceHealth = "Healthy",
         string? lastError = null,
-        string? workflowLastError = null)
+        string? workflowLastError = null,
+        bool requireExecMarker = false)
     {
         return new DashboardSnapshot(
             new DateTimeOffset(2026, 3, 16, 15, 0, 0, TimeSpan.Zero),
@@ -93,6 +104,7 @@ public sealed class DashboardPageComponentTests : BunitContext
             RetryQueue: [],
             RecentAttempts: [],
             lastError,
-            workflowLastError);
+            workflowLastError,
+            requireExecMarker);
     }
 }

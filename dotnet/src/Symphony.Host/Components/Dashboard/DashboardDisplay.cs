@@ -146,16 +146,20 @@ internal static class DashboardDisplay
 
     internal static string GetWorkflowMessage(DashboardSnapshot snapshot)
     {
+        var execMarkerMessage = snapshot.RequireExecMarker
+            ? $" Dispatch requires the `{snapshot.ExecMarker}` marker on issue labels or tags."
+            : string.Empty;
+
         if (string.Equals(snapshot.WorkflowLoadStatus, "ReloadFailedUsingLastKnownGood", StringComparison.Ordinal))
         {
             return string.IsNullOrWhiteSpace(snapshot.WorkflowLastError)
-                ? "Last workflow reload failed; continuing with the cached definition."
-                : $"Reload failed: {snapshot.WorkflowLastError}";
+                ? $"Last workflow reload failed; continuing with the cached definition.{execMarkerMessage}"
+                : $"Reload failed: {snapshot.WorkflowLastError}{execMarkerMessage}";
         }
 
         return snapshot.WorkflowLastLoadedAt is null
-            ? "Waiting for the initial workflow load."
-            : $"Last loaded {FormatTimestamp(snapshot.WorkflowLastLoadedAt)}.";
+            ? $"Waiting for the initial workflow load.{execMarkerMessage}"
+            : $"Last loaded {FormatTimestamp(snapshot.WorkflowLastLoadedAt)}.{execMarkerMessage}";
     }
 
     internal static IReadOnlyList<DashboardAlertMessage> GetAlerts(DashboardSnapshot snapshot)
@@ -183,6 +187,14 @@ internal static class DashboardDisplay
                 AlertColor.Warning,
                 "Service health degraded:",
                 GetHealthMessage(snapshot)));
+        }
+
+        if (snapshot.RequireExecMarker)
+        {
+            alerts.Add(new DashboardAlertMessage(
+                AlertColor.Info,
+                "Dispatch policy:",
+                $"Only issues labeled or tagged `{snapshot.ExecMarker}` are eligible for agent scheduling."));
         }
 
         return alerts;
