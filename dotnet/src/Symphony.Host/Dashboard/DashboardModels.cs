@@ -23,9 +23,7 @@ public sealed record DashboardSnapshot(
     IReadOnlyList<DashboardRetrySnapshot> RetryQueue,
     IReadOnlyList<DashboardRecentAttemptSnapshot> RecentAttempts,
     string? LastError,
-    string? WorkflowLastError,
-    bool RequireExecMarker = false,
-    string ExecMarker = "exec:agent");
+    string? WorkflowLastError);
 
 public sealed record DashboardActiveSessionSnapshot(
     string IssueIdentifier,

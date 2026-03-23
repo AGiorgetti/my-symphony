@@ -1,6 +1,5 @@
 using Symphony.Application.Polling;
 using Symphony.Application.Runtime;
-using Symphony.Application.Configuration;
 using Symphony.Host.Health;
 
 namespace Symphony.Host.Dashboard;
@@ -9,7 +8,6 @@ public sealed class DashboardStateService(
     IOrchestratorRuntimeService orchestratorRuntimeService,
     AttemptHistoryTracker attemptHistoryTracker,
     ServiceHealthSnapshotProvider serviceHealthSnapshotProvider,
-    IWorkflowOptionsProvider workflowOptionsProvider,
     ISessionActivityStore sessionActivityStore) : IDashboardStateService
 {
     private const string InMemoryMode = "Single-process in-memory";
@@ -19,7 +17,6 @@ public sealed class DashboardStateService(
     public async Task<DashboardSnapshot> GetSnapshotAsync(CancellationToken cancellationToken = default)
     {
         var runtimeSnapshot = await orchestratorRuntimeService.GetStateSnapshotAsync(cancellationToken).ConfigureAwait(false);
-        var workflowOptions = await workflowOptionsProvider.GetCurrentAsync(cancellationToken).ConfigureAwait(false);
         var healthSnapshot = serviceHealthSnapshotProvider.GetSnapshot();
         var activeSessions = runtimeSnapshot.Running
             .Select(
@@ -75,9 +72,7 @@ public sealed class DashboardStateService(
             retryQueue,
             recentAttempts,
             healthSnapshot.PollLastError,
-            healthSnapshot.WorkflowLastError,
-            workflowOptions.Agent.RequireExecMarker,
-            workflowOptions.Agent.ExecMarker);
+            healthSnapshot.WorkflowLastError);
 
         lock (_snapshotLock)
         {

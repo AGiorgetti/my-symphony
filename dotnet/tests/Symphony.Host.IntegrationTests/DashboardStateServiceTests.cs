@@ -72,7 +72,6 @@ public sealed class DashboardStateServiceTests
                         null,
                         30_000)),
                 new FakeTimeProvider(new DateTimeOffset(2026, 3, 16, 15, 0, 5, TimeSpan.Zero))),
-            new StaticWorkflowOptionsProvider(requireExecMarker: true),
             new SessionActivityStore(NullLogger<SessionActivityStore>.Instance));
 
         var snapshot = await service.GetSnapshotAsync();
@@ -91,8 +90,6 @@ public sealed class DashboardStateServiceTests
         Assert.Equal("ABC-2", snapshot.RetryQueue[0].IssueIdentifier);
         Assert.Equal("Retrying", snapshot.RecentAttempts[0].Outcome);
         Assert.Equal(165, snapshot.TotalTokens);
-        Assert.True(snapshot.RequireExecMarker);
-        Assert.Equal("exec:agent", snapshot.ExecMarker);
         Assert.Null(snapshot.LastError);
     }
 
@@ -120,7 +117,6 @@ public sealed class DashboardStateServiceTests
                         "Tracker config is invalid.",
                         30_000)),
                 new FakeTimeProvider(new DateTimeOffset(2026, 3, 16, 15, 11, 5, TimeSpan.Zero))),
-            new StaticWorkflowOptionsProvider(),
             new SessionActivityStore(NullLogger<SessionActivityStore>.Instance));
 
         var snapshot = await service.GetSnapshotAsync();
@@ -191,7 +187,6 @@ public sealed class DashboardStateServiceTests
                         null,
                         30_000)),
                 new FakeTimeProvider(new DateTimeOffset(2026, 3, 16, 16, 0, 5, TimeSpan.Zero))),
-            new StaticWorkflowOptionsProvider(),
             sessionActivityStore);
 
         await service.GetSnapshotAsync();
@@ -326,43 +321,6 @@ public sealed class DashboardStateServiceTests
         public OrchestratorControlSnapshot GetSnapshot()
         {
             return new OrchestratorControlSnapshot(state, new DateTimeOffset(2026, 3, 16, 14, 58, 0, TimeSpan.Zero));
-        }
-    }
-
-    private sealed class StaticWorkflowOptionsProvider(bool requireExecMarker = false, string execMarker = "exec:agent") : IWorkflowOptionsProvider
-    {
-        public Task<WorkflowServiceOptions> GetCurrentAsync(CancellationToken cancellationToken = default)
-        {
-            return Task.FromResult(
-                new WorkflowServiceOptions(
-                    new WorkflowTrackerOptions(
-                        "github",
-                        "https://api.github.com",
-                        "token",
-                        null,
-                        "owner/repo",
-                        null,
-                        null,
-                        ["Todo"],
-                        ["Done"]),
-                    new WorkflowPollingOptions(1_000),
-                    new WorkflowWorkspaceOptions("C:\\repo\\workspaces"),
-                    new WorkflowHookOptions(null, null, null, null, 60_000),
-                    new WorkflowAgentOptions(
-                        1,
-                        20,
-                        300_000,
-                        new Dictionary<string, int>(StringComparer.Ordinal),
-                        requireExecMarker,
-                        execMarker),
-                    new WorkflowCodexOptions(
-                        "codex app-server",
-                        null,
-                        null,
-                        null,
-                        3_600_000,
-                        5_000,
-                        300_000)));
         }
     }
 

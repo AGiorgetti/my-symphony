@@ -87,24 +87,6 @@ public sealed class DashboardPageIntegrationTests
     }
 
     [Fact]
-    public async Task Root_page_surfaces_exec_marker_dispatch_policy_when_enabled()
-    {
-        using var app = await StartDashboardApplicationAsync(
-            new StubRuntimeService(),
-            new StaticDashboardStateService(
-                CreateDashboardSnapshot(requireExecMarker: true, execMarker: "exec:agent")));
-        var client = CreateHttpClient(app);
-
-        var response = await client.GetAsync("/");
-        var html = await response.Content.ReadAsStringAsync();
-
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Contains("Dispatch policy:", html, StringComparison.Ordinal);
-        Assert.Contains("Only issues labeled or tagged `exec:agent` are eligible for agent scheduling.", html, StringComparison.Ordinal);
-        Assert.Contains("Dispatch requires the `exec:agent` marker on issue labels or tags.", html, StringComparison.Ordinal);
-    }
-
-    [Fact]
     public async Task Root_page_uses_error_boundary_without_blocking_api_routes()
     {
         using var app = await StartDashboardApplicationAsync(
@@ -249,9 +231,7 @@ public sealed class DashboardPageIntegrationTests
         string? workflowLastError = null,
         IReadOnlyList<DashboardActiveSessionSnapshot>? activeSessions = null,
         IReadOnlyList<DashboardRetrySnapshot>? retryQueue = null,
-        IReadOnlyList<DashboardRecentAttemptSnapshot>? recentAttempts = null,
-        bool requireExecMarker = false,
-        string execMarker = "exec:agent")
+        IReadOnlyList<DashboardRecentAttemptSnapshot>? recentAttempts = null)
     {
         return new DashboardSnapshot(
             new DateTimeOffset(2026, 3, 16, 15, 0, 0, TimeSpan.Zero),
@@ -303,9 +283,7 @@ public sealed class DashboardPageIntegrationTests
                     "thread-3-turn-2")
             ],
             lastError,
-            workflowLastError,
-            requireExecMarker,
-            execMarker);
+            workflowLastError);
     }
 
     private sealed class StubOrchestratorControl : IOrchestratorControl
