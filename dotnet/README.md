@@ -198,19 +198,33 @@ dotnet build -c Release
 dotnet test -c Release
 ```
 
-## UI asset prerequisite
+## UI asset bootstrap
 
-The dashboard UI build expects a one-time Tailwind CLI download in
-`dotnet/src/Symphony.Host/tools/`.
+`dotnet build -c Release` now bootstraps the standalone Tailwind CLI automatically into a shared
+per-user cache when no override binary is already available, then uses it to generate
+`dotnet/src/Symphony.Host/wwwroot/app.min.css`.
 
-- Windows x64: download `tailwindcss-windows-x64.exe` and rename it to
-  `tailwindcss.exe`
-- macOS ARM64: download `tailwindcss-macos-arm64` and rename it to `tailwindcss`
-- Linux x64: download `tailwindcss-linux-x64` and rename it to `tailwindcss`
-- Releases: `https://github.com/tailwindlabs/tailwindcss/releases/latest`
+Symphony first checks for a manual local override in `dotnet/src/Symphony.Host/tools/`, then falls
+back to the shared machine cache for the pinned Tailwind version:
 
-After the binary is present, `dotnet build -c Release` runs it automatically to
-generate `dotnet/src/Symphony.Host/wwwroot/app.min.css`.
+- Windows x64: `%LocalAppData%\Symphony\tools\tailwind\v4.2.2\`
+- Linux/macOS: `~/.cache/symphony/tools/tailwind/v4.2.2/`
+
+- Supported automatic bootstrap targets:
+  - Windows x64 -> `tailwindcss-windows-x64.exe` saved as `tailwindcss.exe`
+  - Linux x64 -> `tailwindcss-linux-x64` saved as `tailwindcss`
+  - macOS ARM64 -> `tailwindcss-macos-arm64` saved as `tailwindcss`
+- Pinned Tailwind release: `v4.2.2`
+- Download source: `https://github.com/tailwindlabs/tailwindcss/releases`
+
+This avoids downloading the Tailwind binary once per git worktree on the same machine. New
+worktrees reuse the shared cached binary automatically.
+
+The first bootstrap uses built-in Windows PowerShell on Windows and `curl` with a `wget` fallback
+on Linux/macOS.
+
+On unsupported platforms, the host build fails fast with an explicit message so the CLI can be
+installed manually into `dotnet/src/Symphony.Host/tools/` or prepopulated in the shared cache.
 
 The PR workflow in [`.github/workflows/make-all.yml`](../.github/workflows/make-all.yml) runs the
 same solution-wide `dotnet test` suite, including the host integration checks for startup

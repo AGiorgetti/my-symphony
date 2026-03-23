@@ -57,6 +57,7 @@ dump/
 dotnet/.dotnet-home/
 **/Properties/launchSettings.json
 dotnet/src/Symphony.Host/tools/
+dotnet/src/Symphony.Host/wwwroot/app.min.css
 
 # StyleCop
 StyleCopReport.xml
