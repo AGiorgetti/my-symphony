@@ -47,21 +47,34 @@
                               IsLast="@(index == Timeline.Entries.Count - 1)"
                               DatePrefix="Logged at">
                     <ChildContent>
-                        <div class="space-y-2" data-testid="session-detail-timeline-entry">
+                        <div class="@GetEntryContainerClasses(entry)" data-testid="session-detail-timeline-entry">
                             <div class="flex flex-wrap items-center gap-2">
-                                <div class="inline-flex">
+                                <div class="inline-flex shrink-0">
                                     <Badge Color="@entry.KindBadgeColor">
                                         @entry.KindLabel
                                     </Badge>
                                 </div>
 
-                                @if (!string.IsNullOrWhiteSpace(entry.Summary))
+                                @if (entry.Facts.Count > 0)
                                 {
-                                    <p class="text-sm leading-6 text-[color:var(--color-on-surface-secondary)]">
-                                        @entry.Summary
-                                    </p>
+                                    <div class="flex flex-wrap gap-2">
+                                        @foreach (var fact in entry.Facts)
+                                        {
+                                            <span class="inline-flex items-center gap-1 rounded-full border border-[var(--shell-border)]/80 bg-[color:var(--color-surface-base)]/65 px-2.5 py-1 text-xs text-[color:var(--color-on-surface-secondary)]">
+                                                <span class="font-semibold text-[color:var(--color-on-surface-primary)]">@fact.Label:</span>
+                                                <span>@fact.Value</span>
+                                            </span>
+                                        }
+                                    </div>
                                 }
                             </div>
+
+                            @if (!string.IsNullOrWhiteSpace(entry.Summary))
+                            {
+                                <p class="text-sm font-medium leading-6 text-[color:var(--color-on-surface-secondary)]">
+                                    @entry.Summary
+                                </p>
+                            }
 
                             @if (!string.IsNullOrWhiteSpace(entry.Detail))
                             {
@@ -70,15 +83,33 @@
                                     <details class="rounded-xl border border-[var(--shell-border)]/80 bg-[color:var(--color-surface-base)]/70 p-3"
                                              data-testid="session-detail-timeline-detail">
                                         <summary class="cursor-pointer list-none text-sm font-semibold text-[color:var(--color-on-surface-primary)]">
-                                            @entry.DetailPreview
+                                            @entry.DetailToggleLabel
                                         </summary>
 
                                         @if (entry.IsStructuredDetail)
                                         {
+                                            @if (entry.Facts.Count > 0)
+                                            {
+                                                <div class="mt-3 space-y-2">
+                                                    <p class="text-xs font-bold uppercase tracking-[0.2em] text-[color:var(--color-on-surface-secondary)]">Highlights</p>
+                                                    <div class="flex flex-wrap gap-2">
+                                                        @foreach (var fact in entry.Facts)
+                                                        {
+                                                            <span class="inline-flex items-center gap-1 rounded-full border border-[var(--shell-border)]/80 bg-[color:var(--color-surface-raised)] px-2.5 py-1 text-xs text-[color:var(--color-on-surface-secondary)]">
+                                                                <span class="font-semibold text-[color:var(--color-on-surface-primary)]">@fact.Label:</span>
+                                                                <span>@fact.Value</span>
+                                                            </span>
+                                                        }
+                                                    </div>
+                                                </div>
+                                            }
+
+                                            <p class="mt-3 text-xs font-bold uppercase tracking-[0.2em] text-[color:var(--color-on-surface-secondary)]">Raw payload</p>
                                             <pre class="mt-3 overflow-x-auto whitespace-pre-wrap break-all rounded-lg bg-[color:var(--color-surface-raised)] p-3 text-xs leading-6 text-[color:var(--color-on-surface-secondary)]">@entry.Detail</pre>
                                         }
                                         else
                                         {
+                                            <p class="mt-3 text-xs font-bold uppercase tracking-[0.2em] text-[color:var(--color-on-surface-secondary)]">Detail</p>
                                             <p class="mt-3 whitespace-pre-wrap break-words text-sm leading-6 text-[color:var(--color-on-surface-secondary)]">@entry.Detail</p>
                                         }
                                     </details>
@@ -107,4 +138,18 @@
     [Parameter]
     [EditorRequired]
     public required SessionActivityTimelineModel Timeline { get; set; }
+
+    private static string GetEntryContainerClasses(SessionActivityTimelineEntryModel entry)
+    {
+        var baseClasses = "space-y-3 rounded-[var(--shell-radius-lg)] border p-4";
+
+        return entry.Kind switch
+        {
+            SessionActivityKind.Warning => $"{baseClasses} border-amber-400/30 bg-amber-400/7",
+            SessionActivityKind.Error => $"{baseClasses} border-rose-400/35 bg-rose-400/8",
+            SessionActivityKind.Outcome when entry.Color == TimelineColor.Red => $"{baseClasses} border-rose-400/30 bg-rose-400/7",
+            SessionActivityKind.Outcome when entry.Color == TimelineColor.Green => $"{baseClasses} border-emerald-400/25 bg-emerald-400/6",
+            _ => $"{baseClasses} border-[var(--shell-border)]/80 bg-[color:var(--color-surface-base)]/38"
+        };
+    }
 }

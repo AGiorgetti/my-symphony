@@ -57,7 +57,9 @@ public sealed class SessionDetailComponentTests : BunitContext
                             "Lifecycle",
                             Badge.BadgeColor.Gray,
                             null,
+                            Array.Empty<SessionActivityFactModel>(),
                             "Tracker moved to In Progress",
+                            null,
                             null,
                             false,
                             false,
@@ -66,11 +68,13 @@ public sealed class SessionDetailComponentTests : BunitContext
                             SessionActivityKind.AgentMessage,
                             new DateTimeOffset(2026, 3, 20, 9, 0, 30, TimeSpan.Zero),
                             "2026-03-20 09:00:30 UTC",
-                            "turn_started",
+                            "Turn started",
                             "Agent message",
                             Badge.BadgeColor.Info,
                             null,
+                            Array.Empty<SessionActivityFactModel>(),
                             "Agent picked up the first turn",
+                            null,
                             null,
                             false,
                             false,
@@ -83,7 +87,9 @@ public sealed class SessionDetailComponentTests : BunitContext
                             "Warning",
                             Badge.BadgeColor.Warning,
                             null,
+                            Array.Empty<SessionActivityFactModel>(),
                             "Waiting for the next dispatcher slot",
+                            null,
                             null,
                             false,
                             false,
@@ -96,6 +102,7 @@ public sealed class SessionDetailComponentTests : BunitContext
         Assert.Contains("data-testid=\"session-detail-failure-alert\"", cut.Markup, StringComparison.Ordinal);
         Assert.Contains("Session started", cut.Markup, StringComparison.Ordinal);
         Assert.Contains("Queued for retry", cut.Markup, StringComparison.Ordinal);
+        Assert.Contains("border-amber-400/30", cut.Markup, StringComparison.Ordinal);
 
         var timelineItems = cut.FindComponents<TimelineItem>();
 
@@ -108,7 +115,7 @@ public sealed class SessionDetailComponentTests : BunitContext
             },
             item =>
             {
-                Assert.Equal("turn_started", item.Instance.Title);
+                Assert.Equal("Turn started", item.Instance.Title);
                 Assert.Equal(TimelineColor.Blue, item.Instance.Color);
             },
             item =>
@@ -133,9 +140,15 @@ public sealed class SessionDetailComponentTests : BunitContext
                             "turn_completed",
                             "Agent message",
                             Badge.BadgeColor.Info,
-                            "JSON object payload with 3 properties: event, files, stats",
+                            "Structured event payload",
+                            [
+                                new SessionActivityFactModel("Event", "turn_completed"),
+                                new SessionActivityFactModel("Files", "Program.cs"),
+                                new SessionActivityFactModel("Input", "12")
+                            ],
                             "{\n  \"event\": \"turn_completed\",\n  \"files\": [\"Program.cs\"],\n  \"stats\": { \"input\": 12 }\n}",
-                            "Expand payload",
+                            "Event: turn_completed | Files: Program.cs | Input: 12",
+                            "View structured payload",
                             true,
                             true,
                             TimelineColor.Blue)
@@ -145,8 +158,13 @@ public sealed class SessionDetailComponentTests : BunitContext
 
         var details = cut.Find("[data-testid=\"session-detail-timeline-detail\"]");
 
-        Assert.Contains("JSON object payload with 3 properties", cut.Markup, StringComparison.Ordinal);
-        Assert.Contains("Expand payload", cut.Markup, StringComparison.Ordinal);
+        Assert.Contains("Event", cut.Markup, StringComparison.Ordinal);
+        Assert.Contains("turn_completed", cut.Markup, StringComparison.Ordinal);
+        Assert.Contains("Files", cut.Markup, StringComparison.Ordinal);
+        Assert.Contains("Program.cs", cut.Markup, StringComparison.Ordinal);
+        Assert.Contains("View structured payload", cut.Markup, StringComparison.Ordinal);
+        Assert.Contains("Highlights", cut.Markup, StringComparison.Ordinal);
+        Assert.Contains("Raw payload", cut.Markup, StringComparison.Ordinal);
         Assert.Contains("\"turn_completed\"", details.TextContent, StringComparison.Ordinal);
     }
 

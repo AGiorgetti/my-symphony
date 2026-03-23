@@ -25,7 +25,7 @@ Alignment policy:
 
 ## Component Library Reference
 
-- **Flowbite Blazor** — site: https://flowbite-blazor.org/
+- **Flowbite Blazor** - site: https://flowbite-blazor.org/
 - **AI / agent context** (always-current component docs): https://flowbite-blazor.org/llms-ctx.md
 
 When implementing components, load the AI context URL to retrieve up-to-date API details,
@@ -33,7 +33,7 @@ parameters, and usage examples. Do not rely on cached or inlined snippets in thi
 
 **Version policy**: Always use the **latest release** of Flowbite Blazor. Do not pin to a
 specific version in this document or in code reviews. Before implementing any component,
-load the AI context URL to obtain current APIs — they may have changed since this document
+load the AI context URL to obtain current APIs - they may have changed since this document
 was written.
 
 ---
@@ -47,7 +47,7 @@ This document covers:
 - Application shell design (layout, navigation, routing)
 - New data models introduced exclusively in the host layer
 - Session activity store design (in-memory, host lifetime)
-- Page catalog — dashboard, session list, session detail
+- Page catalog - dashboard, session list, session detail
 - Flowbite Blazor component assignment per UI element
 - DI registration changes
 - Auto-refresh and Blazor rendering strategy
@@ -58,8 +58,8 @@ This document does not cover:
 
 - Core orchestration behavior (see [`ARCHITECTURE.md`](./ARCHITECTURE.md))
 - Tracker adapter implementations
-- API endpoint contracts (see `ARCHITECTURE.md` § API Contract Baseline)
-- Flowbite Blazor component APIs — retrieve from the AI context URL above
+- API endpoint contracts (see `ARCHITECTURE.md` õ API Contract Baseline)
+- Flowbite Blazor component APIs - retrieve from the AI context URL above
 
 ---
 
@@ -110,8 +110,8 @@ Platform filenames:
 
 Add a single `Tailwind` MSBuild target that dispatches to the correct binary via `$(OS)`:
 
-- Windows condition: `'$(OS)' == 'Windows_NT'` → calls `tools\tailwindcss.exe`
-- Non-Windows condition: `'$(OS)' != 'Windows_NT'` → calls `tools/tailwindcss`
+- Windows condition: `'$(OS)' == 'Windows_NT'`  calls `tools\tailwindcss.exe`
+- Non-Windows condition: `'$(OS)' != 'Windows_NT'`  calls `tools/tailwindcss`
 - Both variants: `-i ./wwwroot/app.css -o ./wwwroot/app.min.css --minify`
 - Target runs `BeforeTargets="Build"`
 - Add `UpToDateCheckBuilt` items for `app.css` and `app.min.css`
@@ -136,10 +136,10 @@ Replace the existing hand-rolled CSS file with a Tailwind v4 CSS-first file:
 - `@theme` block defining CSS custom property tokens for **all** color references. Tokens
   follow a naming convention (`--color-primary-*`, `--color-surface-*`,
   `--color-on-surface-*`). No component ever references a hard-coded Tailwind color class
-  for brand colors — all colors flow through these tokens.
+  for brand colors - all colors flow through these tokens.
 - `[data-theme="dark-yellow"]` selector block overriding token values for the default theme
   (dark background, yellow-400 primary). One additional block per built-in alternate theme.
-  See §14 for the full theme system.
+  See õ14 for the full theme system.
 - Retain Blazor validation (`.validation-message`) and error boundary (`#blazor-error-ui`)
   styles using `@apply` or plain CSS
 
@@ -154,7 +154,7 @@ The CLI writes output to `wwwroot/app.min.css`.
 - Set `<html class="dark" data-theme="dark-yellow">` for the default dark + yellow theme.
   `class="dark"` activates Tailwind `dark:` variants on all Flowbite components.
   `data-theme="dark-yellow"` activates the yellow-accent CSS token overrides.
-  The theme switcher (§14) updates both attributes via JS interop when the user changes
+  The theme switcher (õ14) updates both attributes via JS interop when the user changes
   themes.
 
 For air-gapped environments, vendor the Floating UI scripts into `wwwroot/js/` instead of
@@ -177,10 +177,10 @@ Add the following namespace groups to `Components/_Imports.razor`:
 
 In `AddSymphonyHost`, add:
 
-- `builder.Services.AddFlowbite()` — registers Flowbite services (TwMerge, IFloatingService,
+- `builder.Services.AddFlowbite()` - registers Flowbite services (TwMerge, IFloatingService,
   IModalService, IToastService, etc.)
-- `builder.Services.AddSingleton<ISessionActivityStore, SessionActivityStore>()` — new store
-  (see §7)
+- `builder.Services.AddSingleton<ISessionActivityStore, SessionActivityStore>()` - new store
+  (see õ7)
 
 The `<ToastHost />` component is placed in `MainLayout.razor`; no changes to
 `MapSymphonyHost` are needed for toast support.
@@ -194,20 +194,20 @@ The `<ToastHost />` component is placed in `MainLayout.razor`; no changes to
 The shell uses a responsive sidebar + top bar pattern:
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│  Top bar (mobile: hamburger toggle, title)               │
-├──────────────────┬──────────────────────────────────────┤
-│  Sidebar         │  Main Content (@Body)                 │
-│  (responsive,    │                                       │
-│   collapsible    │                                       │
-│   on mobile)     │                                       │
-│                  │                                       │
-│  - Dashboard     │                                       │
-│  - Sessions [N]  │                                       │
-│    (badge count) │                                       │
-└──────────────────┴──────────────────────────────────────┘
-│  ToastHost (bottom-right)                                │
-└─────────────────────────────────────────────────────────┘
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³  Top bar (mobile: hamburger toggle, title)               ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÂÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³  Sidebar         ³  Main Content (@Body)                 ³
+³  (responsive,    ³                                       ³
+³   collapsible    ³                                       ³
+³   on mobile)     ³                                       ³
+³                  ³                                       ³
+³  - Dashboard     ³                                       ³
+³  - Sessions [N]  ³                                       ³
+³    (badge count) ³                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÁÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+³  ToastHost (bottom-right)                                ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
 ```
 
 ### 6.2 MainLayout.razor
@@ -220,7 +220,7 @@ Replace the current minimal `LayoutComponentBase` with a Flowbite-based shell us
 - Sidebar footer exposes the current orchestration state plus `Start` / `Stop` controls
 - Top `<nav>` bar with a mobile hamburger `Button` and app title
 - `<main>` content area offset from the fixed sidebar
-- `ErrorBoundary` wrapping `@Body` — rendering failures here must not affect the
+- `ErrorBoundary` wrapping `@Body` - rendering failures here must not affect the
   orchestrator or JSON API
 - `<ToastHost Position="ToastPosition.BottomRight" />` at the bottom of the shell
 - Periodic poll of `IDashboardStateService` in `@code` to keep the sidebar badge current
@@ -231,7 +231,7 @@ Replace the current minimal `LayoutComponentBase` with a Flowbite-based shell us
 
 ### 7.1 Purpose
 
-`SPEC_UI.md §9` requires that ended sessions remain visible for the current application run
+`SPEC_UI.md õ9` requires that ended sessions remain visible for the current application run
 and that each session exposes a browsable activity timeline.
 
 The existing `DashboardStateService` provides a point-in-time snapshot only. A dedicated
@@ -240,11 +240,11 @@ process lifetime, without touching lower architectural layers.
 
 ### 7.2 Key Design Constraints
 
-- Lives entirely in `Symphony.Host.Dashboard` — no changes to Abstractions, Domain,
+- Lives entirely in `Symphony.Host.Dashboard` - no changes to Abstractions, Domain,
   Application, or Infrastructure.
-- Singleton lifetime, scoped to the host process (lost on restart — acceptable per spec).
+- Singleton lifetime, scoped to the host process (lost on restart - acceptable per spec).
 - Bounded per-session event log (default cap: 500 entries) to prevent unbounded memory growth.
-- `DashboardStateService` is the **single writer** — it diffs consecutive snapshots and
+- `DashboardStateService` is the **single writer** - it diffs consecutive snapshots and
   records events. No pub/sub bus is introduced.
 
 ### 7.3 New Models (Symphony.Host.Dashboard)
@@ -264,8 +264,8 @@ Writer API (called by `DashboardStateService`):
 
 Reader API (called by Blazor pages):
 - `GetAllSessions()`, `GetActiveSessions()`, `GetEndedSessions()`
-- `GetSession(issueIdentifier)` → `SessionRecord?`
-- `GetActivities(issueIdentifier)` → `IReadOnlyList<SessionActivityEntry>`
+- `GetSession(issueIdentifier)`  `SessionRecord?`
+- `GetActivities(issueIdentifier)`  `IReadOnlyList<SessionActivityEntry>`
 
 ### 7.5 SessionActivityStore Implementation Guidelines
 
@@ -273,7 +273,7 @@ Reader API (called by Blazor pages):
 - Internal `SessionState` carries the current `SessionRecord` and an
   `ImmutableList<SessionActivityEntry>` (swapped on write, bounded by cap).
 - If over cap: drop oldest entry, append a synthetic `Warning` "history trimmed" entry.
-- Write methods must never throw — swallow and log as debug to avoid disrupting the
+- Write methods must never throw - swallow and log as debug to avoid disrupting the
   orchestrator polling loop.
 
 ### 7.6 Event Detection in DashboardStateService
@@ -282,15 +282,15 @@ Add a private snapshot comparison routine called at the end of `GetSnapshotAsync
 `_lastSnapshot` as a private field (initially null) and diffs each new snapshot against it
 under a `Lock`:
 
-- Issue identifier **appeared** in running list → `RecordSessionStart` + `LifecycleMilestone`
+- Issue identifier **appeared** in running list  `RecordSessionStart` + `LifecycleMilestone`
   "Session started"
-- `Status` changed → `LifecycleMilestone` with new status name
-- `TurnCount` increased → `ProgressUpdate` with new count
-- `LastEvent` or `LastMessage` changed → `AgentMessage` with new content
-- Issue identifier **disappeared** from running list → look up outcome in `RecentAttempts`,
+- `Status` changed  `LifecycleMilestone` with new status name
+- `TurnCount` increased  `ProgressUpdate` with new count
+- `LastEvent` or `LastMessage` changed  `AgentMessage` with new content
+- Issue identifier **disappeared** from running list  look up outcome in `RecentAttempts`,
   call `RecordSessionEnd`
-- New entry in retrying list → `Warning` entry on the affected session
-- New entry in `RecentAttempts` → `Outcome` entry on the affected session
+- New entry in retrying list  `Warning` entry on the affected session
+- New entry in `RecentAttempts`  `Outcome` entry on the affected session
 
 ---
 
@@ -310,12 +310,12 @@ All pages inherit `MainLayout` via `Routes.razor`.
 
 Quick-scan overview. Sections:
 
-1. **Operational summary strip** — health, orchestrator mode, last poll tick, workflow config
+1. **Operational summary strip** - health, orchestrator mode, last poll tick, workflow config
    status. Sourced from `DashboardSnapshot`.
-2. **Counters row** — running count, retry count, token totals, runtime seconds.
-3. **Active sessions panel** — live list; each entry links to `/sessions/{identifier}`.
-4. **Retry queue panel** — next retry ETAs and failure reasons.
-5. **Recent attempts panel** — last N completed attempts with outcome badges.
+2. **Counters row** - running count, retry count, token totals, runtime seconds.
+3. **Active sessions panel** - live list; each entry links to `/sessions/{identifier}`.
+4. **Retry queue panel** - next retry ETAs and failure reasons.
+5. **Recent attempts panel** - last N completed attempts with outcome badges.
 
 Flowbite components: `Card` for summary cards; `Badge` for status/health; `Alert` for
 errors and degraded health; `EmptyState` for empty panels; `Skeleton` on first paint before
@@ -327,10 +327,10 @@ Auto-refresh: 5 seconds via `PeriodicTimer`.
 
 All sessions from the current run. Sections:
 
-1. **Filter bar** — `Tabs` (All / Active / Ended).
-2. **Session table** — `Table` with columns: Issue (link), Status badge, Started, Ended /
+1. **Filter bar** - `Tabs` (All / Active / Ended).
+2. **Session table** - `Table` with columns: Issue (link), Status badge, Started, Ended /
    Duration, Outcome / last event.
-3. **Empty state** — `EmptyState` when no sessions match the filter.
+3. **Empty state** - `EmptyState` when no sessions match the filter.
 
 Data sources: `ISessionActivityStore` for active/ended lists; `IDashboardStateService` for
 current running-session details.
@@ -342,43 +342,45 @@ Auto-refresh: 5 seconds.
 Full inspection view for one session. Layout:
 
 ```
-┌─────────────────────────────────────────┐
-│  Session: {Identifier}   [Status badge] │
-│  Issue: {title/url}  Started: {time}    │
-│  Ended: {time} / Running since {dur}    │
-└─────────────────────────────────────────┘
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³  Session: {Identifier}   [Status badge] ³
+³  Issue: {title/url}  Started: {time}    ³
+³  Ended: {time} / Running since {dur}    ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
 
-┌────────────────┬────────────────────────┐
-│  Activity tab  │  Details tab           │
-│  (Timeline)    │  (metadata, tokens,    │
-│                │   session ID, turns)   │
-└────────────────┴────────────────────────┘
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÂÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³  Activity tab  ³  Details tab           ³
+³  (Timeline)    ³  (metadata, tokens,    ³
+³                ³   session ID, turns)   ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÁÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
 ```
 
 Sections:
 
-1. **Session header** — `Card` with identifier, status `Badge`, timestamps. Active sessions
+1. **Session header** - `Card` with identifier, status `Badge`, timestamps. Active sessions
    show a `Spinner` next to the status. Link to tracker URL when available.
-2. **Activity tab** — `Timeline` showing all `SessionActivityEntry` records in order.
+2. **Activity tab** - `Timeline` showing all `SessionActivityEntry` records in order.
    `SessionActivityKind` maps to timeline point color: `LifecycleMilestone` neutral,
    `AgentMessage` blue, `ProgressUpdate` gray, `Warning` yellow, `Error` red,
    `Outcome` green (Succeeded) or red (Failed/TimedOut). Most-recent warning is also shown
-   as an `Alert` at the top of the panel.
-3. **Details tab** — token totals (input/output/total), turn count, session ID
+   as an `Alert` at the top of the panel. Structured JSON-like details may surface compact
+   highlight chips before the raw payload block, but the raw payload remains expandable for
+   inspection.
+3. **Details tab** - token totals (input/output/total), turn count, session ID
    (thread+turn), attempt number.
-4. **Error panel** — `Alert Color="AlertColor.Failure"` when `FinalError` or any `Error`
+4. **Error panel** - `Alert Color="AlertColor.Failure"` when `FinalError` or any `Error`
    activity exists.
 
 Implementation note: EU7-S1 delivers the breadcrumb, session header card, and activity
 timeline first. EU7-S2 adds the metadata/details tab and starts a 2-second refresh loop only
 for active sessions, while ended sessions render once without a timer.
 
-Back navigation uses `Breadcrumb`: Home → Sessions → {Identifier}.
+Back navigation uses `Breadcrumb`: Home  Sessions  {Identifier}.
 
 Auto-refresh: 2 seconds for active sessions; no timer for ended sessions (render once).
 
 Multiple sessions: each detail page is a separate URL, so the operator can open several in
-parallel browser tabs without losing context (satisfies SPEC_UI.md §6.5).
+parallel browser tabs without losing context (satisfies SPEC_UI.md õ6.5).
 
 ---
 
@@ -394,7 +396,7 @@ High-level component-to-purpose mapping:
 | Summary / metric cards | `Card` |
 | Health / outcome status | `Badge` (color mapped to status) |
 | Errors and warnings | `Alert` (Failure / Warning color) |
-| Status → `BadgeColor` mapping | `Succeeded` → Success, active statuses → Info, `Failed`/`TimedOut`/`Stalled` → Pink/Failure, `Canceled` → Gray |
+| Status  `BadgeColor` mapping | `Succeeded`  Success, active statuses  Info, `Failed`/`TimedOut`/`Stalled`  Pink/Failure, `Canceled`  Gray |
 | Empty panel states | `EmptyState` |
 | Loading skeleton on first paint | `Skeleton Variant="SkeletonVariant.Card"` |
 | Sidebar navigation | `Sidebar`, `SidebarItem`, `SidebarLogo`, `SidebarItemGroup` |
@@ -418,9 +420,9 @@ All pages that auto-refresh use `PeriodicTimer` started in `OnInitializedAsync` 
 implement `IAsyncDisposable`. This avoids races associated with `System.Threading.Timer`.
 
 Sequence on page load:
-1. Fetch data once → assign to fields → set `_loaded = true`
+1. Fetch data once  assign to fields  set `_loaded = true`
 2. Start `PeriodicTimer` with the page's configured interval
-3. Background loop: wait for next tick → fetch → `InvokeAsync(StateHasChanged)`
+3. Background loop: wait for next tick  fetch  `InvokeAsync(StateHasChanged)`
 4. `DisposeAsync` cancels the timer and cleans up
 
 ### 10.2 Refresh Intervals
@@ -495,10 +497,10 @@ write path and preventing concurrent diff races.
 
 ## 13. Navigation and Linking
 
-- All navigation uses Blazor routing (`SidebarItem Href`, `NavLink`) — no JS push-state.
+- All navigation uses Blazor routing (`SidebarItem Href`, `NavLink`) - no JS push-state.
 - The sidebar Sessions item shows a live `Badge` with the running count, refreshed by the
   layout's own periodic `IDashboardStateService` poll.
-- Session detail back-navigation uses `Breadcrumb` (Home → Sessions → {Identifier}).
+- Session detail back-navigation uses `Breadcrumb` (Home  Sessions  {Identifier}).
 - Deep links (e.g. `/sessions/ABC-123`) resolve via the standard Blazor router.
 
 ---
@@ -507,7 +509,7 @@ write path and preventing concurrent diff races.
 
 ### 14.1 Defaults
 
-The application launches with **dark mode and a yellow accent** — this is the default theme
+The application launches with **dark mode and a yellow accent** - this is the default theme
 (`dark-yellow`). No user action is required to activate it.
 
 - `<html class="dark" data-theme="dark-yellow">` in `App.razor`
@@ -521,7 +523,7 @@ All colors are indirected through CSS custom properties defined in `@theme` in `
 A theme is a named set of token overrides applied via a `[data-theme="..."]` CSS selector
 block. This means:
 
-- Zero run-time JS color computation — themes are pure CSS.
+- Zero run-time JS color computation - themes are pure CSS.
 - Any number of themes can coexist in the single compiled `app.min.css`.
 - Switching themes requires only DOM attribute changes (`class`, `data-theme`), persisted
   in `localStorage`.
@@ -531,7 +533,7 @@ block. This means:
 
 | Theme key | Mode | Accent |
 |-----------|------|--------|
-| `dark-yellow` | Dark | Yellow (`yellow-400` / `#FBBF24` family) — **default** |
+| `dark-yellow` | Dark | Yellow (`yellow-400` / `#FBBF24` family) - **default** |
 | `dark-blue` | Dark | Blue (`blue-500` / `#3B82F6` family) |
 | `light-blue` | Light | Blue (`blue-500` / `#3B82F6` family) |
 
@@ -542,7 +544,7 @@ Tailwind color classes. Required tokens per theme block:
 
 | Token group | Purpose |
 |-------------|--------|
-| `--color-primary-50` … `--color-primary-900` | Full primary scale for hover/focus states |
+| `--color-primary-50` . `--color-primary-900` | Full primary scale for hover/focus states |
 | `--color-primary-DEFAULT` | Base interactive color (buttons, links, active badges) |
 | `--color-surface-base` | Page background |
 | `--color-surface-raised` | Card / panel background |
@@ -555,9 +557,9 @@ Tailwind color classes. Required tokens per theme block:
 Register a lightweight `IThemeService` / `ThemeService` scoped service in
 `SymphonyHostCompositionExtensions.cs`:
 
-- `CurrentTheme` — string property, default `"dark-yellow"`
-- `AvailableThemes` — static list of `ThemeDescriptor` records (key, display name, is dark)
-- `SetThemeAsync(string key)` — persists to `localStorage` and raises `OnThemeChanged`
+- `CurrentTheme` - string property, default `"dark-yellow"`
+- `AvailableThemes` - static list of `ThemeDescriptor` records (key, display name, is dark)
+- `SetThemeAsync(string key)` - persists to `localStorage` and raises `OnThemeChanged`
   (C# event)
 - On startup, `ThemeService` reads the persisted preference via JS interop
   (`localStorage.getItem("symphony-theme")`) and sets `CurrentTheme` before first render,
@@ -576,7 +578,7 @@ which invokes JS interop to:
 ### 14.6 Responsive Layout
 
 `Sidebar CollapseMode="SidebarCollapseMode.Responsive"` handles mobile breakpoints
-automatically. All content areas must use Tailwind responsive grid utilities — for example,
+automatically. All content areas must use Tailwind responsive grid utilities - for example,
 dashboard metric cards use `grid-cols-1 sm:grid-cols-2 lg:grid-cols-4`. No fixed pixel
 widths are used for content panels. The theme switcher `Dropdown` is accessible at all
 breakpoints.
@@ -602,12 +604,12 @@ The current `DashboardShellContent.razor` uses bespoke classes (`metric-card`, `
 
 Incremental migration path:
 
-1. Add `@import "tailwindcss"` at the top of `app.css` — existing custom classes coexist.
+1. Add `@import "tailwindcss"` at the top of `app.css` - existing custom classes coexist.
 2. Replace one panel at a time in `DashboardShellContent.razor`: convert custom classes to
    Tailwind utilities and Flowbite components.
 3. Delete each custom class from `app.css` as its last usage is migrated.
 4. Once fully migrated, delete `DashboardShellContent.razor` and replace it with the new
-   sub-components from §11.
+   sub-components from õ11.
 
 ---
 
@@ -628,11 +630,11 @@ Incremental migration path:
 
 ### 18.1 Unit Tests
 
-- `SessionActivityStore` — event recording, trimming at cap, session start/end, concurrent
+- `SessionActivityStore` - event recording, trimming at cap, session start/end, concurrent
   access.
-- Diff detection in `DashboardStateService` — two-snapshot transitions produce correct
+- Diff detection in `DashboardStateService` - two-snapshot transitions produce correct
   `SessionActivityEntry` records.
-- Sub-components — use `bUnit` to render with mock parameters and assert DOM output.
+- Sub-components - use `bUnit` to render with mock parameters and assert DOM output.
 
 ### 18.2 Integration Tests
 
@@ -673,13 +675,13 @@ Incremental migration path:
 
 | Concern | Decision |
 |---------|---------|
-| Component library | Flowbite Blazor — always latest release (docs: https://flowbite-blazor.org/llms-ctx.md) |
+| Component library | Flowbite Blazor - always latest release (docs: https://flowbite-blazor.org/llms-ctx.md) |
 | Theming | Default dark + yellow accent; CSS token system; switchable via `data-theme`; persisted in `localStorage` |
 | CSS | Tailwind CSS v4 via CLI, CSS-first `@import` + `@theme` |
 | Layout | Sidebar + top bar shell in `MainLayout.razor` |
 | Pages | Dashboard `/`, Session List `/sessions`, Session Detail `/sessions/{id}` |
 | Session history | In-memory `SessionActivityStore` in `Symphony.Host.Dashboard`, written by `DashboardStateService` diff |
-| Refresh | `PeriodicTimer` per page — 5s dashboard/list, 2s active detail |
+| Refresh | `PeriodicTimer` per page - 5s dashboard/list, 2s active detail |
 | Data flow | One write path: `DashboardStateService` -> `ISessionActivityStore` |
 | Compatibility | Flowbite targets .NET 8/9; resolved assets run on net10.0 without changes |
 | Cross-platform | Tailwind CLI binary selected by MSBuild `$(OS)` condition |

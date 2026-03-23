@@ -250,14 +250,10 @@ Notes:
 
 - If a value is missing, defaults are used where defined by the implementation/spec.
 - `polling.interval_ms` controls the delay between poll ticks. After startup validation succeeds,
-  Symphony performs a best-effort terminal workspace cleanup sweep, runs an immediate tick, and
-  then continues on the configured interval.
+  Symphony runs an immediate tick and then continues on the configured interval.
 - `Orchestration:InitialState` in `appsettings*.json` controls whether the host boots in
   `Started` or `Stopped` mode. `Stopped` blocks new poll ticks and new issue assignment until an
   operator resumes orchestration.
-- Startup cleanup queries the tracker for issues already in terminal states and deletes their
-  matching workspaces before polling starts. Fetch or deletion failures are logged as warnings and
-  do not block host startup.
 - Each poll tick reconciles currently running issues before fetching new candidates. Terminal
   tracker transitions cancel the active worker and trigger workspace cleanup; non-active,
   non-terminal transitions cancel the worker without deleting the workspace.
@@ -269,25 +265,19 @@ Notes:
 - The application layer keeps dispatch staging in a bounded in-memory channel and enforces
   `agent.max_concurrent_agents` with a semaphore-backed execution gate. Status consumers can read
   queued and running work directly from the in-memory dispatch snapshot.
-- Each worker run can execute multiple Codex turns on the same live app-server thread and
-  workspace, up to `agent.max_turns`. The first turn uses the workflow prompt template; later turns
-  send continuation guidance only after Symphony refreshes the issue state from the tracker.
-- After a normal worker exit, Symphony schedules a one-second continuation retry. Failed worker
-  exits are retried with exponential backoff starting at 10 seconds, capped by
-  `agent.max_retry_backoff_ms`, and are surfaced through the in-memory retry snapshot.
+- Successful worker exits schedule a one-second continuation retry. Failed worker exits are retried
+  with exponential backoff starting at 10 seconds, capped by `agent.max_retry_backoff_ms`, and are
+  surfaced through the in-memory retry snapshot.
 - Operator-facing health now degrades when the last successful poll becomes stale or when
   `WORKFLOW.md` reload fails and Symphony falls back to the last-known-good workflow snapshot.
 - Active sessions are tracked in-memory by normalized issue id, can expose live session metadata,
   and support targeted reconciliation cancellation without affecting unrelated executions.
 - Worker attempts now create a validated workspace, optionally run `hooks.before_run`, launch Codex
-  through a shell appropriate to the host OS, send the `initialize` / `thread/start` handshake,
-  execute one or more `turn/start` requests on the same live thread when continuation is warranted,
-  then run `hooks.after_run` as a best-effort cleanup step after the attempt ends.
+  through a shell appropriate to the host OS, send the `initialize` / `thread/start` /
+  `turn/start` handshake, then run `hooks.after_run` as a best-effort cleanup step after the
+  attempt ends.
 - Hook/process timeouts and Codex read/turn timeouts are recorded separately from ordinary
   cancellations, surface as `TimedOut` run attempts, and still enter the standard retry backoff.
-- `codex.stall_timeout_ms` is enforced by reconciliation using the last observed Codex activity
-  timestamp, or the worker start time if no Codex event has been seen yet. Stalled runs are marked
-  `Stalled`, canceled, and requeued through the normal retry path without workspace cleanup.
 - `codex.turn_sandbox_policy` is treated as a structured object and is forwarded to Codex in the
   `turn/start` payload instead of being flattened into a string.
 - Per-issue workspaces live under `workspace.root` using a sanitized issue identifier that keeps
@@ -305,18 +295,10 @@ Notes:
 
 ## Web dashboard
 
-When enabled via service configuration, Symphony exposes:
+When enabled via service configuration (for example `server.port`), Symphony exposes:
 
 - Dashboard at `/`
 - JSON APIs under `/api/v1/*`
-
-Host binding notes:
-
-- `server.port` in `WORKFLOW.md` enables host binding when the dashboard/API surface is shipped.
-- CLI `--port` overrides `server.port`.
-- `0` requests an ephemeral local port, which is useful for development and tests.
-- The current host binds loopback (`127.0.0.1`) by default when an explicit port is selected.
-- Listener changes are restart-applied; runtime workflow reload does not hot-rebind HTTP ports.
 
 The dashboard shell is implemented as an interactive-server Blazor page. It is an operator-facing
 surface only: if dashboard rendering fails, the orchestrator and JSON API continue running.
@@ -324,7 +306,8 @@ surface only: if dashboard rendering fails, the orchestrator and JSON API contin
   can see live execution, next retry ETA, and concise outcome/error summaries without reading raw logs.
 - The session explorer is now available at `/sessions`, with All / Active / Ended filters and deep
   links into `/sessions/{identifier}` for individual run inspection, breadcrumb navigation, a
-  chronological activity timeline, and an Activity / Details tab split for live metadata.
+  chronological activity timeline, richer structured payload highlights, and an Activity / Details
+  tab split for live metadata while keeping the raw payload expandable for inspection.
 - The dashboard health cards now expose last poll tick, last successful poll age, and workflow load
   status so degraded polling or workflow-reload fallback is visible without reading logs.
 - The sidebar footer includes a theme switcher for the built-in `dark-yellow`, `dark-blue`, and
