@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Symphony.Abstractions.Trackers;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Symphony.Abstractions.Processes;
@@ -65,6 +66,7 @@ public sealed class CodexQueuedIssueWorkerTests
             var worker = new CodexQueuedIssueWorker(
                 new StaticWorkflowOptionsProvider(CreateWorkflowOptions()),
                 new StaticWorkflowDefinitionProvider(workflowDefinition),
+                new RecordingIssueTrackerClient(),
                 new StaticWorkspaceManager(new Workspace(workspacePath, "GH-21", createdNow: true)),
                 processRunner,
                 new WorkflowPromptRenderer(),
@@ -126,6 +128,7 @@ public sealed class CodexQueuedIssueWorkerTests
             var worker = new CodexQueuedIssueWorker(
                 new StaticWorkflowOptionsProvider(CreateWorkflowOptions()),
                 new StaticWorkflowDefinitionProvider(new WorkflowDefinition(null, "Prompt")),
+                new RecordingIssueTrackerClient(),
                 new StaticWorkspaceManager(new Workspace(workspacePath, "GH-21", createdNow: true)),
                 new RecordingProcessRunner(exitCodes: [1]),
                 new WorkflowPromptRenderer(),
@@ -154,6 +157,7 @@ public sealed class CodexQueuedIssueWorkerTests
             var worker = new CodexQueuedIssueWorker(
                 new StaticWorkflowOptionsProvider(CreateWorkflowOptions()),
                 new StaticWorkflowDefinitionProvider(new WorkflowDefinition(null, "Prompt")),
+                new RecordingIssueTrackerClient(),
                 new StaticWorkspaceManager(new Workspace(workspacePath, "GH-21", createdNow: true)),
                 new RecordingProcessRunner(
                     exceptionFactory: request => new ProcessRunTimedOutException(
@@ -185,6 +189,7 @@ public sealed class CodexQueuedIssueWorkerTests
             var worker = new CodexQueuedIssueWorker(
                 new StaticWorkflowOptionsProvider(CreateWorkflowOptions(beforeRun: null, afterRun: null, readTimeoutMs: 50)),
                 new StaticWorkflowDefinitionProvider(new WorkflowDefinition(null, "Prompt")),
+                new RecordingIssueTrackerClient(),
                 new StaticWorkspaceManager(new Workspace(workspacePath, "GH-21", createdNow: true)),
                 new RecordingProcessRunner(),
                 new WorkflowPromptRenderer(),
@@ -201,10 +206,163 @@ public sealed class CodexQueuedIssueWorkerTests
         }
     }
 
+    [Fact]
+    public async Task ExecuteAsync_reuses_same_thread_for_multiple_turns_until_max_turns()
+    {
+        var workspacePath = Path.Combine(Path.GetTempPath(), "symphony-runner-tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(workspacePath);
+
+        try
+        {
+            var workflowDefinition = new WorkflowDefinition(
+                config: null,
+                promptTemplate: """
+                    Issue {{ issue.identifier }}
+                    {% if attempt %}
+                    Attempt {{ attempt }}
+                    {% endif %}
+                    """);
+            var turnCounter = 0;
+            var sessionFactory = new TestCodexProcessSessionFactory(
+                async (line, session) =>
+                {
+                    using var document = JsonDocument.Parse(line);
+                    var root = document.RootElement;
+                    var method = root.TryGetProperty("method", out var methodElement)
+                        ? methodElement.GetString()
+                        : null;
+
+                    if (method == "initialize")
+                    {
+                        session.EnqueueStdout(new { id = 1, result = new { } });
+                    }
+                    else if (method == "thread/start")
+                    {
+                        session.EnqueueStdout(new { id = 2, result = new { thread = new { id = "thread-abc" } } });
+                    }
+                    else if (method == "turn/start")
+                    {
+                        turnCounter++;
+                        session.EnqueueStdout(new { id = turnCounter + 2, result = new { turn = new { id = $"turn-{turnCounter}" } } });
+                        session.EnqueueStdout(new { method = "turn/completed", @params = new { message = $"done-{turnCounter}" } });
+                    }
+
+                    await Task.CompletedTask;
+                });
+            var client = new CodexAppServerClient(sessionFactory, TimeProvider.System, NullLogger<CodexAppServerClient>.Instance);
+            var processRunner = new RecordingProcessRunner();
+            var issueTrackerClient = new RecordingIssueTrackerClient(
+            [
+                CreateIssue(state: "Open"),
+                CreateIssue(state: "Open")
+            ]);
+            var worker = new CodexQueuedIssueWorker(
+                new StaticWorkflowOptionsProvider(CreateWorkflowOptions(maxTurns: 2)),
+                new StaticWorkflowDefinitionProvider(workflowDefinition),
+                issueTrackerClient,
+                new StaticWorkspaceManager(new Workspace(workspacePath, "GH-21", createdNow: true)),
+                processRunner,
+                new WorkflowPromptRenderer(),
+                client,
+                NullLogger<CodexQueuedIssueWorker>.Instance);
+            using var testContext = CreateContext(attempt: 3);
+
+            await worker.ExecuteAsync(testContext.Context);
+
+            Assert.Equal(2, issueTrackerClient.Requests.Count);
+            Assert.All(issueTrackerClient.Requests, request => Assert.Equal(new[] { "21" }, request));
+
+            Assert.NotNull(sessionFactory.Session);
+            var turnStartLines = sessionFactory.Session!.SentLines
+                .Where(line => line.Contains("\"method\":\"turn/start\"", StringComparison.Ordinal))
+                .ToArray();
+            Assert.Equal(2, turnStartLines.Length);
+
+            using var firstTurnDocument = JsonDocument.Parse(turnStartLines[0]);
+            using var secondTurnDocument = JsonDocument.Parse(turnStartLines[1]);
+            var firstTurnParams = firstTurnDocument.RootElement.GetProperty("params");
+            var secondTurnParams = secondTurnDocument.RootElement.GetProperty("params");
+
+            Assert.Equal("thread-abc", firstTurnParams.GetProperty("threadId").GetString());
+            Assert.Equal("thread-abc", secondTurnParams.GetProperty("threadId").GetString());
+            Assert.Contains("Issue #21", firstTurnParams.GetProperty("input")[0].GetProperty("text").GetString(), StringComparison.Ordinal);
+            Assert.Contains("Attempt 3", firstTurnParams.GetProperty("input")[0].GetProperty("text").GetString(), StringComparison.Ordinal);
+            Assert.Contains("continuation turn 2 of 2", secondTurnParams.GetProperty("input")[0].GetProperty("text").GetString(), StringComparison.OrdinalIgnoreCase);
+
+            var latestSession = Assert.IsType<LiveSessionMetadata>(testContext.Context.Session);
+            Assert.Equal("thread-abc-turn-2", latestSession.SessionId);
+            Assert.Equal(2, latestSession.TurnCount);
+            Assert.Equal("turn_completed", latestSession.LastCodexEvent);
+        }
+        finally
+        {
+            Directory.Delete(workspacePath, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_stops_after_tracker_marks_issue_inactive()
+    {
+        var workspacePath = Path.Combine(Path.GetTempPath(), "symphony-runner-tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(workspacePath);
+
+        try
+        {
+            var sessionFactory = new TestCodexProcessSessionFactory(
+                async (line, session) =>
+                {
+                    using var document = JsonDocument.Parse(line);
+                    var root = document.RootElement;
+                    var method = root.TryGetProperty("method", out var methodElement)
+                        ? methodElement.GetString()
+                        : null;
+
+                    if (method == "initialize")
+                    {
+                        session.EnqueueStdout(new { id = 1, result = new { } });
+                    }
+                    else if (method == "thread/start")
+                    {
+                        session.EnqueueStdout(new { id = 2, result = new { thread = new { id = "thread-abc" } } });
+                    }
+                    else if (method == "turn/start")
+                    {
+                        session.EnqueueStdout(new { id = 3, result = new { turn = new { id = "turn-1" } } });
+                        session.EnqueueStdout(new { method = "turn/completed", @params = new { message = "done-1" } });
+                    }
+
+                    await Task.CompletedTask;
+                });
+            var worker = new CodexQueuedIssueWorker(
+                new StaticWorkflowOptionsProvider(CreateWorkflowOptions(beforeRun: null, afterRun: null, maxTurns: 3)),
+                new StaticWorkflowDefinitionProvider(new WorkflowDefinition(null, "Prompt")),
+                new RecordingIssueTrackerClient([CreateIssue(state: "Done")]),
+                new StaticWorkspaceManager(new Workspace(workspacePath, "GH-21", createdNow: true)),
+                new RecordingProcessRunner(),
+                new WorkflowPromptRenderer(),
+                new CodexAppServerClient(sessionFactory, TimeProvider.System, NullLogger<CodexAppServerClient>.Instance),
+                NullLogger<CodexQueuedIssueWorker>.Instance);
+            using var testContext = CreateContext(attempt: null);
+
+            await worker.ExecuteAsync(testContext.Context);
+
+            Assert.NotNull(sessionFactory.Session);
+            Assert.Single(
+                sessionFactory.Session!.SentLines,
+                line => line.Contains("\"method\":\"turn/start\"", StringComparison.Ordinal));
+            Assert.Equal("Done", testContext.Context.Issue.State);
+        }
+        finally
+        {
+            Directory.Delete(workspacePath, recursive: true);
+        }
+    }
+
     private static WorkflowServiceOptions CreateWorkflowOptions(
         string? beforeRun = "Write-Host before",
         string? afterRun = "Write-Host after",
-        int readTimeoutMs = 5_000)
+        int readTimeoutMs = 5_000,
+        int maxTurns = 1)
     {
         return new WorkflowServiceOptions(
             new WorkflowTrackerOptions(
@@ -225,7 +383,7 @@ public sealed class CodexQueuedIssueWorkerTests
                 afterRun,
                 null,
                 5_000),
-            new WorkflowAgentOptions(1, 20, 300_000, new Dictionary<string, int>(StringComparer.Ordinal)),
+            new WorkflowAgentOptions(1, maxTurns, 300_000, new Dictionary<string, int>(StringComparer.Ordinal)),
             new WorkflowCodexOptions(
                 "codex app-server",
                 "never",
@@ -241,12 +399,7 @@ public sealed class CodexQueuedIssueWorkerTests
 
     private static TestExecutionContext CreateContext(int? attempt)
     {
-        var issue = new Issue(
-            id: "21",
-            identifier: "#21",
-            title: "Implement Codex agent runner",
-            description: "Implement the runner",
-            state: "Todo");
+        var issue = CreateIssue();
         var logger = new RecordingLogger<ActiveSessionRegistry>();
         var registry = new ActiveSessionRegistry(TimeProvider.System, logger);
         var trackedSession = registry.BeginSession(issue, attempt, CancellationToken.None);
@@ -255,6 +408,16 @@ public sealed class CodexQueuedIssueWorkerTests
             trackedSession,
             trackedSession.CreateExecutionContext(),
             logger);
+    }
+
+    private static Issue CreateIssue(string state = "Todo")
+    {
+        return new Issue(
+            id: "21",
+            identifier: "#21",
+            title: "Implement Codex agent runner",
+            description: "Implement the runner",
+            state: state);
     }
 
     private sealed class StaticWorkflowOptionsProvider(WorkflowServiceOptions options) : IWorkflowOptionsProvider
@@ -283,6 +446,41 @@ public sealed class CodexQueuedIssueWorkerTests
         public Task DeleteForIssueAsync(string issueIdentifier, CancellationToken cancellationToken = default)
         {
             return Task.CompletedTask;
+        }
+    }
+
+    private sealed class RecordingIssueTrackerClient(IEnumerable<Issue>? refreshedIssues = null) : IIssueTrackerClient
+    {
+        private readonly Queue<IReadOnlyList<Issue>> _refreshedIssues = new(
+            (refreshedIssues ?? [])
+            .Select(issue => (IReadOnlyList<Issue>)new[] { issue }));
+
+        public List<IReadOnlyList<string>> Requests { get; } = [];
+
+        public Task<IReadOnlyList<Issue>> FetchCandidateIssuesAsync(CancellationToken cancellationToken = default)
+        {
+            throw new NotSupportedException();
+        }
+
+        public Task<IReadOnlyList<Issue>> FetchIssuesByStatesAsync(
+            IReadOnlyCollection<string> stateNames,
+            CancellationToken cancellationToken = default)
+        {
+            throw new NotSupportedException();
+        }
+
+        public Task<IReadOnlyList<Issue>> FetchIssueStatesByIdsAsync(
+            IReadOnlyCollection<string> issueIds,
+            CancellationToken cancellationToken = default)
+        {
+            Requests.Add(issueIds.ToArray());
+
+            if (_refreshedIssues.Count == 0)
+            {
+                return Task.FromResult<IReadOnlyList<Issue>>([]);
+            }
+
+            return Task.FromResult(_refreshedIssues.Dequeue());
         }
     }
 

@@ -118,6 +118,21 @@ public sealed class ActiveSessionRegistry(
             session.SessionId);
     }
 
+    private void UpdateIssue(ActiveSessionEntry entry, Issue issue)
+    {
+        lock (_stateLock)
+        {
+            entry.Issue = issue;
+        }
+
+        logger.LogInformation(
+            "session_tracking refreshed issue_id={issue_id} issue_identifier={issue_identifier} session_id={session_id} issue_state={issue_state} outcome=completed",
+            issue.Id,
+            issue.Identifier,
+            entry.Session?.SessionId,
+            issue.State);
+    }
+
     private void UpdateStatus(ActiveSessionEntry entry, RunAttemptStatus status, string? error)
     {
         lock (_stateLock)
@@ -237,6 +252,7 @@ public sealed class ActiveSessionRegistry(
                 _entry.Issue,
                 _entry.Attempt,
                 CancellationToken,
+                issue => _owner.UpdateIssue(_entry, issue),
                 session => _owner.UpdateSession(_entry, session),
                 (status, error) => _owner.UpdateStatus(_entry, status, error));
         }

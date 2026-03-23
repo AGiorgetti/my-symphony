@@ -21,7 +21,8 @@ internal sealed class CodexAppServerClient(
         QueuedIssueExecutionContext context,
         string workspacePath,
         string prompt,
-        WorkflowCodexOptions codexOptions)
+        WorkflowCodexOptions codexOptions,
+        Func<int, CancellationToken, Task<string?>>? continuationPromptFactory = null)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentException.ThrowIfNullOrWhiteSpace(workspacePath);
@@ -97,47 +98,38 @@ internal sealed class CodexAppServerClient(
                 .ConfigureAwait(false);
             var threadId = ExtractRequiredNestedId(threadStartResponse, "thread");
 
-            await SendAsync(
-                    session,
-                    new
-                    {
-                        id = 3,
-                        method = "turn/start",
-                        @params = new
-                        {
-                            threadId,
-                            input = new object[]
-                            {
-                                new
-                                {
-                                    type = "text",
-                                    text = prompt
-                                }
-                            },
-                            cwd = workspacePath,
-                            title = $"{context.Issue.Identifier}: {context.Issue.Title}",
-                            approvalPolicy = codexOptions.ApprovalPolicy,
-                            sandboxPolicy = codexOptions.TurnSandboxPolicy
-                        }
-                    },
-                    context.CancellationToken)
-                .ConfigureAwait(false);
-            var turnStartResponse = await ReadResponseAsync(session, 3, codexOptions.ReadTimeoutMs, context, startupDiagnostics, context.CancellationToken)
-                .ConfigureAwait(false);
-            var turnId = ExtractRequiredNestedId(turnStartResponse, "turn");
+            var title = $"{context.Issue.Identifier}: {context.Issue.Title}";
+            var completedTurnCount = 0;
+            var nextPrompt = prompt;
 
-            context.UpdateSession(
-                new LiveSessionMetadata(
-                    threadId,
-                    turnId,
-                    codexAppServerPid: session.ProcessId?.ToString(CultureInfo.InvariantCulture),
-                    lastCodexEvent: "session_started",
-                    lastCodexTimestamp: timeProvider.GetUtcNow(),
-                    lastCodexMessage: "turn_started",
-                    turnCount: 1));
-            context.UpdateStatus(RunAttemptStatus.StreamingTurn);
+            while (true)
+            {
+                completedTurnCount++;
+                var turnStartRequestId = completedTurnCount + 2;
+                await RunTurnAsync(
+                        session,
+                        context,
+                        workspacePath,
+                        title,
+                        threadId,
+                        nextPrompt,
+                        turnStartRequestId,
+                        completedTurnCount,
+                        codexOptions,
+                        startupDiagnostics)
+                    .ConfigureAwait(false);
 
-            await ReadTurnStreamAsync(session, context, codexOptions.TurnTimeoutMs).ConfigureAwait(false);
+                if (continuationPromptFactory is null)
+                {
+                    break;
+                }
+
+                nextPrompt = await continuationPromptFactory(completedTurnCount, context.CancellationToken).ConfigureAwait(false);
+                if (string.IsNullOrWhiteSpace(nextPrompt))
+                {
+                    break;
+                }
+            }
 
             logger.LogInformation(
                 "codex_launch completed issue_id={issue_id} issue_identifier={issue_identifier} session_id={session_id} outcome=completed",
@@ -166,6 +158,67 @@ internal sealed class CodexAppServerClient(
             {
             }
         }
+    }
+
+    private async Task RunTurnAsync(
+        ICodexProcessSession session,
+        QueuedIssueExecutionContext context,
+        string workspacePath,
+        string title,
+        string threadId,
+        string prompt,
+        int requestId,
+        int turnNumber,
+        WorkflowCodexOptions codexOptions,
+        ConcurrentQueue<string> startupDiagnostics)
+    {
+        await SendAsync(
+                session,
+                new
+                {
+                    id = requestId,
+                    method = "turn/start",
+                    @params = new
+                    {
+                        threadId,
+                        input = new object[]
+                        {
+                            new
+                            {
+                                type = "text",
+                                text = prompt
+                            }
+                        },
+                        cwd = workspacePath,
+                        title,
+                        approvalPolicy = codexOptions.ApprovalPolicy,
+                        sandboxPolicy = codexOptions.TurnSandboxPolicy
+                    }
+                },
+                context.CancellationToken)
+            .ConfigureAwait(false);
+        var turnStartResponse = await ReadResponseAsync(
+                session,
+                requestId,
+                codexOptions.ReadTimeoutMs,
+                context,
+                startupDiagnostics,
+                context.CancellationToken)
+            .ConfigureAwait(false);
+        var turnId = ExtractRequiredNestedId(turnStartResponse, "turn");
+
+        context.UpdateSession(
+            new LiveSessionMetadata(
+                threadId,
+                turnId,
+                codexAppServerPid: session.ProcessId?.ToString(CultureInfo.InvariantCulture),
+                lastCodexEvent: turnNumber == 1 ? "session_started" : "turn_started",
+                lastCodexTimestamp: timeProvider.GetUtcNow(),
+                lastCodexMessage: "turn_started",
+                turnCount: turnNumber));
+        context.UpdateStatus(RunAttemptStatus.StreamingTurn);
+
+        await ReadTurnStreamAsync(session, context, codexOptions.TurnTimeoutMs).ConfigureAwait(false);
     }
 
     private async Task<JsonElement> ReadResponseAsync(

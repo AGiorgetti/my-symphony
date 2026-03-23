@@ -73,6 +73,27 @@ public sealed class ActiveSessionRegistryTests
     }
 
     [Fact]
+    public void ExecutionContext_updates_issue_snapshot_when_tracker_state_changes()
+    {
+        var registry = CreateRegistry();
+        using var trackedSession = registry.BeginSession(CreateIssue("ABC-9", "ABC-9"), attempt: 1, CancellationToken.None);
+        var context = trackedSession.CreateExecutionContext();
+
+        context.UpdateIssue(
+            new Issue(
+                "ABC-9",
+                "ABC-9",
+                "Issue ABC-9",
+                description: "Active session registry test",
+                state: "Done",
+                createdAt: DateTimeOffset.UtcNow));
+
+        var snapshot = Assert.Single(registry.GetActiveSessions());
+
+        Assert.Equal("Done", snapshot.IssueState);
+    }
+
+    [Fact]
     public void ExecutionContext_logs_issue_and_session_fields_with_spec_names()
     {
         var logger = new TestLogger<ActiveSessionRegistry>();

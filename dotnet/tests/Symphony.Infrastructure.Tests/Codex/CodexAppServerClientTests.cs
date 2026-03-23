@@ -136,6 +136,78 @@ public sealed class CodexAppServerClientTests
     }
 
     [Fact]
+    public async Task RunAsync_reuses_same_thread_for_continuation_turns_and_updates_turn_count()
+    {
+        var turnCounter = 0;
+        var sessionFactory = new TestCodexProcessSessionFactory(
+            async (line, session) =>
+            {
+                using var document = JsonDocument.Parse(line);
+                var root = document.RootElement;
+                var method = root.TryGetProperty("method", out var methodElement)
+                    ? methodElement.GetString()
+                    : null;
+
+                if (method == "initialize")
+                {
+                    session.EnqueueStdout(new { id = 1, result = new { } });
+                    return;
+                }
+
+                if (method == "thread/start")
+                {
+                    session.EnqueueStdout(new { id = 2, result = new { thread = new { id = "thread-123" } } });
+                    return;
+                }
+
+                if (method == "turn/start")
+                {
+                    turnCounter++;
+                    session.EnqueueStdout(new { id = turnCounter + 2, result = new { turn = new { id = $"turn-{turnCounter}" } } });
+                    session.EnqueueStdout(new { method = "turn/completed", @params = new { message = $"done-{turnCounter}" } });
+                }
+
+                await Task.CompletedTask;
+            });
+        var client = new CodexAppServerClient(sessionFactory, TimeProvider.System, NullLogger<CodexAppServerClient>.Instance);
+        using var testContext = CreateContext();
+
+        await client.RunAsync(
+            testContext.Context,
+            Path.GetTempPath(),
+            "Prompt body",
+            CreateCodexOptions(),
+            (completedTurnCount, cancellationToken) => Task.FromResult<string?>(
+                completedTurnCount == 1 ? "Continuation prompt" : null));
+
+        Assert.NotNull(sessionFactory.Session);
+        var turnStartLines = sessionFactory.Session!.SentLines
+            .Where(line => line.Contains("\"method\":\"turn/start\"", StringComparison.Ordinal))
+            .ToArray();
+        Assert.Equal(2, turnStartLines.Length);
+
+        using var firstTurnDocument = JsonDocument.Parse(turnStartLines[0]);
+        using var secondTurnDocument = JsonDocument.Parse(turnStartLines[1]);
+        var firstTurnRoot = firstTurnDocument.RootElement;
+        var secondTurnRoot = secondTurnDocument.RootElement;
+        var firstTurnParams = firstTurnRoot.GetProperty("params");
+        var secondTurnParams = secondTurnRoot.GetProperty("params");
+
+        Assert.Equal(3, firstTurnRoot.GetProperty("id").GetInt32());
+        Assert.Equal(4, secondTurnRoot.GetProperty("id").GetInt32());
+        Assert.Equal("thread-123", firstTurnParams.GetProperty("threadId").GetString());
+        Assert.Equal("thread-123", secondTurnParams.GetProperty("threadId").GetString());
+        Assert.Equal("Prompt body", firstTurnParams.GetProperty("input")[0].GetProperty("text").GetString());
+        Assert.Equal("Continuation prompt", secondTurnParams.GetProperty("input")[0].GetProperty("text").GetString());
+
+        var latestSession = Assert.IsType<LiveSessionMetadata>(testContext.Context.Session);
+        Assert.Equal("thread-123-turn-2", latestSession.SessionId);
+        Assert.Equal(2, latestSession.TurnCount);
+        Assert.Equal("turn_completed", latestSession.LastCodexEvent);
+        Assert.Equal("done-2", latestSession.LastCodexMessage);
+    }
+
+    [Fact]
     public async Task RunAsync_includes_stderr_when_process_exits_during_startup_handshake()
     {
         var sessionFactory = new TestCodexProcessSessionFactory(

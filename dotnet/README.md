@@ -265,17 +265,20 @@ Notes:
 - The application layer keeps dispatch staging in a bounded in-memory channel and enforces
   `agent.max_concurrent_agents` with a semaphore-backed execution gate. Status consumers can read
   queued and running work directly from the in-memory dispatch snapshot.
-- Successful worker exits schedule a one-second continuation retry. Failed worker exits are retried
-  with exponential backoff starting at 10 seconds, capped by `agent.max_retry_backoff_ms`, and are
-  surfaced through the in-memory retry snapshot.
+- Each worker run can execute multiple Codex turns on the same live app-server thread and
+  workspace, up to `agent.max_turns`. The first turn uses the workflow prompt template; later turns
+  send continuation guidance only after Symphony refreshes the issue state from the tracker.
+- After a normal worker exit, Symphony schedules a one-second continuation retry. Failed worker
+  exits are retried with exponential backoff starting at 10 seconds, capped by
+  `agent.max_retry_backoff_ms`, and are surfaced through the in-memory retry snapshot.
 - Operator-facing health now degrades when the last successful poll becomes stale or when
   `WORKFLOW.md` reload fails and Symphony falls back to the last-known-good workflow snapshot.
 - Active sessions are tracked in-memory by normalized issue id, can expose live session metadata,
   and support targeted reconciliation cancellation without affecting unrelated executions.
 - Worker attempts now create a validated workspace, optionally run `hooks.before_run`, launch Codex
-  through a shell appropriate to the host OS, send the `initialize` / `thread/start` /
-  `turn/start` handshake, then run `hooks.after_run` as a best-effort cleanup step after the
-  attempt ends.
+  through a shell appropriate to the host OS, send the `initialize` / `thread/start` handshake,
+  execute one or more `turn/start` requests on the same live thread when continuation is warranted,
+  then run `hooks.after_run` as a best-effort cleanup step after the attempt ends.
 - Hook/process timeouts and Codex read/turn timeouts are recorded separately from ordinary
   cancellations, surface as `TimedOut` run attempts, and still enter the standard retry backoff.
 - `codex.turn_sandbox_policy` is treated as a structured object and is forwarded to Codex in the
