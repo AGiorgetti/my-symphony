@@ -68,7 +68,7 @@ public sealed class SessionDetailComponentTests : BunitContext
                             SessionActivityKind.AgentMessage,
                             new DateTimeOffset(2026, 3, 20, 9, 0, 30, TimeSpan.Zero),
                             "2026-03-20 09:00:30 UTC",
-                            "turn_started",
+                            "Turn started",
                             "Agent message",
                             Badge.BadgeColor.Info,
                             null,
@@ -115,7 +115,7 @@ public sealed class SessionDetailComponentTests : BunitContext
             },
             item =>
             {
-                Assert.Equal("turn_started", item.Instance.Title);
+                Assert.Equal("Turn started", item.Instance.Title);
                 Assert.Equal(TimelineColor.Blue, item.Instance.Color);
             },
             item =>
@@ -140,7 +140,7 @@ public sealed class SessionDetailComponentTests : BunitContext
                             "turn_completed",
                             "Agent message",
                             Badge.BadgeColor.Info,
-                            "Event: turn_completed | Files: Program.cs | Input: 12",
+                            "Structured event payload",
                             [
                                 new SessionActivityFactModel("Event", "turn_completed"),
                                 new SessionActivityFactModel("Files", "Program.cs"),
@@ -158,9 +158,13 @@ public sealed class SessionDetailComponentTests : BunitContext
 
         var details = cut.Find("[data-testid=\"session-detail-timeline-detail\"]");
 
-        Assert.Contains("Event: turn_completed", cut.Markup, StringComparison.Ordinal);
-        Assert.Contains("Files: Program.cs", cut.Markup, StringComparison.Ordinal);
+        Assert.Contains("Event", cut.Markup, StringComparison.Ordinal);
+        Assert.Contains("turn_completed", cut.Markup, StringComparison.Ordinal);
+        Assert.Contains("Files", cut.Markup, StringComparison.Ordinal);
+        Assert.Contains("Program.cs", cut.Markup, StringComparison.Ordinal);
         Assert.Contains("View structured payload", cut.Markup, StringComparison.Ordinal);
+        Assert.Contains("Highlights", cut.Markup, StringComparison.Ordinal);
+        Assert.Contains("Raw payload", cut.Markup, StringComparison.Ordinal);
         Assert.Contains("\"turn_completed\"", details.TextContent, StringComparison.Ordinal);
     }
 

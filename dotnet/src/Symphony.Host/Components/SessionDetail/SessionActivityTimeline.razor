@@ -71,7 +71,7 @@
 
                             @if (!string.IsNullOrWhiteSpace(entry.Summary))
                             {
-                                <p class="text-sm leading-6 text-[color:var(--color-on-surface-secondary)]">
+                                <p class="text-sm font-medium leading-6 text-[color:var(--color-on-surface-secondary)]">
                                     @entry.Summary
                                 </p>
                             }
@@ -88,10 +88,28 @@
 
                                         @if (entry.IsStructuredDetail)
                                         {
+                                            @if (entry.Facts.Count > 0)
+                                            {
+                                                <div class="mt-3 space-y-2">
+                                                    <p class="text-xs font-bold uppercase tracking-[0.2em] text-[color:var(--color-on-surface-secondary)]">Highlights</p>
+                                                    <div class="flex flex-wrap gap-2">
+                                                        @foreach (var fact in entry.Facts)
+                                                        {
+                                                            <span class="inline-flex items-center gap-1 rounded-full border border-[var(--shell-border)]/80 bg-[color:var(--color-surface-raised)] px-2.5 py-1 text-xs text-[color:var(--color-on-surface-secondary)]">
+                                                                <span class="font-semibold text-[color:var(--color-on-surface-primary)]">@fact.Label:</span>
+                                                                <span>@fact.Value</span>
+                                                            </span>
+                                                        }
+                                                    </div>
+                                                </div>
+                                            }
+
+                                            <p class="mt-3 text-xs font-bold uppercase tracking-[0.2em] text-[color:var(--color-on-surface-secondary)]">Raw payload</p>
                                             <pre class="mt-3 overflow-x-auto whitespace-pre-wrap break-all rounded-lg bg-[color:var(--color-surface-raised)] p-3 text-xs leading-6 text-[color:var(--color-on-surface-secondary)]">@entry.Detail</pre>
                                         }
                                         else
                                         {
+                                            <p class="mt-3 text-xs font-bold uppercase tracking-[0.2em] text-[color:var(--color-on-surface-secondary)]">Detail</p>
                                             <p class="mt-3 whitespace-pre-wrap break-words text-sm leading-6 text-[color:var(--color-on-surface-secondary)]">@entry.Detail</p>
                                         }
                                     </details>

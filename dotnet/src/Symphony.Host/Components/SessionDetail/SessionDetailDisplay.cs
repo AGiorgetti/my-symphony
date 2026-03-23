@@ -106,12 +106,13 @@ internal static class SessionDetailDisplay
     {
         var detail = NormalizeDetail(entry.Detail);
         var detailPresentation = BuildDetailPresentation(detail);
+        var displayTitle = HumanizeTitle(entry.Title);
 
         return new SessionActivityTimelineEntryModel(
             entry.Kind,
             entry.Timestamp,
             FormatTimestamp(entry.Timestamp),
-            entry.Title,
+            displayTitle,
             GetKindLabel(entry.Kind),
             GetKindBadgeColor(entry.Kind),
             detailPresentation.Summary,
@@ -155,6 +156,34 @@ internal static class SessionDetailDisplay
         return string.IsNullOrWhiteSpace(detail) ? null : detail.Trim();
     }
 
+    private static string HumanizeTitle(string title)
+    {
+        if (string.IsNullOrWhiteSpace(title))
+        {
+            return "Activity";
+        }
+
+        var trimmed = title.Trim();
+        if (!trimmed.Contains('_', StringComparison.Ordinal) && !trimmed.Contains('-', StringComparison.Ordinal))
+        {
+            return trimmed;
+        }
+
+        var normalized = trimmed.Replace('_', ' ').Replace('-', ' ');
+        var parts = normalized.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (parts.Length == 0)
+        {
+            return trimmed;
+        }
+
+        for (var index = 0; index < parts.Length; index++)
+        {
+            parts[index] = char.ToUpperInvariant(parts[index][0]) + parts[index][1..].ToLowerInvariant();
+        }
+
+        return string.Join(' ', parts);
+    }
+
     private static ActivityDetailPresentation BuildDetailPresentation(string? detail)
     {
         if (string.IsNullOrWhiteSpace(detail))
@@ -165,7 +194,7 @@ internal static class SessionDetailDisplay
         if (TryFormatJson(detail, out var formattedJson, out var structuredSummary, out var facts))
         {
             return new ActivityDetailPresentation(
-                structuredSummary,
+                "Structured event payload",
                 facts,
                 formattedJson,
                 structuredSummary,

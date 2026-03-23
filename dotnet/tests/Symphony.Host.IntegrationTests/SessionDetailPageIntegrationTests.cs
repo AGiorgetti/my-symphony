@@ -50,7 +50,7 @@ public sealed class SessionDetailPageIntegrationTests
         Assert.Contains("data-testid=\"session-detail-latest-attention-alert\"", html, StringComparison.Ordinal);
 
         var startedIndex = html.IndexOf("Session started", StringComparison.Ordinal);
-        var messageIndex = html.IndexOf("turn_completed", StringComparison.Ordinal);
+        var messageIndex = html.IndexOf("Turn Completed", StringComparison.Ordinal);
         var warningIndex = html.LastIndexOf("Queued for retry", StringComparison.Ordinal);
 
         Assert.True(startedIndex >= 0);
@@ -107,11 +107,16 @@ public sealed class SessionDetailPageIntegrationTests
         var html = await response.Content.ReadAsStringAsync();
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Contains("Event: turn_completed", html, StringComparison.Ordinal);
-        Assert.Contains("Files: Program.cs", html, StringComparison.Ordinal);
-        Assert.Contains("Input: 12", html, StringComparison.Ordinal);
+        Assert.Contains("Event", html, StringComparison.Ordinal);
+        Assert.Contains("turn_completed", html, StringComparison.Ordinal);
+        Assert.Contains("Files", html, StringComparison.Ordinal);
+        Assert.Contains("Program.cs", html, StringComparison.Ordinal);
+        Assert.Contains("Input", html, StringComparison.Ordinal);
+        Assert.Contains("12", html, StringComparison.Ordinal);
         Assert.Contains("data-testid=\"session-detail-timeline-detail\"", html, StringComparison.Ordinal);
         Assert.Contains("View structured payload", html, StringComparison.Ordinal);
+        Assert.Contains("Highlights", html, StringComparison.Ordinal);
+        Assert.Contains("Raw payload", html, StringComparison.Ordinal);
         Assert.Contains("&quot;event&quot;: &quot;turn_completed&quot;", html, StringComparison.Ordinal);
     }
 
