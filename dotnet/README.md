@@ -267,6 +267,9 @@ Notes:
 - The execution marker stays tracker-agnostic after normalization: GitHub labels, Linear labels,
   and Azure DevOps tags all flow into the same lowercase `issue.labels` list before dispatch
   eligibility is evaluated.
+- If a Codex run creates a follow-up issue or sub-issue through tracker tools while
+  `agent.require_exec_marker` is enabled, that new issue should also be created with
+  `agent.exec_marker` in the tracker's native label/tag field.
 - The host defaults to JSON console logging through `Microsoft.Extensions.Logging`. Adjust
   `Logging:Console:FormatterOptions` in `appsettings*.json` to tune timestamps and scope emission.
 - The application layer keeps dispatch staging in a bounded in-memory channel and enforces

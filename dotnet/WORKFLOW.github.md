@@ -81,6 +81,8 @@ The agent should be able to talk to GitHub via `gh` CLI and/or a configured GitH
   file a separate GitHub issue instead of expanding scope. The follow-up issue
   must include a clear title, description, and acceptance criteria, be labeled
   `backlog`, and be linked from the current issue.
+- If `agent.require_exec_marker` is `true`, any GitHub issue or sub-issue you create must also
+  include the `agent.exec_marker` label.
 - Move status only when the matching quality bar is met.
 - Operate autonomously end-to-end unless blocked by missing requirements, secrets, or permissions.
 - Use the blocked-access escape hatch only for true external blockers (missing required tools/auth) after exhausting documented fallbacks.

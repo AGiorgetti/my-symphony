@@ -1343,6 +1343,9 @@ Symphony does not require first-class tracker write APIs in the orchestrator.
 - The service remains a scheduler/runner and tracker reader.
 - Workflow-specific success often means "reached the next handoff state" (for example
   `Human Review`) rather than tracker terminal state `Done`.
+- When `agent.require_exec_marker` is `true`, any follow-up issue or sub-issue created by the
+  coding agent must also be created with the normalized `agent.exec_marker` so it remains eligible
+  for future agent scheduling.
 - If the optional `linear_graphql` client-side tool extension is implemented, it is still part of
   the agent toolchain rather than orchestrator business logic.
 

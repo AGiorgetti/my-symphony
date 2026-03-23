@@ -89,6 +89,8 @@ present, stop and ask the user to configure Azure DevOps access.
   must include a clear title, description, and acceptance criteria, be placed in
   `Backlog`, be assigned to the same project as the current issue, be linked as
   related, and use blocked-by linkage when it depends on the current issue.
+- If `agent.require_exec_marker` is `true`, any Azure DevOps work item or child work item you
+  create must also include the `agent.exec_marker` tag.
 - Move status only when the matching quality bar is met.
 - Operate autonomously end-to-end unless blocked by missing requirements, secrets, or permissions.
 - Use the blocked-access escape hatch only for true external blockers (missing required tools/auth) after exhausting documented fallbacks.
