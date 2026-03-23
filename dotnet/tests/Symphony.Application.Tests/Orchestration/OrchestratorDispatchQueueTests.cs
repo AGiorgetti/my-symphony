@@ -406,6 +406,39 @@ public sealed class OrchestratorDispatchQueueTests
         Assert.Equal("worker timed out", retry.Error);
     }
 
+    [Fact]
+    public async Task DispatchWorker_records_stalled_attempts_and_schedules_retry()
+    {
+        var timeProvider = TimeProvider.System;
+        var queue = CreateQueue(maxConcurrentAgents: 1);
+        var registry = CreateRegistry(timeProvider);
+        var attemptHistoryTracker = new AttemptHistoryTracker();
+        var worker = new BlockingQueuedIssueWorker();
+        var hostedService = CreateHostedService(queue, registry, attemptHistoryTracker, worker, timeProvider);
+
+        await hostedService.StartAsync(CancellationToken.None);
+        await queue.QueueAsync(CreateIssue("1", "ABC-1"));
+        await worker.ExecutionStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+        var stalled = await registry.TryMarkStalledAndWaitAsync(
+            "1",
+            "Session stalled after 360000 ms of Codex inactivity.",
+            CancellationToken.None);
+
+        await WaitForConditionAsync(() => queue.GetSnapshot().Retrying.Count == 1, TimeSpan.FromSeconds(2));
+        await WaitForConditionAsync(() => attemptHistoryTracker.GetRecentAttempts().Count == 1, TimeSpan.FromSeconds(2));
+        await hostedService.StopAsync(CancellationToken.None);
+
+        Assert.True(stalled);
+
+        var attempt = Assert.Single(attemptHistoryTracker.GetRecentAttempts());
+        var retry = Assert.Single(queue.GetSnapshot().Retrying);
+
+        Assert.Equal("Stalled", attempt.Outcome);
+        Assert.Equal("Session stalled after 360000 ms of Codex inactivity.", attempt.Error);
+        Assert.Equal("Session stalled after 360000 ms of Codex inactivity.", retry.Error);
+    }
+
     private static OrchestratorDispatchQueue CreateQueue(int maxConcurrentAgents)
     {
         return CreateQueue(new StaticWorkflowOptionsProvider(CreateWorkflowOptions(maxConcurrentAgents)));

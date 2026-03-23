@@ -87,6 +87,31 @@ public sealed class DispatchWorkerBackgroundService(
             await dispatchQueue.ScheduleContinuationRetryAsync(workItem, cancellationToken).ConfigureAwait(false);
             executionLease.PreserveClaimForRetry();
         }
+        catch (OperationCanceledException) when (activeSession.WasCanceledByStall)
+        {
+            var stallError = activeSession.CancellationError
+                ?? "Execution canceled after reconciliation detected a stalled Codex session.";
+            var stallException = new IssueExecutionStalledException(stallError);
+
+            executionContext.UpdateStatus(RunAttemptStatus.Stalled, stallError);
+            attemptHistoryTracker.Record(
+                workItem.Issue.Id,
+                workItem.Issue.Identifier,
+                workItem.Attempt,
+                "Stalled",
+                attemptStartedAt,
+                timeProvider.GetUtcNow(),
+                stallError,
+                executionContext.SessionId);
+            logger.LogWarning(
+                stallException,
+                "dispatch_execution stalled issue_id={issue_id} issue_identifier={issue_identifier} session_id={session_id} reason=stall outcome=stalled",
+                workItem.Issue.Id,
+                workItem.Issue.Identifier,
+                executionContext.SessionId);
+            await dispatchQueue.ScheduleFailureRetryAsync(workItem, stallException, cancellationToken).ConfigureAwait(false);
+            executionLease.PreserveClaimForRetry();
+        }
         catch (OperationCanceledException) when (activeSession.WasCanceledByReconciliation)
         {
             const string cancellationError = "Execution canceled after reconciliation marked the issue ineligible.";

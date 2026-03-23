@@ -281,6 +281,9 @@ Notes:
   then run `hooks.after_run` as a best-effort cleanup step after the attempt ends.
 - Hook/process timeouts and Codex read/turn timeouts are recorded separately from ordinary
   cancellations, surface as `TimedOut` run attempts, and still enter the standard retry backoff.
+- `codex.stall_timeout_ms` is enforced by reconciliation using the last observed Codex activity
+  timestamp, or the worker start time if no Codex event has been seen yet. Stalled runs are marked
+  `Stalled`, canceled, and requeued through the normal retry path without workspace cleanup.
 - `codex.turn_sandbox_policy` is treated as a structured object and is forwarded to Codex in the
   `turn/start` payload instead of being flattened into a string.
 - Per-issue workspaces live under `workspace.root` using a sanitized issue identifier that keeps
