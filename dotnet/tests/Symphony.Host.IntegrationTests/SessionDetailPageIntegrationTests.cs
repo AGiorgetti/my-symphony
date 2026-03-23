@@ -177,12 +177,12 @@ public sealed class SessionDetailPageIntegrationTests
                 "turn_completed",
                 """
                 {
-                  \"event\": \"turn_completed\",
-                  \"files\": [
-                    \"Program.cs\"
+                  "event": "turn_completed",
+                  "files": [
+                    "Program.cs"
                   ],
-                  \"stats\": {
-                    \"input\": 12
+                  "stats": {
+                    "input": 12
                   }
                 }
                 """));
