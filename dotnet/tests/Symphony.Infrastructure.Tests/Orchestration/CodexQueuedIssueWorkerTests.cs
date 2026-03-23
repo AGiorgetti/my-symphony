@@ -383,7 +383,7 @@ public sealed class CodexQueuedIssueWorkerTests
                 afterRun,
                 null,
                 5_000),
-            new WorkflowAgentOptions(1, maxTurns, 300_000, new Dictionary<string, int>(StringComparer.Ordinal)),
+            new WorkflowAgentOptions(1, maxTurns, 300_000, new Dictionary<string, int>(StringComparer.Ordinal), false, "exec:agent"),
             new WorkflowCodexOptions(
                 "codex app-server",
                 "never",

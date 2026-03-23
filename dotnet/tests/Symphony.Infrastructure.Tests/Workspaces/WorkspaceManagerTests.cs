@@ -213,7 +213,7 @@ public sealed class WorkspaceManagerTests
             new WorkflowPollingOptions(30_000),
             new WorkflowWorkspaceOptions(workspaceRoot),
             new WorkflowHookOptions(afterCreate, null, null, beforeRemove, hookTimeoutMs),
-            new WorkflowAgentOptions(1, 20, 300_000, new Dictionary<string, int>(StringComparer.Ordinal)),
+            new WorkflowAgentOptions(1, 20, 300_000, new Dictionary<string, int>(StringComparer.Ordinal), false, "exec:agent"),
             new WorkflowCodexOptions("codex app-server", null, null, null, 3_600_000, 5_000, 300_000));
     }
 

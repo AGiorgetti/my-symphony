@@ -237,6 +237,8 @@ hooks:
 agent:
   max_concurrent_agents: 10
   max_turns: 20
+  require_exec_marker: false
+  exec_marker: "exec:agent"
 codex:
   command: codex app-server
 ---
@@ -260,6 +262,11 @@ Notes:
 - Candidate dispatch order follows `SPEC.md`: priority `1..4` first, then oldest `created_at`,
   then issue identifier. `Todo` issues with non-terminal blockers are skipped, and
   `agent.max_concurrent_agents_by_state` can further limit dispatch by normalized tracker state.
+- When `agent.require_exec_marker` is `true`, Symphony schedules only issues whose normalized
+  `issue.labels` include `agent.exec_marker`. The default marker is `exec:agent`.
+- The execution marker stays tracker-agnostic after normalization: GitHub labels, Linear labels,
+  and Azure DevOps tags all flow into the same lowercase `issue.labels` list before dispatch
+  eligibility is evaluated.
 - The host defaults to JSON console logging through `Microsoft.Extensions.Logging`. Adjust
   `Logging:Console:FormatterOptions` in `appsettings*.json` to tune timestamps and scope emission.
 - The application layer keeps dispatch staging in a bounded in-memory channel and enforces

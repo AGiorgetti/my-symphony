@@ -35,6 +35,8 @@ public sealed class WorkflowOptionsResolverTests
         Assert.Equal(20, options.Agent.MaxTurns);
         Assert.Equal(300_000, options.Agent.MaxRetryBackoffMs);
         Assert.Empty(options.Agent.MaxConcurrentAgentsByState);
+        Assert.False(options.Agent.RequireExecMarker);
+        Assert.Equal("exec:agent", options.Agent.ExecMarker);
         Assert.Equal("codex app-server", options.Codex.Command);
         Assert.Equal(3_600_000, options.Codex.TurnTimeoutMs);
         Assert.Equal(5_000, options.Codex.ReadTimeoutMs);
@@ -75,7 +77,9 @@ public sealed class WorkflowOptionsResolverTests
                     ["In Progress"] = 3,
                     ["Ignored"] = 0,
                     ["Broken"] = "oops"
-                }
+                },
+                ["require_exec_marker"] = "true",
+                ["exec_marker"] = " Exec:Custom "
             },
             ["codex"] = new Dictionary<string, object?>
             {
@@ -99,6 +103,8 @@ public sealed class WorkflowOptionsResolverTests
         Assert.Equal(3, options.Agent.MaxConcurrentAgentsByState["in progress"]);
         Assert.DoesNotContain("ignored", options.Agent.MaxConcurrentAgentsByState.Keys);
         Assert.DoesNotContain("broken", options.Agent.MaxConcurrentAgentsByState.Keys);
+        Assert.True(options.Agent.RequireExecMarker);
+        Assert.Equal("exec:custom", options.Agent.ExecMarker);
         Assert.Equal("on-request", options.Codex.ApprovalPolicy);
         Assert.Equal("workspace-write", options.Codex.ThreadSandbox);
         Assert.NotNull(options.Codex.TurnSandboxPolicy);
@@ -187,6 +193,29 @@ public sealed class WorkflowOptionsResolverTests
 
         Assert.Equal("invalid_workflow_config", exception.Code);
         Assert.Contains("agent.max_concurrent_agents", exception.Message);
+    }
+
+    [Fact]
+    public void Resolve_rejects_empty_exec_marker_when_explicitly_configured()
+    {
+        var definition = CreateDefinition(new Dictionary<string, object?>
+        {
+            ["tracker"] = new Dictionary<string, object?>
+            {
+                ["kind"] = "github",
+                ["api_key"] = "gh-token",
+                ["repository"] = "AGiorgetti/my-symphony"
+            },
+            ["agent"] = new Dictionary<string, object?>
+            {
+                ["exec_marker"] = "   "
+            }
+        });
+
+        var exception = Assert.Throws<WorkflowConfigurationException>(() => _resolver.Resolve(definition));
+
+        Assert.Equal("invalid_workflow_config", exception.Code);
+        Assert.Contains("agent.exec_marker", exception.Message);
     }
 
     private static WorkflowDefinition CreateDefinition(IReadOnlyDictionary<string, object?> config)

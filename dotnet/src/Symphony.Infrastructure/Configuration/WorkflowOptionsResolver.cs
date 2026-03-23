@@ -14,6 +14,7 @@ public sealed class WorkflowOptionsResolver : IWorkflowOptionsResolver
     private const int DefaultMaxConcurrentAgents = 10;
     private const int DefaultMaxTurns = 20;
     private const int DefaultMaxRetryBackoffMs = 300_000;
+    private const string DefaultExecMarker = "exec:agent";
     private const int DefaultTurnTimeoutMs = 3_600_000;
     private const int DefaultReadTimeoutMs = 5_000;
     private const int DefaultStallTimeoutMs = 300_000;
@@ -50,7 +51,9 @@ public sealed class WorkflowOptionsResolver : IWorkflowOptionsResolver
                 GetPositiveIntOrDefault(agentSection, "max_concurrent_agents", DefaultMaxConcurrentAgents, "agent.max_concurrent_agents"),
                 GetPositiveIntOrDefault(agentSection, "max_turns", DefaultMaxTurns, "agent.max_turns"),
                 GetPositiveIntOrDefault(agentSection, "max_retry_backoff_ms", DefaultMaxRetryBackoffMs, "agent.max_retry_backoff_ms"),
-                GetStateCapMap(agentSection, "max_concurrent_agents_by_state", "agent.max_concurrent_agents_by_state")),
+                GetStateCapMap(agentSection, "max_concurrent_agents_by_state", "agent.max_concurrent_agents_by_state"),
+                GetBoolOrDefault(agentSection, "require_exec_marker", defaultValue: false, "agent.require_exec_marker"),
+                GetRequiredNormalizedLabelOrDefault(agentSection, "exec_marker", DefaultExecMarker, "agent.exec_marker")),
             ResolveCodexOptions(codexSection));
     }
 
@@ -318,6 +321,25 @@ public sealed class WorkflowOptionsResolver : IWorkflowOptionsResolver
         return GetOptionalInt(section, key, fieldName) ?? defaultValue;
     }
 
+    private static bool GetBoolOrDefault(
+        IReadOnlyDictionary<string, object?> section,
+        string key,
+        bool defaultValue,
+        string fieldName)
+    {
+        if (!section.TryGetValue(key, out var value) || value is null)
+        {
+            return defaultValue;
+        }
+
+        if (!TryGetBool(value, out var parsedValue))
+        {
+            throw InvalidConfiguration($"{fieldName} must be a boolean.");
+        }
+
+        return parsedValue;
+    }
+
     private static int? GetOptionalInt(
         IReadOnlyDictionary<string, object?> section,
         string key,
@@ -373,6 +395,22 @@ public sealed class WorkflowOptionsResolver : IWorkflowOptionsResolver
         }
     }
 
+    private static bool TryGetBool(object? value, out bool parsedValue)
+    {
+        switch (value)
+        {
+            case bool boolValue:
+                parsedValue = boolValue;
+                return true;
+            case string stringValue when bool.TryParse(stringValue.Trim(), out var stringBool):
+                parsedValue = stringBool;
+                return true;
+            default:
+                parsedValue = default;
+                return false;
+        }
+    }
+
     private static string? GetOptionalString(
         IReadOnlyDictionary<string, object?> section,
         string key,
@@ -390,6 +428,34 @@ public sealed class WorkflowOptionsResolver : IWorkflowOptionsResolver
 
         var trimmed = stringValue.Trim();
         return trimmed.Length == 0 ? null : trimmed;
+    }
+
+    private static string GetRequiredNormalizedLabelOrDefault(
+        IReadOnlyDictionary<string, object?> section,
+        string key,
+        string defaultValue,
+        string fieldName)
+    {
+        if (section.TryGetValue(key, out var rawValue)
+            && rawValue is string rawString
+            && string.IsNullOrWhiteSpace(rawString))
+        {
+            throw InvalidConfiguration($"{fieldName} must not be empty.");
+        }
+
+        var value = GetOptionalString(section, key, fieldName);
+        if (value is null)
+        {
+            return defaultValue;
+        }
+
+        var normalized = value.Trim().ToLowerInvariant();
+        if (normalized.Length == 0)
+        {
+            throw InvalidConfiguration($"{fieldName} must not be empty.");
+        }
+
+        return normalized;
     }
 
     private static IReadOnlyDictionary<string, object?>? GetOptionalObjectMap(

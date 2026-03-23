@@ -215,6 +215,75 @@ public sealed class OrchestratorPollingIterationHandlerTests
         trackedSession.Dispose();
     }
 
+    [Fact]
+    public async Task ExecuteAsync_requires_exec_marker_when_enabled()
+    {
+        var workflowOptions = CreateWorkflowOptions(requireExecMarker: true);
+        var trackerClient = new StubIssueTrackerClient
+        {
+            CandidateIssues =
+            [
+                CreateIssue("1", "ABC-1", state: "Todo", labels: ["exec:agent"]),
+                CreateIssue("2", "ABC-2", state: "Todo")
+            ]
+        };
+        var logger = new TestLogger<OrchestratorPollingIterationHandler>();
+        var queue = CreateQueue(workflowOptions);
+        var handler = CreateHandler(trackerClient, queue, CreateRegistry(), new StubWorkspaceManager(), logger: logger);
+
+        await handler.ExecuteAsync(workflowOptions, CancellationToken.None);
+
+        var queuedIssues = queue.GetSnapshot().Queued.Select(snapshot => snapshot.IssueIdentifier).ToArray();
+        Assert.Equal(["ABC-1"], queuedIssues);
+
+        var skippedEntry = Assert.Single(
+            logger.Entries,
+            entry => entry.Message.Contains("poll_dispatch skipped", StringComparison.Ordinal)
+                && Equals(entry.State["issue_identifier"], "ABC-2"));
+        Assert.Equal("missing_exec_marker", Assert.IsType<string>(skippedEntry.State["reason"]));
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_ignores_exec_marker_when_requirement_disabled()
+    {
+        var workflowOptions = CreateWorkflowOptions(requireExecMarker: false);
+        var trackerClient = new StubIssueTrackerClient
+        {
+            CandidateIssues =
+            [
+                CreateIssue("1", "ABC-1", state: "Todo")
+            ]
+        };
+        var queue = CreateQueue(workflowOptions);
+        var handler = CreateHandler(trackerClient, queue, CreateRegistry(), new StubWorkspaceManager());
+
+        await handler.ExecuteAsync(workflowOptions, CancellationToken.None);
+
+        var queuedIssues = queue.GetSnapshot().Queued.Select(snapshot => snapshot.IssueIdentifier).ToArray();
+        Assert.Equal(["ABC-1"], queuedIssues);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_uses_custom_exec_marker()
+    {
+        var workflowOptions = CreateWorkflowOptions(requireExecMarker: true, execMarker: "run:codex");
+        var trackerClient = new StubIssueTrackerClient
+        {
+            CandidateIssues =
+            [
+                CreateIssue("1", "ABC-1", state: "Todo", labels: ["exec:agent"]),
+                CreateIssue("2", "ABC-2", state: "Todo", labels: ["run:codex"])
+            ]
+        };
+        var queue = CreateQueue(workflowOptions);
+        var handler = CreateHandler(trackerClient, queue, CreateRegistry(), new StubWorkspaceManager());
+
+        await handler.ExecuteAsync(workflowOptions, CancellationToken.None);
+
+        var queuedIssues = queue.GetSnapshot().Queued.Select(snapshot => snapshot.IssueIdentifier).ToArray();
+        Assert.Equal(["ABC-2"], queuedIssues);
+    }
+
     private static OrchestratorPollingIterationHandler CreateHandler(
         IIssueTrackerClient issueTrackerClient,
         OrchestratorDispatchQueue dispatchQueue,
@@ -253,7 +322,9 @@ public sealed class OrchestratorPollingIterationHandlerTests
     private static WorkflowServiceOptions CreateWorkflowOptions(
         int maxConcurrentAgents = 4,
         IReadOnlyDictionary<string, int>? maxConcurrentAgentsByState = null,
-        int stallTimeoutMs = 300_000)
+        int stallTimeoutMs = 300_000,
+        bool requireExecMarker = false,
+        string execMarker = "exec:agent")
     {
         return new WorkflowServiceOptions(
             new WorkflowTrackerOptions(
@@ -278,7 +349,9 @@ public sealed class OrchestratorPollingIterationHandlerTests
                 maxConcurrentAgents,
                 20,
                 300_000,
-                maxConcurrentAgentsByState ?? new Dictionary<string, int>(StringComparer.Ordinal)),
+                maxConcurrentAgentsByState ?? new Dictionary<string, int>(StringComparer.Ordinal),
+                requireExecMarker,
+                execMarker),
             new WorkflowCodexOptions(
                 "codex app-server",
                 null,
@@ -295,7 +368,8 @@ public sealed class OrchestratorPollingIterationHandlerTests
         string state,
         int? priority = 1,
         DateTimeOffset? createdAt = null,
-        IReadOnlyList<IssueBlocker>? blockedBy = null)
+        IReadOnlyList<IssueBlocker>? blockedBy = null,
+        IReadOnlyList<string>? labels = null)
     {
         return new Issue(
             id,
@@ -304,6 +378,7 @@ public sealed class OrchestratorPollingIterationHandlerTests
             description: "Polling iteration handler test",
             priority: priority,
             state: state,
+            labels: labels,
             blockedBy: blockedBy,
             createdAt: createdAt ?? new DateTimeOffset(2026, 3, 16, 12, 0, 0, TimeSpan.Zero));
     }
