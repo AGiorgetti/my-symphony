@@ -26,6 +26,8 @@ hooks:
 agent:
   max_concurrent_agents: 10
   max_turns: 20
+  require_exec_marker: false
+  exec_marker: "exec:agent"
 codex:
   command: codex --config shell_environment_policy.inherit=all --config model_reasoning_effort=xhigh --model gpt-5.3-codex app-server
   approval_policy: never
