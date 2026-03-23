@@ -1,8 +1,10 @@
 using Microsoft.Extensions.Logging;
 using Symphony.Abstractions.Processes;
+using Symphony.Abstractions.Trackers;
 using Symphony.Abstractions.Workspaces;
 using Symphony.Application.Configuration;
 using Symphony.Application.Orchestration;
+using Symphony.Domain.Issues;
 using Symphony.Domain.Runs;
 using Symphony.Domain.Workspaces;
 using Symphony.Infrastructure.Codex;
@@ -14,6 +16,7 @@ namespace Symphony.Infrastructure.Orchestration;
 internal sealed class CodexQueuedIssueWorker(
     IWorkflowOptionsProvider workflowOptionsProvider,
     IWorkflowDefinitionProvider workflowDefinitionProvider,
+    IIssueTrackerClient issueTrackerClient,
     IWorkspaceManager workspaceManager,
     IProcessRunner processRunner,
     WorkflowPromptRenderer workflowPromptRenderer,
@@ -34,6 +37,8 @@ internal sealed class CodexQueuedIssueWorker(
         {
             workspace = await workspaceManager.CreateForIssueAsync(context.Issue.Identifier, context.CancellationToken).ConfigureAwait(false);
             var issueWorkspace = workspace ?? throw new InvalidOperationException("Workspace manager returned null.");
+            var currentIssue = context.Issue;
+            var activeStates = CreateStateSet(workflowOptions.Tracker.ActiveStates);
 
             if (workflowOptions.Hooks.BeforeRun is not null)
             {
@@ -51,10 +56,41 @@ internal sealed class CodexQueuedIssueWorker(
 
             context.UpdateStatus(RunAttemptStatus.BuildingPrompt);
             var workflowDefinition = await workflowDefinitionProvider.GetCurrentDefinitionAsync(context.CancellationToken).ConfigureAwait(false);
-            var prompt = workflowPromptRenderer.Render(workflowDefinition, context.Issue, context.Attempt);
+            var prompt = workflowPromptRenderer.RenderTurn(
+                workflowDefinition,
+                currentIssue,
+                context.Attempt,
+                turnNumber: 1,
+                workflowOptions.Agent.MaxTurns);
 
             context.UpdateStatus(RunAttemptStatus.LaunchingAgentProcess);
-            await codexAppServerClient.RunAsync(context, issueWorkspace.Path, prompt, workflowOptions.Codex).ConfigureAwait(false);
+            await codexAppServerClient.RunAsync(
+                    context,
+                    issueWorkspace.Path,
+                    prompt,
+                    workflowOptions.Codex,
+                    async (completedTurnCount, cancellationToken) =>
+                    {
+                        currentIssue = await RefreshIssueAsync(currentIssue, context, cancellationToken).ConfigureAwait(false);
+                        if (!activeStates.Contains(currentIssue.NormalizedState))
+                        {
+                            return null;
+                        }
+
+                        if (completedTurnCount >= workflowOptions.Agent.MaxTurns)
+                        {
+                            return null;
+                        }
+
+                        context.UpdateStatus(RunAttemptStatus.BuildingPrompt);
+                        return workflowPromptRenderer.RenderTurn(
+                            workflowDefinition,
+                            currentIssue,
+                            context.Attempt,
+                            completedTurnCount + 1,
+                            workflowOptions.Agent.MaxTurns);
+                    })
+                .ConfigureAwait(false);
             context.UpdateStatus(RunAttemptStatus.Finishing);
         }
         catch (ProcessRunTimedOutException exception)
@@ -179,5 +215,30 @@ internal sealed class CodexQueuedIssueWorker(
     private static bool IsTimeout(CodexAgentException exception)
     {
         return exception.Code is "response_timeout" or "turn_timeout";
+    }
+
+    private async Task<Issue> RefreshIssueAsync(
+        Issue currentIssue,
+        QueuedIssueExecutionContext context,
+        CancellationToken cancellationToken)
+    {
+        var refreshedIssues = await issueTrackerClient.FetchIssueStatesByIdsAsync([currentIssue.Id], cancellationToken).ConfigureAwait(false);
+        var refreshedIssue = refreshedIssues.FirstOrDefault(issue => string.Equals(issue.Id, currentIssue.Id, StringComparison.Ordinal))
+            ?? currentIssue;
+
+        if (!ReferenceEquals(refreshedIssue, currentIssue))
+        {
+            context.UpdateIssue(refreshedIssue);
+        }
+
+        return refreshedIssue;
+    }
+
+    private static HashSet<string> CreateStateSet(IEnumerable<string> states)
+    {
+        return states
+            .Where(state => !string.IsNullOrWhiteSpace(state))
+            .Select(state => state.Trim().ToLowerInvariant())
+            .ToHashSet(StringComparer.Ordinal);
     }
 }

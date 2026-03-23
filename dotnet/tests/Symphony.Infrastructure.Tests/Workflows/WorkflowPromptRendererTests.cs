@@ -44,6 +44,26 @@ public sealed class WorkflowPromptRendererTests
     }
 
     [Fact]
+    public void RenderTurn_uses_continuation_guidance_after_first_turn()
+    {
+        var definition = new WorkflowDefinition(
+            config: null,
+            promptTemplate: "Original prompt for {{ issue.identifier }}");
+
+        var result = _renderer.RenderTurn(
+            definition,
+            CreateIssue(),
+            attempt: 2,
+            turnNumber: 2,
+            maxTurns: 5);
+
+        Assert.Contains("existing Codex thread", result, StringComparison.Ordinal);
+        Assert.Contains("#1", result, StringComparison.Ordinal);
+        Assert.Contains("continuation turn 2 of 5", result, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Original prompt", result, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Render_throws_for_unknown_variables()
     {
         var definition = new WorkflowDefinition(

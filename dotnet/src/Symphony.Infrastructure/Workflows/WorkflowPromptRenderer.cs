@@ -9,19 +9,41 @@ namespace Symphony.Infrastructure.Workflows;
 internal sealed class WorkflowPromptRenderer
 {
     private const string DefaultPrompt = "You are working on an issue from Linear.";
+    private const string DefaultContinuationPrompt = """
+        Continue working in the existing Codex thread for issue {{ issue.identifier }}.
+        Do not repeat the original task prompt; use the existing thread history and current workspace state.
+        This is continuation turn {{ turn_number }} of {{ max_turns }} in the current worker session.
+        Inspect what changed, continue from the next best step, and stop only when you are blocked or the issue is no longer active.
+        """;
 
     public string Render(WorkflowDefinition workflowDefinition, Issue issue, int? attempt)
     {
+        return RenderTurn(workflowDefinition, issue, attempt, turnNumber: 1, maxTurns: 1);
+    }
+
+    public string RenderTurn(
+        WorkflowDefinition workflowDefinition,
+        Issue issue,
+        int? attempt,
+        int turnNumber,
+        int maxTurns)
+    {
         ArgumentNullException.ThrowIfNull(workflowDefinition);
         ArgumentNullException.ThrowIfNull(issue);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(turnNumber);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxTurns);
 
-        var template = string.IsNullOrWhiteSpace(workflowDefinition.PromptTemplate)
-            ? DefaultPrompt
-            : workflowDefinition.PromptTemplate;
+        var template = turnNumber == 1
+            ? string.IsNullOrWhiteSpace(workflowDefinition.PromptTemplate)
+                ? DefaultPrompt
+                : workflowDefinition.PromptTemplate
+            : DefaultContinuationPrompt;
         var variables = new Dictionary<string, object?>(StringComparer.Ordinal)
         {
             ["issue"] = BuildIssueModel(issue),
-            ["attempt"] = attempt
+            ["attempt"] = attempt,
+            ["turn_number"] = turnNumber,
+            ["max_turns"] = maxTurns
         };
 
         var tokens = Tokenize(template);
