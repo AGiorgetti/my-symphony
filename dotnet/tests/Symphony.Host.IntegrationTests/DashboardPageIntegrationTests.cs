@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.FileProviders;
 using Symphony.Abstractions.Orchestration;
 using Symphony.Application.Configuration;
 using Symphony.Application.Polling;
@@ -19,6 +20,8 @@ namespace Symphony.Host.IntegrationTests;
 
 public sealed class DashboardPageIntegrationTests
 {
+    private static readonly string HostProjectDirectory = ResolveHostProjectDirectory();
+
     [Fact]
     public async Task Root_page_renders_dashboard_shell()
     {
@@ -55,6 +58,22 @@ public sealed class DashboardPageIntegrationTests
         Assert.Contains("ABC-1", html, StringComparison.Ordinal);
         Assert.Contains("ABC-2", html, StringComparison.Ordinal);
         Assert.Contains("ABC-3", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Root_page_static_stylesheet_is_served()
+    {
+        using var app = await StartDashboardApplicationAsync(
+            new StubRuntimeService(),
+            new StaticDashboardStateService(CreateDashboardSnapshot()));
+        var client = CreateHttpClient(app);
+
+        var response = await client.GetAsync("/app.min.css");
+        var css = await response.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains("text/css", response.Content.Headers.ContentType?.MediaType, StringComparison.Ordinal);
+        Assert.Contains(".dashboard-page", css, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -167,7 +186,11 @@ public sealed class DashboardPageIntegrationTests
                         300_000))));
 
         var app = builder.Build();
-        app.UseStaticFiles();
+        app.UseStaticFiles(
+            new StaticFileOptions
+            {
+                FileProvider = new PhysicalFileProvider(Path.Combine(HostProjectDirectory, "wwwroot"))
+            });
         app.UseAntiforgery();
         app.MapSymphonyApi();
         app.MapRazorComponents<App>()
@@ -175,6 +198,25 @@ public sealed class DashboardPageIntegrationTests
 
         await app.StartAsync();
         return app;
+    }
+
+    private static string ResolveHostProjectDirectory()
+    {
+        var hostProjectDirectory = Path.GetFullPath(
+            Path.Combine(
+                AppContext.BaseDirectory,
+                "..",
+                "..",
+                "..",
+                "..",
+                "..",
+                "src",
+                "Symphony.Host"));
+
+        return Directory.Exists(hostProjectDirectory)
+            ? hostProjectDirectory
+            : throw new DirectoryNotFoundException(
+                $"Unable to locate the Symphony.Host project directory from '{AppContext.BaseDirectory}'.");
     }
 
     private sealed class StubRuntimeService : IOrchestratorRuntimeService
