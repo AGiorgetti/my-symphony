@@ -2,64 +2,71 @@
 @implements IAsyncDisposable
 @using System.Globalization
 @using Symphony.Abstractions.Orchestration
-@using Flowbite.Layout
 @inject IDashboardStateService DashboardStateService
 @inject IOrchestratorControl OrchestratorControl
 @inject IThemeService ThemeService
 
-<div class="min-h-screen bg-transparent text-[var(--color-on-surface-primary)] lg:flex">
-    <div class="hidden lg:block lg:w-64 lg:shrink-0">
-        <Sidebar>
-            @SidebarContent
-        </Sidebar>
-    </div>
+<MudThemeProvider Theme="@CurrentMudTheme" IsDarkMode="@CurrentThemeIsDark" />
+<MudSnackbarProvider />
 
-    @if (!_isSidebarCollapsed)
+<div class="app-shell">
+    <MudPaper Class="app-shell__sidebar app-shell__sidebar--desktop"
+              Square="true"
+              Elevation="0">
+        @SidebarContent
+    </MudPaper>
+
+    @if (_isSidebarOpen)
     {
-        <button class="fixed inset-0 z-30 bg-slate-950/45 lg:hidden"
+        <button class="app-shell__scrim"
                 aria-label="Close menu"
                 @onclick="CloseSidebar">
         </button>
 
-        <div class="fixed inset-y-0 left-0 z-40 w-64 lg:hidden">
-            <Sidebar>
+        <MudPaper Class="app-shell__sidebar app-shell__sidebar--mobile"
+                  Square="true"
+                  Elevation="0">
                 @SidebarContent
-            </Sidebar>
-        </div>
+        </MudPaper>
     }
 
-    <div class="min-h-screen min-w-0 flex-1">
-        <nav class="sticky top-0 z-30 border-b border-[var(--shell-border)] bg-[color:var(--color-surface-overlay)]/95 backdrop-blur">
-            <div class="flex w-full items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
-                <div class="flex items-center gap-3">
-                    <div class="lg:hidden">
-                        <Button OnClick="ToggleSidebarAsync">Menu</Button>
+    <div class="app-shell__content">
+        <nav class="app-topbar">
+            <div class="app-topbar__inner">
+                <div class="app-topbar__leading">
+                    <div class="app-topbar__menu">
+                        <MudButton Variant="Variant.Text"
+                                   Color="Color.Inherit"
+                                   Class="app-topbar__menu-button"
+                                   OnClick="ToggleSidebarAsync">
+                            Menu
+                        </MudButton>
                     </div>
-                    <div>
-                        <p class="text-xs font-bold uppercase tracking-[0.24em] text-[color:var(--color-primary-DEFAULT)]">Symphony</p>
-                        <h1 class="text-lg font-semibold text-[color:var(--color-on-surface-primary)]">Operator Dashboard</h1>
+                    <div class="app-topbar__brand">
+                        <p class="section-kicker">Symphony</p>
+                        <h1 class="app-topbar__title">Operator Dashboard</h1>
                     </div>
                 </div>
 
-                <div class="hidden items-center gap-2 text-sm text-[color:var(--color-on-surface-secondary)] sm:flex">
+                <div class="app-topbar__meta">
                     <span>Live sessions</span>
-                    <span class="inline-flex min-w-8 items-center justify-center rounded-full bg-[color:var(--color-primary-DEFAULT)] px-2 py-1 font-semibold text-slate-950">
+                    <span class="app-topbar__count">
                         @_runningSessionsLabel
                     </span>
                 </div>
             </div>
         </nav>
 
-        <main class="flex min-h-[calc(100vh-4.5rem)] w-full flex-col px-4 py-4 sm:px-6 lg:px-8">
+        <main class="app-shell__main">
             <ErrorBoundary>
                 <ChildContent>
                     @Body
                 </ChildContent>
                 <ErrorContent>
-                    <section class="rounded-[var(--shell-radius-xl)] border border-[var(--shell-border)] bg-[color:var(--color-surface-raised)] p-8 shadow-[var(--shell-shadow)]">
-                        <p class="text-sm font-semibold uppercase tracking-[0.24em] text-[color:var(--color-primary-DEFAULT)]">Symphony</p>
-                        <h2 class="mt-3 text-3xl font-semibold text-[color:var(--color-on-surface-primary)]">Layout content failed to render</h2>
-                        <p class="mt-3 max-w-2xl text-base leading-7 text-[color:var(--color-on-surface-secondary)]">
+                    <section class="page-card app-layout-error">
+                        <p class="section-kicker">Symphony</p>
+                        <h2 class="page-title page-title--secondary">Layout content failed to render</h2>
+                        <p class="page-copy app-layout-error__copy">
                             The page UI hit an error, but the orchestrator and API remain available.
                         </p>
                     </section>
@@ -67,22 +74,24 @@
             </ErrorBoundary>
         </main>
     </div>
-
-    <ToastHost Position="ToastPosition.BottomRight" />
 </div>
 
 @code {
     private PeriodicTimer? _refreshTimer;
     private CancellationTokenSource? _refreshCancellationTokenSource;
     private Task? _refreshLoopTask;
-    private bool _isSidebarCollapsed = true;
+    private bool _isSidebarOpen;
     private string _runningSessionsLabel = "0";
     private OrchestratorControlState _orchestratorState = OrchestratorControlState.Started;
     private string _orchestratorStateLabel = "Started";
     private bool _isUpdatingOrchestratorState;
+    private MudTheme CurrentMudTheme => MudThemeCatalog.GetTheme(ThemeService.CurrentTheme);
+    private bool CurrentThemeIsDark => ThemeService.AvailableThemes.FirstOrDefault(theme =>
+        string.Equals(theme.Key, ThemeService.CurrentTheme, StringComparison.OrdinalIgnoreCase))?.IsDark ?? true;
 
     protected override async Task OnInitializedAsync()
     {
+        ThemeService.OnThemeChanged += HandleThemeChanged;
         await RefreshRunningCountAsync();
 
         _refreshCancellationTokenSource = new CancellationTokenSource();
@@ -102,6 +111,8 @@
 
     public async ValueTask DisposeAsync()
     {
+        ThemeService.OnThemeChanged -= HandleThemeChanged;
+
         if (_refreshCancellationTokenSource is not null)
         {
             await _refreshCancellationTokenSource.CancelAsync();
@@ -126,61 +137,87 @@
 
     private Task ToggleSidebarAsync()
     {
-        _isSidebarCollapsed = !_isSidebarCollapsed;
+        _isSidebarOpen = !_isSidebarOpen;
         return Task.CompletedTask;
     }
 
     private void CloseSidebar()
     {
-        _isSidebarCollapsed = true;
+        _isSidebarOpen = false;
     }
 
     private RenderFragment SidebarContent => @<text>
-        <SidebarLogo Href="/">Symphony</SidebarLogo>
-        <SidebarItemGroup>
-            <SidebarItem Href="/" Icon="@(new HomeIcon())">
-                Dashboard
-            </SidebarItem>
-            <SidebarItem Href="/sessions"
-                         Label="@_runningSessionsLabel"
-                         LabelColorValue="SidebarItem.LabelColor.Primary">
-                Sessions
-            </SidebarItem>
-        </SidebarItemGroup>
+        <div class="sidebar-header">
+            <NavLink href="/"
+                     Match="NavLinkMatch.All"
+                     class="sidebar-title-link">
+                Symphony
+            </NavLink>
+            <p class="sidebar-subtitle">
+                Operator shell
+            </p>
+        </div>
 
-        <div class="mt-auto space-y-4 border-t border-[var(--shell-border)] px-3 pb-4 pt-4">
-            <section class="space-y-3" data-testid="orchestrator-control-panel">
-                <div class="rounded-[var(--shell-radius-lg)] border border-[var(--shell-border)] bg-[color:var(--color-surface-overlay)]/80 p-3">
-                    <p class="text-xs font-bold uppercase tracking-[0.24em] text-[color:var(--color-primary-DEFAULT)]">Orchestrator</p>
-                    <div class="mt-3 space-y-2">
-                        <span class="@GetOrchestratorStateBadgeClasses()" data-testid="orchestrator-control-state">
+        <nav class="sidebar-nav">
+            <NavLink href="/"
+                     Match="NavLinkMatch.All"
+                     class="sidebar-nav-link">
+                Dashboard
+            </NavLink>
+            <NavLink href="/sessions"
+                     class="sidebar-nav-link">
+                <span class="sidebar-nav-link__content">
+                    <span>Sessions</span>
+                    <StatusPill Text="@_runningSessionsLabel" Color="Color.Primary" />
+                </span>
+            </NavLink>
+        </nav>
+
+        <div class="sidebar-footer">
+            <section class="sidebar-section" data-testid="orchestrator-control-panel">
+                <MudPaper Class="sidebar-panel"
+                          Outlined="true"
+                          Elevation="0">
+                    <p class="section-kicker">Orchestrator</p>
+                    <div class="sidebar-panel__content">
+                        <span class="@GetOrchestratorStateBadgeClasses()"
+                              data-testid="orchestrator-control-state">
                             @_orchestratorStateLabel
                         </span>
-                        <p class="text-sm leading-6 text-[color:var(--color-on-surface-secondary)]">
+                        <p class="sidebar-panel__description">
                             @GetOrchestratorDescription()
                         </p>
                     </div>
-                </div>
+                </MudPaper>
 
-                <div class="flex flex-col gap-2">
-                    <button class="@GetOrchestratorActionButtonClasses(_orchestratorState == OrchestratorControlState.Started)"
-                            data-testid="orchestrator-start-button"
-                            disabled="@(_isUpdatingOrchestratorState || _orchestratorState == OrchestratorControlState.Started)"
-                            @onclick="StartOrchestratorAsync">
+                <div class="sidebar-actions">
+                    <MudButton Variant="Variant.Filled"
+                               Color="Color.Success"
+                               Class="sidebar-action sidebar-action--start"
+                               data-testid="orchestrator-start-button"
+                               Disabled="@(_isUpdatingOrchestratorState || _orchestratorState == OrchestratorControlState.Started)"
+                               OnClick="StartOrchestratorAsync">
                         Start
-                    </button>
-                    <button class="@GetOrchestratorActionButtonClasses(_orchestratorState == OrchestratorControlState.Stopped)"
-                            data-testid="orchestrator-stop-button"
-                            disabled="@(_isUpdatingOrchestratorState || _orchestratorState == OrchestratorControlState.Stopped)"
-                            @onclick="StopOrchestratorAsync">
+                    </MudButton>
+                    <MudButton Variant="Variant.Filled"
+                               Color="Color.Error"
+                               Class="sidebar-action sidebar-action--stop"
+                               data-testid="orchestrator-stop-button"
+                               Disabled="@(_isUpdatingOrchestratorState || _orchestratorState == OrchestratorControlState.Stopped)"
+                               OnClick="StopOrchestratorAsync">
                         Stop
-                    </button>
+                    </MudButton>
                 </div>
             </section>
 
             <ThemeSwitcher ThemeService="ThemeService" />
         </div>
     </text>;
+
+    private void HandleThemeChanged()
+    {
+        _ = InvokeAsync(StateHasChanged);
+    }
 
     private async Task RunRefreshLoopAsync(CancellationToken cancellationToken)
     {
@@ -266,17 +303,8 @@
     private string GetOrchestratorStateBadgeClasses()
     {
         return _orchestratorState == OrchestratorControlState.Started
-            ? "inline-flex items-center rounded-full bg-emerald-500/15 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-emerald-300"
-            : "inline-flex items-center rounded-full bg-amber-400/15 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-amber-200";
-    }
-
-    private string GetOrchestratorActionButtonClasses(bool isActiveAction)
-    {
-        var baseClasses = "inline-flex w-full items-center justify-center rounded-xl border px-3 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50";
-
-        return isActiveAction
-            ? $"{baseClasses} border-[color:var(--color-primary-DEFAULT)] bg-[color:var(--color-primary-DEFAULT)] text-slate-950"
-            : $"{baseClasses} border-[var(--shell-border)] bg-[color:var(--color-surface-overlay)] text-[color:var(--color-on-surface-primary)] hover:border-[color:var(--color-primary-DEFAULT)]";
+            ? "control-state-pill control-state-pill--started"
+            : "control-state-pill control-state-pill--stopped";
     }
 
     private string GetOrchestratorDescription()

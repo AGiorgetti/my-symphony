@@ -1,12 +1,12 @@
 using System.Net;
 using System.Net.Http.Json;
-using Flowbite.Services;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.FileProviders;
+using MudBlazor.Services;
 using Symphony.Abstractions.Orchestration;
 using Symphony.Application.Configuration;
 using Symphony.Application.Polling;
@@ -37,9 +37,9 @@ public sealed class DashboardPageIntegrationTests
         Assert.Contains("class=\"dark\"", html, StringComparison.Ordinal);
         Assert.Contains("data-theme=\"dark-yellow\"", html, StringComparison.Ordinal);
         Assert.Contains("href=\"favicon.svg\"", html, StringComparison.Ordinal);
-        Assert.Contains("href=\"app.min.css\"", html, StringComparison.Ordinal);
-        Assert.Contains("href=\"_content/Flowbite/flowbite.min.css\"", html, StringComparison.Ordinal);
-        Assert.Contains("src=\"_content/Flowbite/flowbite.js\"", html, StringComparison.Ordinal);
+        Assert.Contains("href=\"app.css\"", html, StringComparison.Ordinal);
+        Assert.Contains("href=\"_content/MudBlazor/MudBlazor.min.css\"", html, StringComparison.Ordinal);
+        Assert.Contains("src=\"_content/MudBlazor/MudBlazor.min.js\"", html, StringComparison.Ordinal);
         Assert.Contains("data-testid=\"dashboard-summary-grid\"", html, StringComparison.Ordinal);
         Assert.Contains("Service Health", html, StringComparison.Ordinal);
         Assert.Contains("Workflow Config", html, StringComparison.Ordinal);
@@ -68,7 +68,7 @@ public sealed class DashboardPageIntegrationTests
             new StaticDashboardStateService(CreateDashboardSnapshot()));
         var client = CreateHttpClient(app);
 
-        var response = await client.GetAsync("/app.min.css");
+        var response = await client.GetAsync("/app.css");
         var css = await response.Content.ReadAsStringAsync();
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -142,7 +142,7 @@ public sealed class DashboardPageIntegrationTests
         var builder = WebApplication.CreateBuilder();
         builder.WebHost.UseUrls("http://127.0.0.1:0");
         builder.Services.AddRazorComponents().AddInteractiveServerComponents();
-        builder.Services.AddFlowbite();
+        builder.Services.AddMudServices();
         builder.Services.AddSingleton<IOrchestratorRuntimeService>(runtimeService);
         builder.Services.AddSingleton<IOrchestratorControl>(new StubOrchestratorControl());
         builder.Services.AddSingleton<IDashboardStateService>(dashboardStateService);

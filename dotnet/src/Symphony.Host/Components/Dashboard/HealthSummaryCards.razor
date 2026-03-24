@@ -2,66 +2,62 @@
 
 @if (Alerts.Count > 0)
 {
-    <div class="mb-4 space-y-3" data-testid="dashboard-summary-alerts">
+    <div class="summary-alerts" data-testid="dashboard-summary-alerts">
         @foreach (var alert in Alerts)
         {
-            <Alert Color="@alert.Color"
-                   Rounded="true"
-                   WithBorderAccent="true"
-                   TextEmphasis="@alert.TextEmphasis"
-                   Text="@alert.Text" />
+            <MudAlert Severity="@alert.Color"
+                      Variant="Variant.Outlined"
+                      Dense="true">
+                <strong>@alert.TextEmphasis</strong> @alert.Text
+            </MudAlert>
         }
     </div>
 }
 
-<div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4" data-testid="dashboard-summary-grid">
-    <Card Slots="@CardSlots">
-        <p class="text-xs font-bold uppercase tracking-[0.24em] text-[color:var(--color-primary-DEFAULT)]">Service Health</p>
-        <div class="mt-4 flex items-center gap-3">
-            <Badge Color="@DashboardDisplay.GetHealthBadgeColor(Snapshot.ServiceHealth)">@Snapshot.ServiceHealth</Badge>
-            <span class="text-sm text-[color:var(--color-on-surface-secondary)]">@Snapshot.RunningCount running</span>
+<div class="summary-grid" data-testid="dashboard-summary-grid">
+    <MudPaper Class="@CardClass" Outlined="true" Elevation="0">
+        <p class="section-kicker">Service Health</p>
+        <div class="summary-card__status">
+            <StatusPill Text="@Snapshot.ServiceHealth" Color="@DashboardDisplay.GetHealthBadgeColor(Snapshot.ServiceHealth)" />
+            <span class="body-copy body-copy--muted">@Snapshot.RunningCount running</span>
         </div>
-        <p class="text-sm leading-6 text-[color:var(--color-on-surface-secondary)]">@DashboardDisplay.GetHealthMessage(Snapshot)</p>
-    </Card>
+        <p class="section-copy">@DashboardDisplay.GetHealthMessage(Snapshot)</p>
+    </MudPaper>
 
-    <Card Slots="@CardSlots">
-        <p class="text-xs font-bold uppercase tracking-[0.24em] text-[color:var(--color-primary-DEFAULT)]">Orchestrator Mode</p>
-        <h2 class="text-2xl font-semibold text-[color:var(--color-on-surface-primary)]">@Snapshot.OrchestratorMode</h2>
-        <p class="text-sm leading-6 text-[color:var(--color-on-surface-secondary)]">
+    <MudPaper Class="@CardClass" Outlined="true" Elevation="0">
+        <p class="section-kicker">Orchestrator Mode</p>
+        <h2 class="section-title section-title--card">@Snapshot.OrchestratorMode</h2>
+        <p class="section-copy">
             State is tracked in-process and served live for the operator shell.
         </p>
-        <p class="text-sm text-[color:var(--color-on-surface-secondary)]">
+        <p class="body-copy body-copy--muted">
             Retry queue: @Snapshot.RetryingCount queued
         </p>
-    </Card>
+    </MudPaper>
 
-    <Card Slots="@CardSlots">
-        <p class="text-xs font-bold uppercase tracking-[0.24em] text-[color:var(--color-primary-DEFAULT)]">Last Poll Tick</p>
-        <h2 class="text-2xl font-semibold text-[color:var(--color-on-surface-primary)]">
+    <MudPaper Class="@CardClass" Outlined="true" Elevation="0">
+        <p class="section-kicker">Last Poll Tick</p>
+        <h2 class="section-title section-title--card">
             @DashboardDisplay.FormatTimestamp(Snapshot.LastPollTickAt)
         </h2>
-        <p class="text-sm leading-6 text-[color:var(--color-on-surface-secondary)]">@DashboardDisplay.GetPollMessage(Snapshot)</p>
-        <p class="text-sm text-[color:var(--color-on-surface-secondary)]">
+        <p class="section-copy">@DashboardDisplay.GetPollMessage(Snapshot)</p>
+        <p class="body-copy body-copy--muted">
             Runtime: @DashboardDisplay.FormatDuration(Snapshot.SecondsRunning)
         </p>
-    </Card>
+    </MudPaper>
 
-    <Card Slots="@CardSlots">
-        <p class="text-xs font-bold uppercase tracking-[0.24em] text-[color:var(--color-primary-DEFAULT)]">Workflow Config</p>
-        <div class="mt-4 flex items-center gap-3">
-            <Badge Color="@DashboardDisplay.GetWorkflowBadgeColor(Snapshot.WorkflowLoadStatus)">@Snapshot.WorkflowLoadStatus</Badge>
-            <span class="text-sm text-[color:var(--color-on-surface-secondary)]">@Snapshot.TotalTokens tokens</span>
+    <MudPaper Class="@CardClass" Outlined="true" Elevation="0">
+        <p class="section-kicker">Workflow Config</p>
+        <div class="summary-card__status">
+            <StatusPill Text="@Snapshot.WorkflowLoadStatus" Color="@DashboardDisplay.GetWorkflowBadgeColor(Snapshot.WorkflowLoadStatus)" />
+            <span class="body-copy body-copy--muted">@Snapshot.TotalTokens tokens</span>
         </div>
-        <p class="text-sm leading-6 text-[color:var(--color-on-surface-secondary)]">@DashboardDisplay.GetWorkflowMessage(Snapshot)</p>
-    </Card>
+        <p class="section-copy">@DashboardDisplay.GetWorkflowMessage(Snapshot)</p>
+    </MudPaper>
 </div>
 
 @code {
-    private static readonly CardSlots CardSlots = new()
-    {
-        Base = "h-full rounded-[var(--shell-radius-lg)] border border-[var(--shell-border)] bg-[color:var(--color-surface-raised)] shadow-[var(--shell-shadow)]",
-        Body = "flex h-full flex-col gap-3 p-5"
-    };
+    private const string CardClass = "summary-card";
 
     [Parameter]
     [EditorRequired]

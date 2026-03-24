@@ -1,42 +1,43 @@
 @implements IDisposable
 
-<div class="space-y-2" data-testid="theme-switcher">
-    <p class="text-[0.6875rem] font-bold uppercase tracking-[0.24em] text-[color:var(--color-on-surface-secondary)]">
+<div class="theme-switcher" data-testid="theme-switcher">
+    <p class="theme-switcher__label">
         Theme
     </p>
 
-    <Dropdown Placement="DropdownPlacement.Top"
-              Size="DropdownSize.Small"
-              Slots="@_slots">
-        <Label>@CurrentThemeDisplayName</Label>
-        <ChildContent>
-            @foreach (var theme in ThemeService.AvailableThemes)
-            {
-                <DropdownItem OnClick="@(() => SelectThemeAsync(theme.Key))">
-                    <div class="flex items-center justify-between gap-3">
+    <div class="theme-switcher__panel">
+        <MudButton Variant="Variant.Outlined"
+                   FullWidth="true"
+                   Class="theme-switcher__trigger"
+                   OnClick="ToggleMenu">
+            @CurrentThemeDisplayName
+        </MudButton>
+
+        @if (_isMenuOpen)
+        {
+            <div class="theme-switcher__menu">
+                @foreach (var theme in ThemeService.AvailableThemes)
+                {
+                    <button type="button"
+                            class="theme-switcher__item"
+                            @onclick="@(() => SelectThemeAsync(theme.Key))">
                         <span>@theme.DisplayName</span>
                         @if (IsSelected(theme))
                         {
-                            <span class="text-[0.6875rem] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-primary-DEFAULT)]">
+                            <span class="theme-switcher__current">
                                 Current
                             </span>
                         }
-                    </div>
-                </DropdownItem>
-            }
-        </ChildContent>
-    </Dropdown>
+                    </button>
+                }
+            </div>
+        }
+    </div>
 </div>
 
 @code {
-    private static readonly DropdownSlots _slots = new()
-    {
-        Trigger = "flex w-full items-center justify-between rounded-[var(--shell-radius-lg)] border border-[var(--shell-border)] bg-[color:var(--color-surface-overlay)] px-3 py-2 text-sm font-medium text-[color:var(--color-on-surface-primary)] hover:bg-[color:var(--color-surface-raised)] focus:ring-[color:var(--color-primary-DEFAULT)]",
-        Menu = "w-60 rounded-[var(--shell-radius-lg)] border border-[var(--shell-border)] bg-[color:var(--color-surface-raised)] shadow-[var(--shell-shadow)]",
-        Item = "text-[color:var(--color-on-surface-primary)] hover:bg-[color:var(--color-surface-overlay)]"
-    };
-
     private IThemeService? _subscribedThemeService;
+    private bool _isMenuOpen;
 
     [Parameter, EditorRequired]
     public IThemeService ThemeService { get; set; } = default!;
@@ -78,11 +79,17 @@
 
     private Task SelectThemeAsync(string themeKey)
     {
+        _isMenuOpen = false;
         return ThemeService.SetThemeAsync(themeKey);
     }
 
     private void HandleThemeChanged()
     {
         _ = InvokeAsync(StateHasChanged);
+    }
+
+    private void ToggleMenu()
+    {
+        _isMenuOpen = !_isMenuOpen;
     }
 }

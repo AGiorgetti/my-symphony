@@ -1,4 +1,4 @@
-using Flowbite.Services;
+using MudBlazor.Services;
 using Symphony.Application.Orchestration;
 using Symphony.Application.DependencyInjection;
 using Symphony.Host.Api;
@@ -25,7 +25,7 @@ public static class SymphonyHostCompositionExtensions
         builder.Services
             .AddRazorComponents()
             .AddInteractiveServerComponents();
-        builder.Services.AddFlowbite();
+        builder.Services.AddMudServices();
 
         builder.Services
             .AddSymphonyApplication()

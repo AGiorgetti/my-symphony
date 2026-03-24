@@ -1,0 +1,31 @@
+<span class="@ResolveClasses()">
+    @Text
+</span>
+
+@code {
+    [Parameter, EditorRequired]
+    public string Text { get; set; } = string.Empty;
+
+    [Parameter]
+    public Color Color { get; set; } = Color.Default;
+
+    [Parameter]
+    public string? Class { get; set; }
+
+    private string ResolveClasses()
+    {
+        var colorClass = Color switch
+        {
+            Color.Primary => "status-pill--primary",
+            Color.Info => "status-pill--info",
+            Color.Success => "status-pill--success",
+            Color.Warning => "status-pill--warning",
+            Color.Error => "status-pill--error",
+            _ => "status-pill--default"
+        };
+
+        return string.IsNullOrWhiteSpace(Class)
+            ? $"status-pill {colorClass}"
+            : $"status-pill {colorClass} {Class}";
+    }
+}

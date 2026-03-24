@@ -1,8 +1,8 @@
-using Flowbite.Components;
+using MudBlazor;
 
 namespace Symphony.Host.Components.SessionDetail;
 
 public sealed record SessionActivityTimelineAlertModel(
-    AlertColor Color,
+    Severity Color,
     string Emphasis,
     string Message);

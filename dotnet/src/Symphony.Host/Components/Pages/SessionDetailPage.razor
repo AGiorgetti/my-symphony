@@ -6,77 +6,75 @@
 @inject IOrchestratorRuntimeService OrchestratorRuntimeService
 @inject ISessionActivityStore SessionActivityStore
 
-<main class="dashboard-page flex flex-col gap-6">
+<main class="page-shell page-stack">
     <div data-testid="session-detail-breadcrumb">
-        <Breadcrumb>
-            <BreadcrumbItem Href="/">Home</BreadcrumbItem>
-            <BreadcrumbItem Href="/sessions">Sessions</BreadcrumbItem>
-            <BreadcrumbItem>@_requestedIdentifier</BreadcrumbItem>
-        </Breadcrumb>
+        <nav class="page-breadcrumb">
+            <a href="/" class="page-breadcrumb__link">Home</a>
+            <span>/</span>
+            <a href="/sessions" class="page-breadcrumb__link">Sessions</a>
+            <span>/</span>
+            <span class="page-breadcrumb__current">@_requestedIdentifier</span>
+        </nav>
     </div>
 
     @if (_isLoading)
     {
-        <Card Slots="@ShellCardSlots" data-testid="session-detail-skeleton">
-            <Skeleton Variant="SkeletonVariant.Text" Lines="1" Width="w-40" />
-            <Skeleton Variant="SkeletonVariant.Text" Lines="1" Width="w-72" />
-            <Skeleton Variant="SkeletonVariant.Card" Width="w-full" Height="h-80" />
-        </Card>
+        <MudPaper Class="@ShellCardClass" Outlined="true" Elevation="0" data-testid="session-detail-skeleton">
+            <MudSkeleton SkeletonType="SkeletonType.Text" Width="10rem" />
+            <MudSkeleton SkeletonType="SkeletonType.Text" Width="18rem" />
+            <MudSkeleton SkeletonType="SkeletonType.Rectangle" Width="100%" Height="20rem" />
+        </MudPaper>
     }
     else if (_header is null || _timeline is null || _metadata is null)
     {
         <div data-testid="session-detail-not-found">
-            <Alert Color="AlertColor.Warning"
-                   Rounded="true"
-                   WithBorderAccent="true"
-                   TextEmphasis="Session not found:"
-                   Text="@($"No session with identifier '{_requestedIdentifier}' is available in the current application run.")" />
+            <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true">
+                <strong>Session not found:</strong> No session with identifier '@_requestedIdentifier' is available in the current application run.
+            </MudAlert>
         </div>
     }
     else
     {
         @if (!string.IsNullOrWhiteSpace(_refreshErrorMessage))
         {
-            <Alert Color="AlertColor.Warning"
-                   Rounded="true"
-                   WithBorderAccent="true"
-                   TextEmphasis="Refresh warning:"
-                   Text="@_refreshErrorMessage" />
+            <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true">
+                <strong>Refresh warning:</strong> @_refreshErrorMessage
+            </MudAlert>
         }
 
         <SessionHeaderCard Session="_header" />
 
-        <div data-testid="session-detail-tabs">
-            <Tabs Variant="TabVariant.Underline"
-                  ActiveIndex="@_activeTabIndex"
-                  ActiveIndexChanged="@HandleActiveTabChanged">
-                <TabListContent>
-                    <Tab Index="0">Activity</Tab>
-                    <Tab Index="1">Details</Tab>
-                </TabListContent>
-                <TabPanelsContent>
-                    <TabPanel Index="0">
-                        <div data-testid="session-detail-activity-panel">
-                            <SessionActivityTimeline Timeline="_timeline" />
-                        </div>
-                    </TabPanel>
-                    <TabPanel Index="1">
-                        <div data-testid="session-detail-details-panel">
-                            <SessionMetadataPanel Metadata="_metadata" />
-                        </div>
-                    </TabPanel>
-                </TabPanelsContent>
-            </Tabs>
+        <div class="detail-split">
+            <div class="detail-split__primary" data-testid="session-detail-activity-panel">
+                <SessionActivityTimeline Timeline="_timeline" />
+            </div>
+            <div class="detail-split__secondary" data-testid="session-detail-details-panel">
+                <SessionMetadataPanel Metadata="_metadata" />
+            </div>
+        </div>
+
+        <div class="detail-tabs-mobile" data-testid="session-detail-tabs">
+            <MudTabs ActivePanelIndex="@_activeTabIndex"
+                     ActivePanelIndexChanged="@HandleActiveTabChanged"
+                     Rounded="true"
+                     ApplyEffectsToContainer="true">
+                <MudTabPanel Text="Activity">
+                    <div data-testid="session-detail-activity-panel">
+                        <SessionActivityTimeline Timeline="_timeline" />
+                    </div>
+                </MudTabPanel>
+                <MudTabPanel Text="Details">
+                    <div data-testid="session-detail-details-panel">
+                        <SessionMetadataPanel Metadata="_metadata" />
+                    </div>
+                </MudTabPanel>
+            </MudTabs>
         </div>
     }
 </main>
 
 @code {
-    private static readonly CardSlots ShellCardSlots = new()
-    {
-        Base = "rounded-[var(--shell-radius-xl)] border border-[var(--shell-border)] bg-[color:var(--color-surface-raised)] shadow-[var(--shell-shadow)]",
-        Body = "flex flex-col gap-6 p-6"
-    };
+    private const string ShellCardClass = "page-card";
 
     [Parameter]
     public string Identifier { get; set; } = string.Empty;
@@ -219,7 +217,7 @@
         var parsedStatus = SessionDetailDisplay.TryParseStatus(statusText);
         var statusColor = parsedStatus is null
             ? SessionDetailDisplay.GetFallbackStatusColor(statusText, session.IsActive)
-            : Badge.BadgeColor.Primary;
+            : Color.Primary;
 
         return new SessionHeaderDisplayModel(
             session.IssueIdentifier,
@@ -254,7 +252,7 @@
         if (latestWarning is not null && latestError is null)
         {
             latestAttentionAlert = new SessionActivityTimelineAlertModel(
-                AlertColor.Warning,
+                Severity.Warning,
                 "Latest warning:",
                 ComposeAlertMessage(latestWarning));
         }
@@ -269,7 +267,7 @@
         if (!string.IsNullOrWhiteSpace(failureMessage))
         {
             failureAlert = new SessionActivityTimelineAlertModel(
-                AlertColor.Failure,
+                Severity.Error,
                 "Failure detail:",
                 failureMessage);
         }

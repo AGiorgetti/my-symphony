@@ -13,7 +13,7 @@ This directory contains the .NET 10 ASP.NET Core implementation of Symphony: an 
 
 - Runtime configuration is sourced from `WORKFLOW.md` front matter and mapped through typed options.
 - Treat `ARCHITECTURE.md` as the implementation architecture guideline for project structure, DI/composition boundaries, and pluggable adapter patterns.
-- Treat `ARCHITECTURE_UI.md` as the implementation architecture guideline for the operator dashboard UI (Blazor, Flowbite Blazor, theming, session activity store). Always load the Flowbite Blazor AI context (`https://flowbite-blazor.org/llms-ctx.md`) before implementing or updating UI components to get current APIs.
+- Treat `ARCHITECTURE_UI.md` as the implementation architecture guideline for the operator dashboard UI (Blazor, MudBlazor, theming, session activity store). For restart-safe progress tracking during UI migration work, read `MUDBLAZOR_MIGRATION.md` first.
 - Cross-platform is a hard requirement: all host and dashboard UI changes must run on Windows, Linux, and macOS.
 - Keep the implementation aligned with `../SPEC.md` where practical.
   - The implementation may be a superset of the spec.

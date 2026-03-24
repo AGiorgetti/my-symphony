@@ -1,6 +1,6 @@
 using Symphony.Abstractions.Orchestration;
 using System.Globalization;
-using Flowbite.Components;
+using MudBlazor;
 using Symphony.Host.Dashboard;
 
 namespace Symphony.Host.Components.Dashboard;
@@ -38,55 +38,55 @@ internal static class DashboardDisplay
             : $"in {remaining.TotalSeconds:0}s";
     }
 
-    internal static Badge.BadgeColor GetHealthBadgeColor(string serviceHealth)
+    internal static Color GetHealthBadgeColor(string serviceHealth)
     {
         return serviceHealth.ToLowerInvariant() switch
         {
-            "healthy" => Badge.BadgeColor.Success,
-            "degraded" => Badge.BadgeColor.Warning,
-            "paused" => Badge.BadgeColor.Gray,
-            _ => Badge.BadgeColor.Gray
+            "healthy" => Color.Success,
+            "degraded" => Color.Warning,
+            "paused" => Color.Default,
+            _ => Color.Default
         };
     }
 
-    internal static Badge.BadgeColor GetWorkflowBadgeColor(string workflowLoadStatus)
+    internal static Color GetWorkflowBadgeColor(string workflowLoadStatus)
     {
         return workflowLoadStatus switch
         {
-            "Loaded" => Badge.BadgeColor.Success,
-            "ReloadFailedUsingLastKnownGood" => Badge.BadgeColor.Warning,
-            _ => Badge.BadgeColor.Gray
+            "Loaded" => Color.Success,
+            "ReloadFailedUsingLastKnownGood" => Color.Warning,
+            _ => Color.Default
         };
     }
 
-    internal static Badge.BadgeColor GetSessionStateBadgeColor(string state)
+    internal static Color GetSessionStateBadgeColor(string state)
     {
         return state.ToLowerInvariant() switch
         {
-            "in progress" => Badge.BadgeColor.Info,
-            "streaming" => Badge.BadgeColor.Info,
-            "finishing" => Badge.BadgeColor.Info,
-            "retrying" => Badge.BadgeColor.Warning,
-            "succeeded" => Badge.BadgeColor.Success,
-            "failed" => Badge.BadgeColor.Failure,
-            "timedout" => Badge.BadgeColor.Failure,
-            "stalled" => Badge.BadgeColor.Failure,
-            "canceled" => Badge.BadgeColor.Gray,
-            _ => Badge.BadgeColor.Primary
+            "in progress" => Color.Info,
+            "streaming" => Color.Info,
+            "finishing" => Color.Info,
+            "retrying" => Color.Warning,
+            "succeeded" => Color.Success,
+            "failed" => Color.Error,
+            "timedout" => Color.Error,
+            "stalled" => Color.Error,
+            "canceled" => Color.Default,
+            _ => Color.Primary
         };
     }
 
-    internal static Badge.BadgeColor GetOutcomeBadgeColor(string outcome)
+    internal static Color GetOutcomeBadgeColor(string outcome)
     {
         return outcome.ToLowerInvariant() switch
         {
-            "succeeded" => Badge.BadgeColor.Success,
-            "retrying" => Badge.BadgeColor.Warning,
-            "failed" => Badge.BadgeColor.Failure,
-            "timedout" => Badge.BadgeColor.Failure,
-            "stalled" => Badge.BadgeColor.Failure,
-            "canceled" => Badge.BadgeColor.Gray,
-            _ => Badge.BadgeColor.Primary
+            "succeeded" => Color.Success,
+            "retrying" => Color.Warning,
+            "failed" => Color.Error,
+            "timedout" => Color.Error,
+            "stalled" => Color.Error,
+            "canceled" => Color.Default,
+            _ => Color.Primary
         };
     }
 
@@ -165,7 +165,7 @@ internal static class DashboardDisplay
         if (!string.IsNullOrWhiteSpace(snapshot.LastError))
         {
             alerts.Add(new DashboardAlertMessage(
-                AlertColor.Failure,
+                Severity.Error,
                 "Polling failure:",
                 snapshot.LastError));
         }
@@ -173,14 +173,14 @@ internal static class DashboardDisplay
         if (!string.IsNullOrWhiteSpace(snapshot.WorkflowLastError))
         {
             alerts.Add(new DashboardAlertMessage(
-                AlertColor.Warning,
+                Severity.Warning,
                 "Workflow reload warning:",
                 snapshot.WorkflowLastError));
         }
         else if (string.Equals(snapshot.ServiceHealth, "Degraded", StringComparison.Ordinal))
         {
             alerts.Add(new DashboardAlertMessage(
-                AlertColor.Warning,
+                Severity.Warning,
                 "Service health degraded:",
                 GetHealthMessage(snapshot)));
         }
@@ -190,6 +190,6 @@ internal static class DashboardDisplay
 }
 
 internal sealed record DashboardAlertMessage(
-    AlertColor Color,
+    Severity Color,
     string TextEmphasis,
     string Text);

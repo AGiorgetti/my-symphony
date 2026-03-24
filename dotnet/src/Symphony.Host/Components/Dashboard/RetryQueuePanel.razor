@@ -1,37 +1,37 @@
 @using Symphony.Host.Dashboard
 
-<Card Slots="@PanelSlots" data-testid="dashboard-retry-queue">
-    <div class="flex items-start justify-between gap-4">
-        <div>
-            <p class="text-xs font-bold uppercase tracking-[0.24em] text-[color:var(--color-primary-DEFAULT)]">Retry Queue</p>
-            <h2 class="mt-2 text-2xl font-semibold text-[color:var(--color-on-surface-primary)]">Scheduled retries</h2>
-            <p class="mt-2 text-sm leading-6 text-[color:var(--color-on-surface-secondary)]">
+<MudPaper Class="@PanelClass" Outlined="true" Elevation="0" data-testid="dashboard-retry-queue">
+    <div class="panel-header">
+        <div class="panel-header__content">
+            <p class="section-kicker">Retry Queue</p>
+            <h2 class="section-title section-title--panel">Scheduled retries</h2>
+            <p class="section-copy">
                 Continuation and failure retries with their next retry ETA and failure reason.
             </p>
         </div>
-        <Badge Color="Badge.BadgeColor.Warning">@Entries.Count</Badge>
+        <StatusPill Text="@Entries.Count.ToString()" Color="Color.Warning" />
     </div>
 
     @if (Entries.Count == 0)
     {
-        <div class="rounded-[var(--shell-radius-lg)] border border-dashed border-[var(--shell-border)]/80 bg-[color:var(--color-surface-overlay)]/50 p-4">
-            <p class="text-base font-semibold text-[color:var(--color-on-surface-primary)]">Retry queue is empty</p>
-            <p class="mt-2 text-sm leading-6 text-[color:var(--color-on-surface-secondary)]">
+        <div class="empty-state">
+            <p class="empty-state__title">Retry queue is empty</p>
+            <p class="empty-state__copy">
                 Queued continuation and failure retries will appear here when they are scheduled.
             </p>
         </div>
     }
     else
     {
-        <ul class="space-y-4">
+        <ul class="panel-list">
             @foreach (var entry in Entries)
             {
-                <li class="rounded-[var(--shell-radius-lg)] border border-[var(--shell-border)] bg-[color:var(--color-surface-overlay)] p-4">
-                    <div class="flex flex-wrap items-center justify-between gap-3">
-                        <span class="text-base font-semibold text-[color:var(--color-on-surface-primary)]">@entry.IssueIdentifier</span>
-                        <Badge Color="Badge.BadgeColor.Warning">Retry @entry.Attempt</Badge>
+                <li class="panel-item">
+                    <div class="panel-item__header">
+                        <span class="panel-item__title">@entry.IssueIdentifier</span>
+                        <StatusPill Text="@($"Retry {entry.Attempt}")" Color="Color.Warning" />
                     </div>
-                    <div class="mt-3 space-y-2 text-sm text-[color:var(--color-on-surface-secondary)]">
+                    <div class="panel-item__meta">
                         <p>ETA @DashboardDisplay.FormatRetryEta(entry.DueAt, GeneratedAt) · due @DashboardDisplay.FormatTimestamp(entry.DueAt)</p>
                         @if (!string.IsNullOrWhiteSpace(entry.Error))
                         {
@@ -42,14 +42,10 @@
             }
         </ul>
     }
-</Card>
+</MudPaper>
 
 @code {
-    private static readonly CardSlots PanelSlots = new()
-    {
-        Base = "h-full rounded-[var(--shell-radius-lg)] border border-[var(--shell-border)] bg-[color:var(--color-surface-raised)] shadow-[var(--shell-shadow)]",
-        Body = "flex h-full flex-col gap-6 p-5"
-    };
+    private const string PanelClass = "panel-card";
 
     [Parameter]
     [EditorRequired]

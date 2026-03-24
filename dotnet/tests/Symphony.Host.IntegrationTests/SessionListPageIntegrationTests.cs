@@ -1,12 +1,12 @@
 using System.Net;
 using System.Net.Http.Json;
-using Flowbite.Services;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using MudBlazor.Services;
 using Symphony.Abstractions.Orchestration;
 using Symphony.Application.Configuration;
 using Symphony.Application.Polling;
@@ -181,7 +181,7 @@ public sealed class SessionListPageIntegrationTests
         var builder = WebApplication.CreateBuilder();
         builder.WebHost.UseUrls("http://127.0.0.1:0");
         builder.Services.AddRazorComponents().AddInteractiveServerComponents();
-        builder.Services.AddFlowbite();
+        builder.Services.AddMudServices();
         builder.Services.AddSingleton<IOrchestratorRuntimeService>(new StubRuntimeService());
         builder.Services.AddSingleton<IOrchestratorControl>(new StubOrchestratorControl());
         builder.Services.AddSingleton(sessionActivityStore);

@@ -1,79 +1,73 @@
 @if (Sessions.Count == 0)
 {
-    <Card Slots="@EmptyStateCardSlots" data-testid="session-list-empty-state">
-        <EmptyState Title="No sessions in this view"
-                    Description="Change the filter or wait for more agent activity to populate the session explorer." />
-    </Card>
+    <MudPaper Class="@EmptyStateClass" Outlined="true" Elevation="0" data-testid="session-list-empty-state">
+        <p class="empty-state__title">No sessions in this view</p>
+        <p class="empty-state__copy">
+            Change the filter or wait for more agent activity to populate the session explorer.
+        </p>
+    </MudPaper>
 }
 else
 {
-    <div class="rounded-[var(--shell-radius-lg)] border border-[var(--shell-border)] bg-[color:var(--color-surface-raised)] p-2 shadow-[var(--shell-shadow)]"
+    <MudPaper Class="session-table-card"
+              Outlined="true"
+              Elevation="0"
          data-testid="session-list-table">
-        <div class="overflow-x-auto">
-            <Table Striped="true" Hoverable="true" Responsive="true">
-                <TableHead>
-                    <TableRow>
-                        <TableHeadCell>Issue</TableHeadCell>
-                        <TableHeadCell>Status</TableHeadCell>
-                        <TableHeadCell>Started</TableHeadCell>
-                        <TableHeadCell>Ended / Duration</TableHeadCell>
-                        <TableHeadCell>Outcome / last event</TableHeadCell>
-                    </TableRow>
-                </TableHead>
-                <TableBody class="divide-y">
-                    @foreach (var session in Sessions)
-                    {
-                        <TableRow class="bg-[color:var(--color-surface-raised)]">
-                            <TableCell IsFirstColumn="true">
-                                <div class="flex flex-col gap-1">
-                                    <a class="font-semibold text-[color:var(--color-on-surface-primary)] underline decoration-[color:var(--color-primary-DEFAULT)] decoration-2 underline-offset-4"
-                                       href="/sessions/@Uri.EscapeDataString(session.IssueIdentifier)">
-                                        @session.IssueIdentifier
+        <div class="session-table-wrap">
+            <MudTable Items="@Sessions"
+                      Hover="true"
+                      Striped="true"
+                      Breakpoint="Breakpoint.Md">
+                <HeaderContent>
+                    <MudTh>Issue</MudTh>
+                    <MudTh>Status</MudTh>
+                    <MudTh>Started</MudTh>
+                    <MudTh>Ended / Duration</MudTh>
+                    <MudTh>Outcome / last event</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Issue">
+                                <div class="session-table-link-group">
+                                    <a class="session-table-link"
+                                       href="/sessions/@Uri.EscapeDataString(context.IssueIdentifier)">
+                                        @context.IssueIdentifier
                                     </a>
-                                    @if (!string.IsNullOrWhiteSpace(session.IssueUrl))
+                                    @if (!string.IsNullOrWhiteSpace(context.IssueUrl))
                                     {
-                                        <a class="text-xs font-medium text-[color:var(--color-on-surface-secondary)] hover:text-[color:var(--color-primary-DEFAULT)]"
-                                           href="@session.IssueUrl">
+                                        <a class="session-table-subtle-link"
+                                           href="@context.IssueUrl">
                                             Tracker issue
                                         </a>
                                     }
                                 </div>
-                            </TableCell>
-                            <TableCell>
-                                <Badge Color="@SessionListDisplay.GetStatusColor(session)">
-                                    @session.Status
-                                </Badge>
-                            </TableCell>
-                            <TableCell class="whitespace-nowrap text-sm text-[color:var(--color-on-surface-secondary)]">
-                                @SessionListDisplay.FormatTimestamp(session.StartedAt)
-                            </TableCell>
-                            <TableCell class="text-sm text-[color:var(--color-on-surface-secondary)]">
-                                <div class="font-medium text-[color:var(--color-on-surface-primary)]">
-                                    @(session.EndedAt is null ? "Live" : SessionListDisplay.FormatTimestamp(session.EndedAt.Value))
+                    </MudTd>
+                    <MudTd DataLabel="Status">
+                        <StatusPill Text="@context.Status" Color="@SessionListDisplay.GetStatusColor(context)" />
+                    </MudTd>
+                    <MudTd DataLabel="Started" Class="session-table-cell session-table-cell--nowrap">
+                        @SessionListDisplay.FormatTimestamp(context.StartedAt)
+                    </MudTd>
+                    <MudTd DataLabel="Ended / Duration" Class="session-table-cell">
+                                <div class="session-table-primary">
+                            @(context.EndedAt is null ? "Live" : SessionListDisplay.FormatTimestamp(context.EndedAt.Value))
                                 </div>
-                                <div>@SessionListDisplay.GetDurationLabel(session)</div>
-                            </TableCell>
-                            <TableCell class="text-sm text-[color:var(--color-on-surface-secondary)]">
-                                <div class="font-medium text-[color:var(--color-on-surface-primary)]">@session.Summary</div>
-                                @if (!string.IsNullOrWhiteSpace(session.Detail))
+                        <div>@SessionListDisplay.GetDurationLabel(context)</div>
+                    </MudTd>
+                    <MudTd DataLabel="Outcome / last event" Class="session-table-cell">
+                        <div class="session-table-primary">@context.Summary</div>
+                        @if (!string.IsNullOrWhiteSpace(context.Detail))
                                 {
-                                    <div class="mt-1">@session.Detail</div>
+                            <div class="session-table-detail">@context.Detail</div>
                                 }
-                            </TableCell>
-                        </TableRow>
-                    }
-                </TableBody>
-            </Table>
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
         </div>
-    </div>
+    </MudPaper>
 }
 
 @code {
-    private static readonly CardSlots EmptyStateCardSlots = new()
-    {
-        Base = "rounded-[var(--shell-radius-lg)] border border-[var(--shell-border)] bg-[color:var(--color-surface-raised)] shadow-[var(--shell-shadow)]",
-        Body = "p-6"
-    };
+    private const string EmptyStateClass = "empty-state";
 
     [Parameter]
     [EditorRequired]

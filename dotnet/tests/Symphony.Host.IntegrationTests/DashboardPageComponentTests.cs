@@ -1,6 +1,7 @@
 using Bunit;
-using Flowbite.Services;
 using Microsoft.Extensions.DependencyInjection;
+using MudBlazor.Services;
+using MudBlazor;
 using Symphony.Abstractions.Orchestration;
 using Symphony.Host.Components.Dashboard;
 using Symphony.Host.Components.Pages;
@@ -12,7 +13,9 @@ public sealed class DashboardPageComponentTests : BunitContext
 {
     public DashboardPageComponentTests()
     {
-        Services.AddFlowbite();
+        JSInterop.Mode = JSRuntimeMode.Loose;
+        Services.AddMudServices();
+        Services.AddSingleton<IKeyInterceptorService, TestKeyInterceptorService>();
     }
 
     [Fact]
