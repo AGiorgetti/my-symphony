@@ -577,6 +577,9 @@ This section is intentionally redundant so a coding agent can implement the conf
 - `tracker.project`: string, required when `tracker.kind=azure_devops`
 - `tracker.active_states`: list of strings, default `["Todo", "In Progress"]`
 - `tracker.terminal_states`: list of strings, default `["Closed", "Cancelled", "Canceled", "Duplicate", "Done"]`
+- `tracker.dispatch_block_labels`: list of strings, default `[]`; normalized to lowercase and
+  compared against normalized `issue.labels` to hard-stop dispatch when any configured label/tag is
+  present
 - `polling.interval_ms`: integer, default `30000`
 - `workspace.root`: path, default `<system-temp>/symphony_workspaces`
 - `worker.ssh_hosts` (extension): list of SSH host strings, optional; when omitted, work runs
@@ -734,6 +737,7 @@ An issue is dispatch-eligible only if all are true:
 - It is not already in `claimed`.
 - Global concurrency slots are available.
 - Per-state concurrency slots are available.
+- None of `issue.labels` match the normalized `tracker.dispatch_block_labels`.
 - If `agent.require_exec_marker` is `true`, `issue.labels` includes the normalized
   `agent.exec_marker`.
 - Blocker rule for `Todo` state passes:
@@ -1267,6 +1271,8 @@ Additional normalization details:
 - `labels` -> lowercase strings
 - Execution-marker gating is evaluated against normalized `labels`, so GitHub labels, Linear
   labels, and Azure DevOps tags all participate through the same lowercase label set.
+- `tracker.dispatch_block_labels` is normalized to lowercase and compared against normalized
+  `labels`, so repository-specific block labels/tags can gate dispatch without code changes.
 - `blocked_by` -> derived from inverse relations where relation type is `blocks`
 - For `tracker.kind == "github"`, `blocked_by` should be derived from issue dependency links when
   available; if unavailable, return an empty list.

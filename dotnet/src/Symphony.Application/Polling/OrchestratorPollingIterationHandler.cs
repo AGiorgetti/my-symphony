@@ -22,6 +22,7 @@ public sealed class OrchestratorPollingIterationHandler(
 
         var activeStates = CreateStateSet(workflowOptions.Tracker.ActiveStates);
         var terminalStates = CreateStateSet(workflowOptions.Tracker.TerminalStates);
+        var dispatchBlockLabels = CreateStateSet(workflowOptions.Tracker.DispatchBlockLabels);
 
         await ReconcileRunningIssuesAsync(
                 activeStates,
@@ -39,6 +40,7 @@ public sealed class OrchestratorPollingIterationHandler(
                     issue,
                     activeStates,
                     terminalStates,
+                    dispatchBlockLabels,
                     workflowOptions.Agent.MaxConcurrentAgentsByState,
                     workflowOptions.Agent.RequireExecMarker,
                     workflowOptions.Agent.ExecMarker,
@@ -234,6 +236,7 @@ public sealed class OrchestratorPollingIterationHandler(
         Issue issue,
         HashSet<string> activeStates,
         HashSet<string> terminalStates,
+        HashSet<string> dispatchBlockLabels,
         IReadOnlyDictionary<string, int> maxConcurrentAgentsByState,
         bool requireExecMarker,
         string execMarker,
@@ -250,6 +253,13 @@ public sealed class OrchestratorPollingIterationHandler(
             && issue.BlockedBy.Any(blocker => blocker.NormalizedState is null || !terminalStates.Contains(blocker.NormalizedState)))
         {
             skipReason = "blocked_by_dependency";
+            return false;
+        }
+
+        if (dispatchBlockLabels.Count > 0
+            && issue.Labels.Any(dispatchBlockLabels.Contains))
+        {
+            skipReason = "blocked_by_label";
             return false;
         }
 

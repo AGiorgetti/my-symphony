@@ -17,7 +17,10 @@ public sealed record WorkflowTrackerOptions(
     string? Organization,
     string? Project,
     IReadOnlyList<string> ActiveStates,
-    IReadOnlyList<string> TerminalStates);
+    IReadOnlyList<string> TerminalStates)
+{
+    public IReadOnlyList<string> DispatchBlockLabels { get; init; } = Array.Empty<string>();
+}
 
 public sealed record WorkflowPollingOptions(int IntervalMs);
 

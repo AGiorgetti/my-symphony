@@ -15,6 +15,12 @@ tracker:
     - Canceled
     - Duplicate
     - Done
+  # Optional labels that block dispatch even while the issue remains active.
+  # dispatch_block_labels:
+  #   - backlog
+  #   - human-review
+  #   - done
+  #   - status:blocked
 polling:
   interval_ms: 5000
 workspace:

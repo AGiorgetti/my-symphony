@@ -8,6 +8,12 @@ tracker:
     - open
   terminal_states:
     - closed
+  # Optional labels that block dispatch even while the issue remains open.
+  # dispatch_block_labels:
+  #   - backlog
+  #   - human-review
+  #   - done
+  #   - status:blocked
 polling:
   interval_ms: 5000
 workspace:

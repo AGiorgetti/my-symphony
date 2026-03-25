@@ -14,6 +14,12 @@ tracker:
     - Closed
     - Done
     - Removed
+  # Optional tags that block dispatch even while the work item remains active.
+  # dispatch_block_labels:
+  #   - backlog
+  #   - human-review
+  #   - done
+  #   - status:blocked
 polling:
   interval_ms: 5000
 workspace:

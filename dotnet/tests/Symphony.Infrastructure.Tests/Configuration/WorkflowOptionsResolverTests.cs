@@ -28,6 +28,7 @@ public sealed class WorkflowOptionsResolverTests
         Assert.Equal("gh-token", options.Tracker.ApiKey);
         Assert.Equal(new[] { "Todo", "In Progress" }, options.Tracker.ActiveStates);
         Assert.Equal(new[] { "Closed", "Cancelled", "Canceled", "Duplicate", "Done" }, options.Tracker.TerminalStates);
+        Assert.Empty(options.Tracker.DispatchBlockLabels);
         Assert.Equal(30_000, options.Polling.IntervalMs);
         Assert.Equal(Path.GetFullPath(Path.Combine(Path.GetTempPath(), "symphony_workspaces")), options.Workspace.Root);
         Assert.Equal(60_000, options.Hooks.TimeoutMs);
@@ -59,7 +60,8 @@ public sealed class WorkflowOptionsResolverTests
             {
                 ["kind"] = "github",
                 ["api_key"] = $"${apiKeyVariable}",
-                ["repository"] = "AGiorgetti/my-symphony"
+                ["repository"] = "AGiorgetti/my-symphony",
+                ["dispatch_block_labels"] = new object[] { " Backlog ", "human-review", "BACKLOG" }
             },
             ["workspace"] = new Dictionary<string, object?>
             {
@@ -97,6 +99,7 @@ public sealed class WorkflowOptionsResolverTests
         var options = _resolver.Resolve(definition);
 
         Assert.Equal("resolved-api-key", options.Tracker.ApiKey);
+        Assert.Equal(["backlog", "human-review"], options.Tracker.DispatchBlockLabels);
         Assert.Equal(Path.GetFullPath(workspaceRoot), options.Workspace.Root);
         Assert.Equal(60_000, options.Hooks.TimeoutMs);
         Assert.Equal(2, options.Agent.MaxConcurrentAgentsByState["todo"]);
