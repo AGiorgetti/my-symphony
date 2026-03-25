@@ -1,5 +1,5 @@
 using System.Globalization;
-using Flowbite.Components;
+using MudBlazor;
 
 namespace Symphony.Host.Components.Sessions;
 
@@ -23,21 +23,21 @@ internal static class SessionListDisplay
         return session.IsActive ? $"{duration} live" : duration;
     }
 
-    internal static Badge.BadgeColor GetStatusColor(SessionListRowViewModel session)
+    internal static Color GetStatusColor(SessionListRowViewModel session)
     {
         return session.Status.ToLowerInvariant() switch
         {
-            "in progress" => Badge.BadgeColor.Info,
-            "streaming" => Badge.BadgeColor.Info,
-            "finishing" => Badge.BadgeColor.Info,
-            "retrying" => Badge.BadgeColor.Warning,
-            "succeeded" => Badge.BadgeColor.Success,
-            "failed" => Badge.BadgeColor.Failure,
-            "timedout" => Badge.BadgeColor.Failure,
-            "stalled" => Badge.BadgeColor.Failure,
-            "canceled" => Badge.BadgeColor.Gray,
-            _ when session.IsActive => Badge.BadgeColor.Info,
-            _ => Badge.BadgeColor.Gray
+            "in progress" => Color.Info,
+            "streaming" => Color.Info,
+            "finishing" => Color.Info,
+            "retrying" => Color.Warning,
+            "succeeded" => Color.Success,
+            "failed" => Color.Error,
+            "timedout" => Color.Error,
+            "stalled" => Color.Error,
+            "canceled" => Color.Default,
+            _ when session.IsActive => Color.Info,
+            _ => Color.Default
         };
     }
 }

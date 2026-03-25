@@ -1,8 +1,8 @@
 using Bunit;
-using Flowbite.Components;
-using Flowbite.Services;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using MudBlazor;
+using MudBlazor.Services;
 using Symphony.Abstractions.Orchestration;
 using Symphony.Application.Polling;
 using Symphony.Application.Runtime;
@@ -16,7 +16,9 @@ public sealed class SessionDetailComponentTests : BunitContext
 {
     public SessionDetailComponentTests()
     {
-        Services.AddFlowbite();
+        JSInterop.Mode = JSRuntimeMode.Loose;
+        Services.AddMudServices();
+        Services.AddSingleton<IKeyInterceptorService, TestKeyInterceptorService>();
     }
 
     [Fact]
@@ -31,7 +33,7 @@ public sealed class SessionDetailComponentTests : BunitContext
                     true,
                     "Active",
                     Status: null,
-                    Badge.BadgeColor.Info,
+                    Color.Info,
                     new DateTimeOffset(2026, 3, 20, 9, 0, 0, TimeSpan.Zero),
                     EndedAt: null)));
 
@@ -55,7 +57,7 @@ public sealed class SessionDetailComponentTests : BunitContext
                             "2026-03-20 09:00:00 UTC",
                             "Session started",
                             "Lifecycle",
-                            Badge.BadgeColor.Gray,
+                            Color.Default,
                             null,
                             Array.Empty<SessionActivityFactModel>(),
                             "Tracker moved to In Progress",
@@ -63,14 +65,14 @@ public sealed class SessionDetailComponentTests : BunitContext
                             null,
                             false,
                             false,
-                            TimelineColor.Gray),
+                            Color.Default),
                         new SessionActivityTimelineEntryModel(
                             SessionActivityKind.AgentMessage,
                             new DateTimeOffset(2026, 3, 20, 9, 0, 30, TimeSpan.Zero),
                             "2026-03-20 09:00:30 UTC",
                             "Turn started",
                             "Agent message",
-                            Badge.BadgeColor.Info,
+                            Color.Info,
                             null,
                             Array.Empty<SessionActivityFactModel>(),
                             "Agent picked up the first turn",
@@ -78,14 +80,14 @@ public sealed class SessionDetailComponentTests : BunitContext
                             null,
                             false,
                             false,
-                            TimelineColor.Blue),
+                            Color.Info),
                         new SessionActivityTimelineEntryModel(
                             SessionActivityKind.Warning,
                             new DateTimeOffset(2026, 3, 20, 9, 1, 0, TimeSpan.Zero),
                             "2026-03-20 09:01:00 UTC",
                             "Queued for retry",
                             "Warning",
-                            Badge.BadgeColor.Warning,
+                            Color.Warning,
                             null,
                             Array.Empty<SessionActivityFactModel>(),
                             "Waiting for the next dispatcher slot",
@@ -93,36 +95,24 @@ public sealed class SessionDetailComponentTests : BunitContext
                             null,
                             false,
                             false,
-                            TimelineColor.Orange)
+                            Color.Warning)
                     ],
-                    new SessionActivityTimelineAlertModel(AlertColor.Warning, "Latest warning:", "Queued for retry - Waiting for the next dispatcher slot"),
-                    new SessionActivityTimelineAlertModel(AlertColor.Failure, "Failure detail:", "Prompt build failed"))));
+                    new SessionActivityTimelineAlertModel(Severity.Warning, "Latest warning:", "Queued for retry - Waiting for the next dispatcher slot"),
+                    new SessionActivityTimelineAlertModel(Severity.Error, "Failure detail:", "Prompt build failed"))));
 
         Assert.Contains("data-testid=\"session-detail-latest-attention-alert\"", cut.Markup, StringComparison.Ordinal);
         Assert.Contains("data-testid=\"session-detail-failure-alert\"", cut.Markup, StringComparison.Ordinal);
         Assert.Contains("Session started", cut.Markup, StringComparison.Ordinal);
         Assert.Contains("Queued for retry", cut.Markup, StringComparison.Ordinal);
-        Assert.Contains("border-amber-400/30", cut.Markup, StringComparison.Ordinal);
+        Assert.Contains("timeline-entry--warning", cut.Markup, StringComparison.Ordinal);
 
-        var timelineItems = cut.FindComponents<TimelineItem>();
+        var startedIndex = cut.Markup.IndexOf("Session started", StringComparison.Ordinal);
+        var messageIndex = cut.Markup.IndexOf("Turn started", StringComparison.Ordinal);
+        var warningIndex = cut.Markup.LastIndexOf("Queued for retry", StringComparison.Ordinal);
 
-        Assert.Collection(
-            timelineItems,
-            item =>
-            {
-                Assert.Equal("Session started", item.Instance.Title);
-                Assert.Equal(TimelineColor.Gray, item.Instance.Color);
-            },
-            item =>
-            {
-                Assert.Equal("Turn started", item.Instance.Title);
-                Assert.Equal(TimelineColor.Blue, item.Instance.Color);
-            },
-            item =>
-            {
-                Assert.Equal("Queued for retry", item.Instance.Title);
-                Assert.Equal(TimelineColor.Orange, item.Instance.Color);
-            });
+        Assert.True(startedIndex >= 0);
+        Assert.True(messageIndex > startedIndex);
+        Assert.True(warningIndex > messageIndex);
     }
 
     [Fact]
@@ -139,7 +129,7 @@ public sealed class SessionDetailComponentTests : BunitContext
                             "2026-03-20 09:02:00 UTC",
                             "turn_completed",
                             "Agent message",
-                            Badge.BadgeColor.Info,
+                            Color.Info,
                             "Structured event payload",
                             [
                                 new SessionActivityFactModel("Event", "turn_completed"),
@@ -151,7 +141,7 @@ public sealed class SessionDetailComponentTests : BunitContext
                             "View structured payload",
                             true,
                             true,
-                            TimelineColor.Blue)
+                            Color.Info)
                     ],
                     LatestAttentionAlert: null,
                     FailureAlert: null)));

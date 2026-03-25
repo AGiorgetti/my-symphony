@@ -1,55 +1,51 @@
 <div data-testid="session-detail-metadata">
-    <Card Slots="@MetadataCardSlots">
-        <div class="space-y-2">
-            <p class="text-xs font-bold uppercase tracking-[0.24em] text-[color:var(--color-primary-DEFAULT)]">Details</p>
-            <h2 class="text-2xl font-semibold text-[color:var(--color-on-surface-primary)]">Session metadata</h2>
-            <p class="text-sm leading-6 text-[color:var(--color-on-surface-secondary)]">
+    <MudPaper Class="@MetadataCardClass" Outlined="true" Elevation="0">
+        <div class="panel-header__content">
+            <p class="section-kicker">Details</p>
+            <h2 class="section-title section-title--panel">Session metadata</h2>
+            <p class="section-copy">
                 Live runtime token counters plus the latest known session identity and attempt metadata.
             </p>
         </div>
 
         @if (!string.IsNullOrWhiteSpace(Metadata.AvailabilityMessage))
         {
-            <div class="rounded-[var(--shell-radius-lg)] border border-[var(--shell-border)] bg-[color:var(--color-surface-base)] px-4 py-3 text-sm leading-6 text-[color:var(--color-on-surface-secondary)]">
+            <div class="detail-note">
                 @Metadata.AvailabilityMessage
             </div>
         }
 
-        <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            <div class="rounded-[var(--shell-radius-lg)] border border-[var(--shell-border)] bg-[color:var(--color-surface-base)] p-4" data-testid="session-detail-metadata-input-tokens">
-                <p class="text-xs font-bold uppercase tracking-[0.2em] text-[color:var(--color-on-surface-secondary)]">Input tokens</p>
-                <p class="mt-2 text-base font-semibold text-[color:var(--color-on-surface-primary)]">@FormatLong(Metadata.InputTokens)</p>
+        <div class="detail-metrics-grid detail-metrics-grid--metadata">
+            <div class="detail-metric-card" data-testid="session-detail-metadata-input-tokens">
+                <p class="detail-metric-label">Input tokens</p>
+                <p class="detail-metric-value">@FormatLong(Metadata.InputTokens)</p>
             </div>
-            <div class="rounded-[var(--shell-radius-lg)] border border-[var(--shell-border)] bg-[color:var(--color-surface-base)] p-4" data-testid="session-detail-metadata-output-tokens">
-                <p class="text-xs font-bold uppercase tracking-[0.2em] text-[color:var(--color-on-surface-secondary)]">Output tokens</p>
-                <p class="mt-2 text-base font-semibold text-[color:var(--color-on-surface-primary)]">@FormatLong(Metadata.OutputTokens)</p>
+            <div class="detail-metric-card" data-testid="session-detail-metadata-output-tokens">
+                <p class="detail-metric-label">Output tokens</p>
+                <p class="detail-metric-value">@FormatLong(Metadata.OutputTokens)</p>
             </div>
-            <div class="rounded-[var(--shell-radius-lg)] border border-[var(--shell-border)] bg-[color:var(--color-surface-base)] p-4" data-testid="session-detail-metadata-total-tokens">
-                <p class="text-xs font-bold uppercase tracking-[0.2em] text-[color:var(--color-on-surface-secondary)]">Combined tokens</p>
-                <p class="mt-2 text-base font-semibold text-[color:var(--color-on-surface-primary)]">@FormatLong(Metadata.TotalTokens)</p>
+            <div class="detail-metric-card" data-testid="session-detail-metadata-total-tokens">
+                <p class="detail-metric-label">Combined tokens</p>
+                <p class="detail-metric-value">@FormatLong(Metadata.TotalTokens)</p>
             </div>
-            <div class="rounded-[var(--shell-radius-lg)] border border-[var(--shell-border)] bg-[color:var(--color-surface-base)] p-4" data-testid="session-detail-metadata-turn-count">
-                <p class="text-xs font-bold uppercase tracking-[0.2em] text-[color:var(--color-on-surface-secondary)]">Turn count</p>
-                <p class="mt-2 text-base font-semibold text-[color:var(--color-on-surface-primary)]">@FormatInt(Metadata.TurnCount)</p>
+            <div class="detail-metric-card" data-testid="session-detail-metadata-turn-count">
+                <p class="detail-metric-label">Turn count</p>
+                <p class="detail-metric-value">@FormatInt(Metadata.TurnCount)</p>
             </div>
-            <div class="rounded-[var(--shell-radius-lg)] border border-[var(--shell-border)] bg-[color:var(--color-surface-base)] p-4" data-testid="session-detail-metadata-session-id">
-                <p class="text-xs font-bold uppercase tracking-[0.2em] text-[color:var(--color-on-surface-secondary)]">Session ID</p>
-                <p class="mt-2 break-all text-base font-semibold text-[color:var(--color-on-surface-primary)]">@FormatText(Metadata.SessionId)</p>
+            <div class="detail-metric-card" data-testid="session-detail-metadata-session-id">
+                <p class="detail-metric-label">Session ID</p>
+                <p class="detail-metric-value detail-metric-value--break">@FormatText(Metadata.SessionId)</p>
             </div>
-            <div class="rounded-[var(--shell-radius-lg)] border border-[var(--shell-border)] bg-[color:var(--color-surface-base)] p-4" data-testid="session-detail-metadata-attempt">
-                <p class="text-xs font-bold uppercase tracking-[0.2em] text-[color:var(--color-on-surface-secondary)]">Attempt</p>
-                <p class="mt-2 text-base font-semibold text-[color:var(--color-on-surface-primary)]">@SessionDetailDisplay.GetAttemptLabel(Metadata.Attempt, Metadata.IsAttemptKnown)</p>
+            <div class="detail-metric-card" data-testid="session-detail-metadata-attempt">
+                <p class="detail-metric-label">Attempt</p>
+                <p class="detail-metric-value">@SessionDetailDisplay.GetAttemptLabel(Metadata.Attempt, Metadata.IsAttemptKnown)</p>
             </div>
         </div>
-    </Card>
+    </MudPaper>
 </div>
 
 @code {
-    private static readonly CardSlots MetadataCardSlots = new()
-    {
-        Base = "rounded-[var(--shell-radius-xl)] border border-[var(--shell-border)] bg-[color:var(--color-surface-raised)] shadow-[var(--shell-shadow)]",
-        Body = "flex flex-col gap-6 p-6"
-    };
+    private const string MetadataCardClass = "page-card";
 
     [Parameter]
     [EditorRequired]

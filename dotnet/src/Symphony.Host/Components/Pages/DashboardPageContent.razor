@@ -2,27 +2,27 @@
 @using Symphony.Host.Components.Dashboard
 @inject IDashboardStateService DashboardStateService
 
-<main class="dashboard-page flex flex-col gap-6">
+<main class="page-shell page-stack">
     @if (_isLoading)
     {
-        <section class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4" data-testid="dashboard-skeleton">
+        <section class="summary-grid" data-testid="dashboard-skeleton">
             @for (var index = 0; index < 4; index++)
             {
-                <Card Slots="@SkeletonCardSlots">
-                    <Skeleton Variant="SkeletonVariant.Text" Lines="1" AriaLabel="Loading dashboard summary" />
-                    <Skeleton Variant="SkeletonVariant.Text" Lines="2" Width="w-full" />
-                    <Skeleton Variant="SkeletonVariant.Button" Width="w-24" />
-                </Card>
+                <MudPaper Class="@SkeletonCardClass" Outlined="true" Elevation="0">
+                    <MudSkeleton SkeletonType="SkeletonType.Text" Width="45%" />
+                    <MudSkeleton SkeletonType="SkeletonType.Text" Width="100%" />
+                    <MudSkeleton SkeletonType="SkeletonType.Rectangle" Width="6rem" Height="2.25rem" />
+                </MudPaper>
             }
         </section>
 
-        <section class="grid grid-cols-1 gap-6 xl:grid-cols-3">
+        <section class="operations-grid">
             @for (var index = 0; index < 3; index++)
             {
-                <Card Slots="@SkeletonCardSlots">
-                    <Skeleton Variant="SkeletonVariant.Text" Lines="1" AriaLabel="Loading dashboard panel" />
-                    <Skeleton Variant="SkeletonVariant.Card" Width="w-full" Height="h-48" />
-                </Card>
+                <MudPaper Class="@SkeletonCardClass" Outlined="true" Elevation="0">
+                    <MudSkeleton SkeletonType="SkeletonType.Text" Width="55%" />
+                    <MudSkeleton SkeletonType="SkeletonType.Rectangle" Width="100%" Height="12rem" />
+                </MudPaper>
             }
         </section>
     }
@@ -30,41 +30,39 @@
     {
         @if (!string.IsNullOrWhiteSpace(_refreshErrorMessage))
         {
-            <Alert Color="AlertColor.Warning"
-                   Rounded="true"
-                   WithBorderAccent="true"
-                   TextEmphasis="Refresh warning:"
-                   Text="@_refreshErrorMessage" />
+            <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true">
+                <strong>Refresh warning:</strong> @_refreshErrorMessage
+            </MudAlert>
         }
 
-        <ErrorBoundary>
-            <ChildContent>
-                <HealthSummaryCards Snapshot="_snapshot" />
-            </ChildContent>
-            <ErrorContent>
-                <Card Slots="@FallbackCardSlots" data-testid="dashboard-summary-fallback">
-                    <p class="text-xs font-bold uppercase tracking-[0.24em] text-[color:var(--color-primary-DEFAULT)]">Dashboard summary</p>
-                    <h2 class="text-2xl font-semibold text-[color:var(--color-on-surface-primary)]">Summary panel failed</h2>
-                    <p class="text-sm leading-6 text-[color:var(--color-on-surface-secondary)]">
-                        The shell is still responsive, but the summary cards hit a rendering error.
-                    </p>
-                </Card>
-            </ErrorContent>
-        </ErrorBoundary>
+            <ErrorBoundary>
+                <ChildContent>
+                    <HealthSummaryCards Snapshot="_snapshot" />
+                </ChildContent>
+                <ErrorContent>
+                    <MudPaper Class="@FallbackCardClass" Outlined="true" Elevation="0" data-testid="dashboard-summary-fallback">
+                        <p class="section-kicker">Dashboard summary</p>
+                        <h2 class="section-title section-title--card">Summary panel failed</h2>
+                        <p class="section-copy">
+                            The shell is still responsive, but the summary cards hit a rendering error.
+                        </p>
+                    </MudPaper>
+                </ErrorContent>
+            </ErrorBoundary>
 
-        <section class="grid grid-cols-1 gap-6 xl:grid-cols-3" aria-label="Operational panels">
+        <section class="operations-grid" aria-label="Operational panels">
             <ErrorBoundary>
                 <ChildContent>
                     <ActiveSessionsPanel Sessions="_snapshot.ActiveSessions" GeneratedAt="_snapshot.GeneratedAt" />
                 </ChildContent>
                 <ErrorContent>
-                    <Card Slots="@FallbackCardSlots" data-testid="dashboard-active-sessions-fallback">
-                        <p class="text-xs font-bold uppercase tracking-[0.24em] text-[color:var(--color-primary-DEFAULT)]">Active Sessions</p>
-                        <h2 class="text-2xl font-semibold text-[color:var(--color-on-surface-primary)]">Panel failed</h2>
-                        <p class="text-sm leading-6 text-[color:var(--color-on-surface-secondary)]">
+                    <MudPaper Class="@FallbackCardClass" Outlined="true" Elevation="0" data-testid="dashboard-active-sessions-fallback">
+                        <p class="section-kicker">Active Sessions</p>
+                        <h2 class="section-title section-title--card">Panel failed</h2>
+                        <p class="section-copy">
                             Active session details are temporarily unavailable.
                         </p>
-                    </Card>
+                    </MudPaper>
                 </ErrorContent>
             </ErrorBoundary>
 
@@ -73,13 +71,13 @@
                     <RetryQueuePanel Entries="_snapshot.RetryQueue" GeneratedAt="_snapshot.GeneratedAt" />
                 </ChildContent>
                 <ErrorContent>
-                    <Card Slots="@FallbackCardSlots" data-testid="dashboard-retry-queue-fallback">
-                        <p class="text-xs font-bold uppercase tracking-[0.24em] text-[color:var(--color-primary-DEFAULT)]">Retry Queue</p>
-                        <h2 class="text-2xl font-semibold text-[color:var(--color-on-surface-primary)]">Panel failed</h2>
-                        <p class="text-sm leading-6 text-[color:var(--color-on-surface-secondary)]">
+                    <MudPaper Class="@FallbackCardClass" Outlined="true" Elevation="0" data-testid="dashboard-retry-queue-fallback">
+                        <p class="section-kicker">Retry Queue</p>
+                        <h2 class="section-title section-title--card">Panel failed</h2>
+                        <p class="section-copy">
                             Retry details are temporarily unavailable.
                         </p>
-                    </Card>
+                    </MudPaper>
                 </ErrorContent>
             </ErrorBoundary>
 
@@ -88,13 +86,13 @@
                     <RecentAttemptsPanel Attempts="_snapshot.RecentAttempts" />
                 </ChildContent>
                 <ErrorContent>
-                    <Card Slots="@FallbackCardSlots" data-testid="dashboard-recent-attempts-fallback">
-                        <p class="text-xs font-bold uppercase tracking-[0.24em] text-[color:var(--color-primary-DEFAULT)]">Recent Attempts</p>
-                        <h2 class="text-2xl font-semibold text-[color:var(--color-on-surface-primary)]">Panel failed</h2>
-                        <p class="text-sm leading-6 text-[color:var(--color-on-surface-secondary)]">
+                    <MudPaper Class="@FallbackCardClass" Outlined="true" Elevation="0" data-testid="dashboard-recent-attempts-fallback">
+                        <p class="section-kicker">Recent Attempts</p>
+                        <h2 class="section-title section-title--card">Panel failed</h2>
+                        <p class="section-copy">
                             Recent attempt details are temporarily unavailable.
                         </p>
-                    </Card>
+                    </MudPaper>
                 </ErrorContent>
             </ErrorBoundary>
         </section>
@@ -102,17 +100,8 @@
 </main>
 
 @code {
-    private static readonly CardSlots SkeletonCardSlots = new()
-    {
-        Base = "rounded-[var(--shell-radius-lg)] border border-[var(--shell-border)] bg-[color:var(--color-surface-raised)] shadow-[var(--shell-shadow)]",
-        Body = "flex flex-col gap-4 p-5"
-    };
-
-    private static readonly CardSlots FallbackCardSlots = new()
-    {
-        Base = "h-full rounded-[var(--shell-radius-lg)] border border-[var(--shell-border)] bg-[color:var(--color-surface-raised)] shadow-[var(--shell-shadow)]",
-        Body = "flex h-full flex-col gap-3 p-5"
-    };
+    private const string SkeletonCardClass = "page-card page-card--tight";
+    private const string FallbackCardClass = "page-card page-card--tight";
 
     private PeriodicTimer? _refreshTimer;
     private CancellationTokenSource? _refreshCancellationTokenSource;

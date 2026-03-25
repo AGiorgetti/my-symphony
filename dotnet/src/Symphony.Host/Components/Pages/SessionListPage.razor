@@ -5,79 +5,59 @@
 @inject IDashboardStateService DashboardStateService
 @inject ISessionActivityStore SessionActivityStore
 
-<main class="dashboard-page flex flex-col gap-6">
-    <section class="hero">
-        <p class="eyebrow">Symphony</p>
-        <h1>Session Explorer</h1>
-        <p class="lede">
-            Browse all active and ended sessions from the current application run without leaving the
-            operator shell.
-        </p>
-    </section>
-
+<main class="page-shell page-stack">
     @if (_isLoading)
     {
-        <Card Slots="@ShellCardSlots" data-testid="session-list-skeleton">
-            <Skeleton Variant="SkeletonVariant.Text" Lines="1" AriaLabel="Loading session filters" />
-            <Skeleton Variant="SkeletonVariant.Text" Lines="1" Width="w-72" />
-            <Skeleton Variant="SkeletonVariant.Card" Width="w-full" Height="h-64" />
-        </Card>
+        <MudPaper Class="@ShellCardClass" Outlined="true" Elevation="0" data-testid="session-list-skeleton">
+            <MudSkeleton SkeletonType="SkeletonType.Text" Width="25%" />
+            <MudSkeleton SkeletonType="SkeletonType.Text" Width="18rem" />
+            <MudSkeleton SkeletonType="SkeletonType.Rectangle" Width="100%" Height="16rem" />
+        </MudPaper>
     }
     else
     {
         @if (!string.IsNullOrWhiteSpace(_refreshErrorMessage))
         {
-            <Alert Color="AlertColor.Warning"
-                   Rounded="true"
-                   WithBorderAccent="true"
-                   TextEmphasis="Refresh warning:"
-                   Text="@_refreshErrorMessage" />
+            <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true">
+                <strong>Refresh warning:</strong> @_refreshErrorMessage
+            </MudAlert>
         }
 
-        <Card Slots="@ShellCardSlots" data-testid="session-list-page">
-            <div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-                <div>
-                    <p class="text-xs font-bold uppercase tracking-[0.24em] text-[color:var(--color-primary-DEFAULT)]">Session List</p>
-                    <h2 class="mt-2 text-2xl font-semibold text-[color:var(--color-on-surface-primary)]">Current run inventory</h2>
-                    <p class="mt-2 text-sm leading-6 text-[color:var(--color-on-surface-secondary)]">
-                        Filter active and ended sessions, then jump into `/sessions/{identifier}` for the full timeline.
+        <MudPaper Class="@ShellCardClass" Outlined="true" Elevation="0" data-testid="session-list-page">
+            <div class="page-header">
+                <div class="page-header__content">
+                    <p class="section-kicker">Sessions</p>
+                    <h1 class="page-title page-title--secondary">Session Explorer</h1>
+                    <p class="section-copy">
+                        Browse all active and ended sessions from the current application run, then jump into
+                        `/sessions/{identifier}` for the full timeline.
                     </p>
                 </div>
-                <div class="text-sm text-[color:var(--color-on-surface-secondary)]">
+                <div class="page-header__meta">
                     Refreshed @(_generatedAt is null ? "never" : _generatedAt.Value.ToUniversalTime().ToString("HH:mm:ss 'UTC'", CultureInfo.InvariantCulture))
                 </div>
             </div>
 
-            <Tabs Variant="TabVariant.Underline"
-                  ActiveIndex="@_activeTabIndex"
-                  ActiveIndexChanged="@HandleActiveTabChanged">
-                <TabListContent>
-                    <Tab Index="0">All (@_allSessions.Count)</Tab>
-                    <Tab Index="1">Active (@_activeSessions.Count)</Tab>
-                    <Tab Index="2">Ended (@_endedSessions.Count)</Tab>
-                </TabListContent>
-                <TabPanelsContent>
-                    <TabPanel Index="0">
-                        <SessionListTable Sessions="_allSessions" />
-                    </TabPanel>
-                    <TabPanel Index="1">
-                        <SessionListTable Sessions="_activeSessions" />
-                    </TabPanel>
-                    <TabPanel Index="2">
-                        <SessionListTable Sessions="_endedSessions" />
-                    </TabPanel>
-                </TabPanelsContent>
-            </Tabs>
-        </Card>
+            <MudTabs ActivePanelIndex="@_activeTabIndex"
+                     ActivePanelIndexChanged="@HandleActiveTabChanged"
+                     Rounded="true"
+                     ApplyEffectsToContainer="true">
+                <MudTabPanel Text="@($"All ({_allSessions.Count})")">
+                    <SessionListTable Sessions="_allSessions" />
+                </MudTabPanel>
+                <MudTabPanel Text="@($"Active ({_activeSessions.Count})")">
+                    <SessionListTable Sessions="_activeSessions" />
+                </MudTabPanel>
+                <MudTabPanel Text="@($"Ended ({_endedSessions.Count})")">
+                    <SessionListTable Sessions="_endedSessions" />
+                </MudTabPanel>
+            </MudTabs>
+        </MudPaper>
     }
 </main>
 
 @code {
-    private static readonly CardSlots ShellCardSlots = new()
-    {
-        Base = "rounded-[var(--shell-radius-xl)] border border-[var(--shell-border)] bg-[color:var(--color-surface-raised)] shadow-[var(--shell-shadow)]",
-        Body = "flex flex-col gap-6 p-6"
-    };
+    private const string ShellCardClass = "page-card";
 
     private PeriodicTimer? _refreshTimer;
     private CancellationTokenSource? _refreshCancellationTokenSource;

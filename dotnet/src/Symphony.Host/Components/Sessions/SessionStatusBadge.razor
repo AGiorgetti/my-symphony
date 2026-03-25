@@ -1,8 +1,6 @@
 @using Symphony.Domain.Runs
 
-<Badge Color="@ResolveColor()">
-    @ResolveText()
-</Badge>
+<StatusPill Text="@ResolveText()" Color="@ResolveColor()" />
 
 @code {
     [Parameter]
@@ -12,9 +10,9 @@
     public string? Text { get; set; }
 
     [Parameter]
-    public Badge.BadgeColor? ColorOverride { get; set; }
+    public Color? ColorOverride { get; set; }
 
-    private Badge.BadgeColor ResolveColor()
+    private Color ResolveColor()
     {
         if (ColorOverride is not null)
         {
@@ -22,7 +20,7 @@
         }
 
         return Status is null
-            ? Badge.BadgeColor.Primary
+            ? Color.Primary
             : GetColor(Status.Value);
     }
 
@@ -36,22 +34,22 @@
         return Status?.ToString() ?? string.Empty;
     }
 
-    private static Badge.BadgeColor GetColor(RunAttemptStatus status)
+    private static Color GetColor(RunAttemptStatus status)
     {
         return status switch
         {
-            RunAttemptStatus.Succeeded => Badge.BadgeColor.Success,
-            RunAttemptStatus.PreparingWorkspace => Badge.BadgeColor.Info,
-            RunAttemptStatus.BuildingPrompt => Badge.BadgeColor.Info,
-            RunAttemptStatus.LaunchingAgentProcess => Badge.BadgeColor.Info,
-            RunAttemptStatus.InitializingSession => Badge.BadgeColor.Info,
-            RunAttemptStatus.StreamingTurn => Badge.BadgeColor.Info,
-            RunAttemptStatus.Finishing => Badge.BadgeColor.Info,
-            RunAttemptStatus.Failed => Badge.BadgeColor.Failure,
-            RunAttemptStatus.TimedOut => Badge.BadgeColor.Failure,
-            RunAttemptStatus.Stalled => Badge.BadgeColor.Failure,
-            RunAttemptStatus.CanceledByReconciliation => Badge.BadgeColor.Gray,
-            _ => Badge.BadgeColor.Primary
+            RunAttemptStatus.Succeeded => Color.Success,
+            RunAttemptStatus.PreparingWorkspace => Color.Info,
+            RunAttemptStatus.BuildingPrompt => Color.Info,
+            RunAttemptStatus.LaunchingAgentProcess => Color.Info,
+            RunAttemptStatus.InitializingSession => Color.Info,
+            RunAttemptStatus.StreamingTurn => Color.Info,
+            RunAttemptStatus.Finishing => Color.Info,
+            RunAttemptStatus.Failed => Color.Error,
+            RunAttemptStatus.TimedOut => Color.Error,
+            RunAttemptStatus.Stalled => Color.Error,
+            RunAttemptStatus.CanceledByReconciliation => Color.Default,
+            _ => Color.Primary
         };
     }
 }

@@ -1,6 +1,7 @@
 using Bunit;
-using Flowbite.Services;
 using Microsoft.Extensions.DependencyInjection;
+using MudBlazor.Services;
+using MudBlazor;
 using Symphony.Abstractions.Orchestration;
 using Symphony.Host.Components.Pages;
 using Symphony.Host.Components.Sessions;
@@ -12,7 +13,9 @@ public sealed class SessionListTableTests : BunitContext
 {
     public SessionListTableTests()
     {
-        Services.AddFlowbite();
+        JSInterop.Mode = JSRuntimeMode.Loose;
+        Services.AddMudServices();
+        Services.AddSingleton<IKeyInterceptorService, TestKeyInterceptorService>();
     }
 
     [Fact]
@@ -74,35 +77,21 @@ public sealed class SessionListTableTests : BunitContext
 
         Assert.Contains("ABC-1", cut.Markup, StringComparison.Ordinal);
         Assert.Contains("ABC-2", cut.Markup, StringComparison.Ordinal);
-        Assert.Equal("0", cut.Find("#tab-0").GetAttribute("tabindex"));
-        Assert.Equal("-1", cut.Find("#tab-1").GetAttribute("tabindex"));
-        Assert.Equal("-1", cut.Find("#tab-2").GetAttribute("tabindex"));
-        Assert.Equal("display: block", cut.Find("#tabpanel-0").GetAttribute("style"));
-        Assert.Equal("display: none", cut.Find("#tabpanel-1").GetAttribute("style"));
-        Assert.Equal("display: none", cut.Find("#tabpanel-2").GetAttribute("style"));
 
-        cut.FindAll("button").Single(button => button.TextContent.Contains("Active", StringComparison.Ordinal)).Click();
+        cut.FindAll(".mud-tab").Single(button => button.TextContent.Contains("Active", StringComparison.Ordinal)).Click();
 
         cut.WaitForAssertion(() =>
         {
-            Assert.Equal("-1", cut.Find("#tab-0").GetAttribute("tabindex"));
-            Assert.Equal("0", cut.Find("#tab-1").GetAttribute("tabindex"));
-            Assert.Equal("-1", cut.Find("#tab-2").GetAttribute("tabindex"));
-            Assert.Equal("display: none", cut.Find("#tabpanel-0").GetAttribute("style"));
-            Assert.Equal("display: block", cut.Find("#tabpanel-1").GetAttribute("style"));
-            Assert.Equal("display: none", cut.Find("#tabpanel-2").GetAttribute("style"));
+            Assert.Contains("ABC-1", cut.Markup, StringComparison.Ordinal);
+            Assert.DoesNotContain("href=\"/sessions/ABC-2\"", cut.Markup, StringComparison.Ordinal);
         });
 
-        cut.FindAll("button").Single(button => button.TextContent.Contains("Ended", StringComparison.Ordinal)).Click();
+        cut.FindAll(".mud-tab").Single(button => button.TextContent.Contains("Ended", StringComparison.Ordinal)).Click();
 
         cut.WaitForAssertion(() =>
         {
-            Assert.Equal("-1", cut.Find("#tab-0").GetAttribute("tabindex"));
-            Assert.Equal("-1", cut.Find("#tab-1").GetAttribute("tabindex"));
-            Assert.Equal("0", cut.Find("#tab-2").GetAttribute("tabindex"));
-            Assert.Equal("display: none", cut.Find("#tabpanel-0").GetAttribute("style"));
-            Assert.Equal("display: none", cut.Find("#tabpanel-1").GetAttribute("style"));
-            Assert.Equal("display: block", cut.Find("#tabpanel-2").GetAttribute("style"));
+            Assert.Contains("ABC-2", cut.Markup, StringComparison.Ordinal);
+            Assert.DoesNotContain("href=\"/sessions/ABC-1\"", cut.Markup, StringComparison.Ordinal);
         });
     }
 

@@ -1,139 +1,134 @@
 <div data-testid="session-detail-timeline">
-<Card Slots="@TimelineCardSlots">
-    <div class="space-y-2">
-        <p class="text-xs font-bold uppercase tracking-[0.24em] text-[color:var(--color-primary-DEFAULT)]">Timeline</p>
-        <h2 class="text-2xl font-semibold text-[color:var(--color-on-surface-primary)]">Session activity</h2>
-        <p class="text-sm leading-6 text-[color:var(--color-on-surface-secondary)]">
-            Lifecycle milestones, agent messages, warnings, and outcomes in chronological order.
-        </p>
-    </div>
-
-    @if (Timeline.LatestAttentionAlert is not null)
-    {
-        <div data-testid="session-detail-latest-attention-alert">
-            <Alert Color="@Timeline.LatestAttentionAlert.Color"
-                   Rounded="true"
-                   WithBorderAccent="true"
-                   TextEmphasis="@Timeline.LatestAttentionAlert.Emphasis"
-                   Text="@Timeline.LatestAttentionAlert.Message" />
+    <MudPaper Class="@TimelineCardClass" Outlined="true" Elevation="0">
+        <div class="panel-header__content">
+            <p class="section-kicker">Timeline</p>
+            <h2 class="section-title section-title--panel">Session activity</h2>
+            <p class="section-copy">
+                Lifecycle milestones, agent messages, warnings, and outcomes in chronological order.
+            </p>
         </div>
-    }
 
-    @if (Timeline.FailureAlert is not null)
-    {
-        <div data-testid="session-detail-failure-alert">
-            <Alert Color="@Timeline.FailureAlert.Color"
-                   Rounded="true"
-                   WithBorderAccent="true"
-                   TextEmphasis="@Timeline.FailureAlert.Emphasis"
-                   Text="@Timeline.FailureAlert.Message" />
-        </div>
-    }
+        @if (Timeline.LatestAttentionAlert is not null)
+        {
+            <div data-testid="session-detail-latest-attention-alert">
+                <MudAlert Severity="@Timeline.LatestAttentionAlert.Color" Variant="Variant.Outlined" Dense="true">
+                    <strong>@Timeline.LatestAttentionAlert.Emphasis</strong> @Timeline.LatestAttentionAlert.Message
+                </MudAlert>
+            </div>
+        }
 
-    @if (Timeline.Entries.Count == 0)
-    {
-        <EmptyState Title="No session activity recorded"
-                    Description="The session exists, but no timeline entries are available yet." />
-    }
-    else
-    {
-        <Timeline Order="TimelineOrder.Vertical">
-            @for (var index = 0; index < Timeline.Entries.Count; index++)
-            {
-                var entry = Timeline.Entries[index];
-                <TimelineItem Title="@entry.Title"
-                              Date="@entry.TimestampLabel"
-                              Color="@entry.Color"
-                              IsLast="@(index == Timeline.Entries.Count - 1)"
-                              DatePrefix="Logged at">
-                    <ChildContent>
+        @if (Timeline.FailureAlert is not null)
+        {
+            <div data-testid="session-detail-failure-alert">
+                <MudAlert Severity="@Timeline.FailureAlert.Color" Variant="Variant.Outlined" Dense="true">
+                    <strong>@Timeline.FailureAlert.Emphasis</strong> @Timeline.FailureAlert.Message
+                </MudAlert>
+            </div>
+        }
+
+        @if (Timeline.Entries.Count == 0)
+        {
+            <div class="empty-state">
+                <p class="empty-state__title">No session activity recorded</p>
+                <p class="empty-state__copy">
+                    The session exists, but no timeline entries are available yet.
+                </p>
+            </div>
+        }
+        else
+        {
+            <ol class="timeline-list">
+                @foreach (var entry in Timeline.Entries)
+                {
+                    <li class="timeline-item">
+                        <span class="@GetTimelineDotClasses(entry)"></span>
                         <div class="@GetEntryContainerClasses(entry)" data-testid="session-detail-timeline-entry">
-                            <div class="flex flex-wrap items-center gap-2">
-                                <div class="inline-flex shrink-0">
-                                    <Badge Color="@entry.KindBadgeColor">
-                                        @entry.KindLabel
-                                    </Badge>
+                            <div class="timeline-entry__head">
+                                <div class="timeline-entry__meta">
+                                    <StatusPill Text="@entry.KindLabel" Color="@entry.KindBadgeColor" />
+                                    @if (entry.Facts.Count > 0)
+                                    {
+                                        <div class="fact-list">
+                                            @foreach (var fact in entry.Facts)
+                                            {
+                                                <span class="fact-pill">
+                                                    <span class="fact-pill__label">@fact.Label:</span>
+                                                    <span>@fact.Value</span>
+                                                </span>
+                                            }
+                                        </div>
+                                    }
                                 </div>
 
-                                @if (entry.Facts.Count > 0)
-                                {
-                                    <div class="flex flex-wrap gap-2">
-                                        @foreach (var fact in entry.Facts)
-                                        {
-                                            <span class="inline-flex items-center gap-1 rounded-full border border-[var(--shell-border)]/80 bg-[color:var(--color-surface-base)]/65 px-2.5 py-1 text-xs text-[color:var(--color-on-surface-secondary)]">
-                                                <span class="font-semibold text-[color:var(--color-on-surface-primary)]">@fact.Label:</span>
-                                                <span>@fact.Value</span>
-                                            </span>
-                                        }
-                                    </div>
-                                }
+                                <div class="timeline-entry__time">
+                                    @entry.TimestampLabel
+                                </div>
                             </div>
 
-                            @if (!string.IsNullOrWhiteSpace(entry.Summary))
-                            {
-                                <p class="text-sm font-medium leading-6 text-[color:var(--color-on-surface-secondary)]">
-                                    @entry.Summary
-                                </p>
-                            }
+                            <div class="timeline-entry__body">
+                                <h3 class="timeline-entry__title">@entry.Title</h3>
 
-                            @if (!string.IsNullOrWhiteSpace(entry.Detail))
-                            {
-                                @if (entry.HasExpandableDetail)
+                                @if (!string.IsNullOrWhiteSpace(entry.Summary))
                                 {
-                                    <details class="rounded-xl border border-[var(--shell-border)]/80 bg-[color:var(--color-surface-base)]/70 p-3"
-                                             data-testid="session-detail-timeline-detail">
-                                        <summary class="cursor-pointer list-none text-sm font-semibold text-[color:var(--color-on-surface-primary)]">
-                                            @entry.DetailToggleLabel
-                                        </summary>
+                                    <p class="timeline-entry__summary">
+                                        @entry.Summary
+                                    </p>
+                                }
 
-                                        @if (entry.IsStructuredDetail)
-                                        {
-                                            @if (entry.Facts.Count > 0)
+                                @if (!string.IsNullOrWhiteSpace(entry.Detail))
+                                {
+                                    @if (entry.HasExpandableDetail)
+                                    {
+                                        <details class="timeline-entry__detail"
+                                                 data-testid="session-detail-timeline-detail">
+                                            <summary class="timeline-entry__toggle">
+                                                @entry.DetailToggleLabel
+                                            </summary>
+
+                                            @if (entry.IsStructuredDetail)
                                             {
-                                                <div class="mt-3 space-y-2">
-                                                    <p class="text-xs font-bold uppercase tracking-[0.2em] text-[color:var(--color-on-surface-secondary)]">Highlights</p>
-                                                    <div class="flex flex-wrap gap-2">
-                                                        @foreach (var fact in entry.Facts)
-                                                        {
-                                                            <span class="inline-flex items-center gap-1 rounded-full border border-[var(--shell-border)]/80 bg-[color:var(--color-surface-raised)] px-2.5 py-1 text-xs text-[color:var(--color-on-surface-secondary)]">
-                                                                <span class="font-semibold text-[color:var(--color-on-surface-primary)]">@fact.Label:</span>
-                                                                <span>@fact.Value</span>
-                                                            </span>
-                                                        }
+                                                @if (entry.Facts.Count > 0)
+                                                {
+                                                    <div class="timeline-entry__detail-body">
+                                                        <p class="detail-metric-label">Highlights</p>
+                                                        <div class="fact-list">
+                                                            @foreach (var fact in entry.Facts)
+                                                            {
+                                                                <span class="fact-pill">
+                                                                    <span class="fact-pill__label">@fact.Label:</span>
+                                                                    <span>@fact.Value</span>
+                                                                </span>
+                                                            }
+                                                        </div>
                                                     </div>
-                                                </div>
-                                            }
+                                                }
 
-                                            <p class="mt-3 text-xs font-bold uppercase tracking-[0.2em] text-[color:var(--color-on-surface-secondary)]">Raw payload</p>
-                                            <pre class="mt-3 overflow-x-auto whitespace-pre-wrap break-all rounded-lg bg-[color:var(--color-surface-raised)] p-3 text-xs leading-6 text-[color:var(--color-on-surface-secondary)]">@entry.Detail</pre>
-                                        }
-                                        else
-                                        {
-                                            <p class="mt-3 text-xs font-bold uppercase tracking-[0.2em] text-[color:var(--color-on-surface-secondary)]">Detail</p>
-                                            <p class="mt-3 whitespace-pre-wrap break-words text-sm leading-6 text-[color:var(--color-on-surface-secondary)]">@entry.Detail</p>
-                                        }
-                                    </details>
+                                                <p class="detail-metric-label">Raw payload</p>
+                                                <pre class="timeline-pre">@entry.Detail</pre>
+                                            }
+                                            else
+                                            {
+                                                <p class="detail-metric-label">Detail</p>
+                                                <p class="timeline-text">@entry.Detail</p>
+                                            }
+                                        </details>
+                                    }
+                                    else
+                                    {
+                                        <p class="timeline-text">@entry.Detail</p>
+                                    }
                                 }
-                                else
-                                {
-                                    <p class="text-sm leading-6 text-[color:var(--color-on-surface-secondary)]">@entry.Detail</p>
-                                }
-                            }
+                            </div>
                         </div>
-                    </ChildContent>
-                </TimelineItem>
-            }
-        </Timeline>
-    }
-</Card>
+                    </li>
+                }
+            </ol>
+        }
+    </MudPaper>
 </div>
 
 @code {
-    private static readonly CardSlots TimelineCardSlots = new()
-    {
-        Base = "rounded-[var(--shell-radius-xl)] border border-[var(--shell-border)] bg-[color:var(--color-surface-raised)] shadow-[var(--shell-shadow)]",
-        Body = "flex flex-col gap-4 p-5"
-    };
+    private const string TimelineCardClass = "page-card page-card--tight";
 
     [Parameter]
     [EditorRequired]
@@ -141,15 +136,27 @@
 
     private static string GetEntryContainerClasses(SessionActivityTimelineEntryModel entry)
     {
-        var baseClasses = "space-y-3 rounded-[var(--shell-radius-lg)] border p-4";
+        var baseClasses = "timeline-entry";
 
         return entry.Kind switch
         {
-            SessionActivityKind.Warning => $"{baseClasses} border-amber-400/30 bg-amber-400/7",
-            SessionActivityKind.Error => $"{baseClasses} border-rose-400/35 bg-rose-400/8",
-            SessionActivityKind.Outcome when entry.Color == TimelineColor.Red => $"{baseClasses} border-rose-400/30 bg-rose-400/7",
-            SessionActivityKind.Outcome when entry.Color == TimelineColor.Green => $"{baseClasses} border-emerald-400/25 bg-emerald-400/6",
-            _ => $"{baseClasses} border-[var(--shell-border)]/80 bg-[color:var(--color-surface-base)]/38"
+            SessionActivityKind.Warning => $"{baseClasses} timeline-entry--warning",
+            SessionActivityKind.Error => $"{baseClasses} timeline-entry--error",
+            SessionActivityKind.Outcome when entry.Color == Color.Error => $"{baseClasses} timeline-entry--error",
+            SessionActivityKind.Outcome when entry.Color == Color.Success => $"{baseClasses} timeline-entry--success",
+            _ => $"{baseClasses} timeline-entry--default"
+        };
+    }
+
+    private static string GetTimelineDotClasses(SessionActivityTimelineEntryModel entry)
+    {
+        return entry.Color switch
+        {
+            Color.Info => "timeline-dot timeline-dot--info",
+            Color.Warning => "timeline-dot timeline-dot--warning",
+            Color.Error => "timeline-dot timeline-dot--error",
+            Color.Success => "timeline-dot timeline-dot--success",
+            _ => "timeline-dot timeline-dot--default"
         };
     }
 }

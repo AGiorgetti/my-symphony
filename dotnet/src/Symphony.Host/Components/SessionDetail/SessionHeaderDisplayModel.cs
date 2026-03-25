@@ -1,4 +1,4 @@
-using Flowbite.Components;
+using MudBlazor;
 using Symphony.Domain.Runs;
 
 namespace Symphony.Host.Components.SessionDetail;
@@ -9,6 +9,6 @@ public sealed record SessionHeaderDisplayModel(
     bool IsActive,
     string StatusText,
     RunAttemptStatus? Status,
-    Badge.BadgeColor StatusColor,
+    Color StatusColor,
     DateTimeOffset StartedAt,
     DateTimeOffset? EndedAt);

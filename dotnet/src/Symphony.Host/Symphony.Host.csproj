@@ -12,63 +12,18 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <TailwindVersion>v4.2.2</TailwindVersion>
-    <TailwindLocalToolDirectory>$(MSBuildProjectDirectory)\tools</TailwindLocalToolDirectory>
-    <TailwindLocalExecutablePath Condition="'$(OS)' == 'Windows_NT'">$(TailwindLocalToolDirectory)\tailwindcss.exe</TailwindLocalExecutablePath>
-    <TailwindLocalExecutablePath Condition="'$(OS)' != 'Windows_NT'">$(MSBuildProjectDirectory)/tools/tailwindcss</TailwindLocalExecutablePath>
-    <TailwindCacheDirectory Condition="'$(OS)' == 'Windows_NT'">$([System.Environment]::GetFolderPath(System.Environment+SpecialFolder.LocalApplicationData))\Symphony\tools\tailwind\$(TailwindVersion)</TailwindCacheDirectory>
-    <TailwindCacheDirectory Condition="'$(OS)' != 'Windows_NT'">$([System.Environment]::GetFolderPath(System.Environment+SpecialFolder.UserProfile))/.cache/symphony/tools/tailwind/$(TailwindVersion)</TailwindCacheDirectory>
-    <TailwindCachedExecutablePath Condition="'$(OS)' == 'Windows_NT'">$(TailwindCacheDirectory)\tailwindcss.exe</TailwindCachedExecutablePath>
-    <TailwindCachedExecutablePath Condition="'$(OS)' != 'Windows_NT'">$(TailwindCacheDirectory)/tailwindcss</TailwindCachedExecutablePath>
-    <TailwindExecutablePath Condition="Exists('$(TailwindLocalExecutablePath)')">$(TailwindLocalExecutablePath)</TailwindExecutablePath>
-    <TailwindExecutablePath Condition="'$(TailwindExecutablePath)' == ''">$(TailwindCachedExecutablePath)</TailwindExecutablePath>
-    <TailwindAssetName Condition="$([System.OperatingSystem]::IsWindows()) and '$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)' == 'X64'">tailwindcss-windows-x64.exe</TailwindAssetName>
-    <TailwindAssetName Condition="$([System.OperatingSystem]::IsLinux()) and '$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)' == 'X64'">tailwindcss-linux-x64</TailwindAssetName>
-    <TailwindAssetName Condition="$([System.OperatingSystem]::IsMacOS()) and '$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)' == 'Arm64'">tailwindcss-macos-arm64</TailwindAssetName>
-    <TailwindDownloadUrl Condition="'$(TailwindAssetName)' != ''">https://github.com/tailwindlabs/tailwindcss/releases/download/$(TailwindVersion)/$(TailwindAssetName)</TailwindDownloadUrl>
-    <TailwindCommand>&quot;$(TailwindExecutablePath)&quot; -i ./wwwroot/app.css -o ./wwwroot/app.min.css --minify</TailwindCommand>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Flowbite" Version="*-*" />
+    <PackageReference Include="MudBlazor" Version="9.2.0" />
   </ItemGroup>
 
   <ItemGroup>
     <Compile Remove="output\**\*.cs" />
     <UpToDateCheckBuilt Include="wwwroot\app.css" />
-    <UpToDateCheckBuilt Include="wwwroot\app.min.css" />
     <None Update="wwwroot\**\*">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>
-
-  <Target Name="EnsureSupportedTailwindBootstrapPlatform"
-          BeforeTargets="Build"
-          Condition="!Exists('$(TailwindLocalExecutablePath)') and !Exists('$(TailwindCachedExecutablePath)') and '$(TailwindAssetName)' == ''">
-    <Error Text="Automatic Tailwind bootstrap is only configured for Windows x64, Linux x64, and macOS ARM64. Install the CLI manually into dotnet/src/Symphony.Host/tools/ or prepopulate the shared cache for this platform." />
-  </Target>
-
-  <Target Name="BootstrapTailwind"
-          BeforeTargets="Build"
-          Condition="!Exists('$(TailwindLocalExecutablePath)') and !Exists('$(TailwindCachedExecutablePath)') and '$(TailwindAssetName)' != ''">
-    <MakeDir Directories="$(TailwindCacheDirectory)" />
-    <Message Importance="high"
-             Text="Bootstrapping Tailwind CLI $(TailwindVersion) into shared cache $(TailwindCacheDirectory) from $(TailwindDownloadUrl)." />
-    <Exec Command="powershell -NoProfile -NonInteractive -Command &quot;$ProgressPreference = 'SilentlyContinue'; Invoke-WebRequest -Uri '$(TailwindDownloadUrl)' -OutFile '$(TailwindCachedExecutablePath)'&quot;"
-          Condition="'$(OS)' == 'Windows_NT'" />
-    <Exec Command="/bin/sh -c &quot;if command -v curl &gt;/dev/null 2&gt;&amp;1; then curl -fsSL '$(TailwindDownloadUrl)' -o '$(TailwindCachedExecutablePath)'; elif command -v wget &gt;/dev/null 2&gt;&amp;1; then wget -qO '$(TailwindCachedExecutablePath)' '$(TailwindDownloadUrl)'; else echo 'Neither curl nor wget is installed.' 1&gt;&amp;2; exit 1; fi&quot;"
-          Condition="'$(OS)' != 'Windows_NT'" />
-    <Exec Command="chmod +x &quot;$(TailwindCachedExecutablePath)&quot;"
-          Condition="'$(OS)' != 'Windows_NT'" />
-  </Target>
-
-  <Target Name="Tailwind"
-          BeforeTargets="Build"
-          Inputs="wwwroot\app.css"
-          Outputs="wwwroot\app.min.css"
-          Condition="Exists('$(TailwindExecutablePath)')">
-    <Exec Command="$(TailwindCommand)"
-          WorkingDirectory="$(MSBuildProjectDirectory)" />
-  </Target>
 
 </Project>

@@ -1,37 +1,37 @@
 @using Symphony.Host.Dashboard
 
-<Card Slots="@PanelSlots" data-testid="dashboard-recent-attempts">
-    <div class="flex items-start justify-between gap-4">
-        <div>
-            <p class="text-xs font-bold uppercase tracking-[0.24em] text-[color:var(--color-primary-DEFAULT)]">Recent Attempts</p>
-            <h2 class="mt-2 text-2xl font-semibold text-[color:var(--color-on-surface-primary)]">Latest outcomes</h2>
-            <p class="mt-2 text-sm leading-6 text-[color:var(--color-on-surface-secondary)]">
+<MudPaper Class="@PanelClass" Outlined="true" Elevation="0" data-testid="dashboard-recent-attempts">
+    <div class="panel-header">
+        <div class="panel-header__content">
+            <p class="section-kicker">Recent Attempts</p>
+            <h2 class="section-title section-title--panel">Latest outcomes</h2>
+            <p class="section-copy">
                 Most recent run outcomes with concise error summaries for operator triage.
             </p>
         </div>
-        <Badge Color="Badge.BadgeColor.Primary">@Attempts.Count</Badge>
+        <StatusPill Text="@Attempts.Count.ToString()" Color="Color.Primary" />
     </div>
 
     @if (Attempts.Count == 0)
     {
-        <div class="rounded-[var(--shell-radius-lg)] border border-dashed border-[var(--shell-border)]/80 bg-[color:var(--color-surface-overlay)]/50 p-4">
-            <p class="text-base font-semibold text-[color:var(--color-on-surface-primary)]">No recent attempts yet</p>
-            <p class="mt-2 text-sm leading-6 text-[color:var(--color-on-surface-secondary)]">
+        <div class="empty-state">
+            <p class="empty-state__title">No recent attempts yet</p>
+            <p class="empty-state__copy">
                 Completed worker attempts will appear here after the first run finishes.
             </p>
         </div>
     }
     else
     {
-        <ul class="space-y-4">
+        <ul class="panel-list">
             @foreach (var attempt in Attempts)
             {
-                <li class="rounded-[var(--shell-radius-lg)] border border-[var(--shell-border)] bg-[color:var(--color-surface-overlay)] p-4">
-                    <div class="flex flex-wrap items-center justify-between gap-3">
-                        <span class="text-base font-semibold text-[color:var(--color-on-surface-primary)]">@attempt.IssueIdentifier</span>
-                        <Badge Color="@DashboardDisplay.GetOutcomeBadgeColor(attempt.Outcome)">@attempt.Outcome</Badge>
+                <li class="panel-item">
+                    <div class="panel-item__header">
+                        <span class="panel-item__title">@attempt.IssueIdentifier</span>
+                        <StatusPill Text="@attempt.Outcome" Color="@DashboardDisplay.GetOutcomeBadgeColor(attempt.Outcome)" />
                     </div>
-                    <div class="mt-3 space-y-2 text-sm text-[color:var(--color-on-surface-secondary)]">
+                    <div class="panel-item__meta">
                         <p>@GetAttemptLabel(attempt.Attempt) · finished @DashboardDisplay.FormatTimestamp(attempt.CompletedAt) · @DashboardDisplay.FormatDuration(attempt.DurationSeconds)</p>
                         @if (!string.IsNullOrWhiteSpace(attempt.SessionId))
                         {
@@ -46,14 +46,10 @@
             }
         </ul>
     }
-</Card>
+</MudPaper>
 
 @code {
-    private static readonly CardSlots PanelSlots = new()
-    {
-        Base = "h-full rounded-[var(--shell-radius-lg)] border border-[var(--shell-border)] bg-[color:var(--color-surface-raised)] shadow-[var(--shell-shadow)]",
-        Body = "flex h-full flex-col gap-6 p-5"
-    };
+    private const string PanelClass = "panel-card";
 
     [Parameter]
     [EditorRequired]

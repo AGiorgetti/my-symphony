@@ -1,8 +1,8 @@
 using Bunit;
-using Flowbite.Components;
-using Flowbite.Services;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.AspNetCore.Components;
+using Microsoft.Extensions.DependencyInjection;
+using MudBlazor.Services;
+using MudBlazor;
 using Symphony.Abstractions.Orchestration;
 using Symphony.Host.Components.Shell;
 using Symphony.Host.Components.Layout;
@@ -15,8 +15,9 @@ public sealed class ThemeSwitcherTests : BunitContext
 {
     public ThemeSwitcherTests()
     {
-        Services.AddFlowbite();
-        Services.AddSingleton<IFloatingService, TestFloatingService>();
+        JSInterop.Mode = JSRuntimeMode.Loose;
+        Services.AddMudServices();
+        Services.AddSingleton<IKeyInterceptorService, TestKeyInterceptorService>();
     }
 
     [Fact]
@@ -40,11 +41,13 @@ public sealed class ThemeSwitcherTests : BunitContext
         var cut = Render<ThemeSwitcher>(parameters => parameters.Add(component => component.ThemeService, themeService));
 
         cut.Find("[data-testid=\"theme-switcher\"] button").Click();
-        var dropdownItems = cut.FindComponents<DropdownItem>();
+        var dropdownItems = cut.FindAll("[data-testid=\"theme-switcher\"] button")
+            .Skip(1)
+            .ToArray();
 
-        Assert.Equal(3, dropdownItems.Count);
+        Assert.Equal(3, dropdownItems.Length);
 
-        await cut.InvokeAsync(() => dropdownItems[1].Instance.OnClick.InvokeAsync());
+        await cut.InvokeAsync(() => dropdownItems[1].Click());
 
         Assert.Equal("dark-blue", Assert.Single(themeService.SelectedThemes));
         Assert.Equal("Dark Blue", cut.Find("[data-testid=\"theme-switcher\"] button").TextContent.Trim());
@@ -235,43 +238,6 @@ public sealed class ThemeSwitcherTests : BunitContext
                     RecentAttempts: [],
                     LastError: null,
                     WorkflowLastError: null));
-        }
-    }
-
-    private sealed class TestFloatingService : IFloatingService, IDisposable
-    {
-        public Task<string?> InitializeAsync(string id, FloatingOptions? options = null)
-        {
-            return Task.FromResult<string?>("top");
-        }
-
-        public Task UpdatePositionAsync(string id)
-        {
-            return Task.CompletedTask;
-        }
-
-        public Task DestroyAsync(string id)
-        {
-            return Task.CompletedTask;
-        }
-
-        public Task<bool> ExistsAsync(string id)
-        {
-            return Task.FromResult(true);
-        }
-
-        public Task<string?> GetPlacementAsync(string id)
-        {
-            return Task.FromResult<string?>("top");
-        }
-
-        public void Dispose()
-        {
-        }
-
-        public ValueTask DisposeAsync()
-        {
-            return ValueTask.CompletedTask;
         }
     }
 }

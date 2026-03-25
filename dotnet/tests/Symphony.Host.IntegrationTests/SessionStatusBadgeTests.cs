@@ -1,7 +1,7 @@
 using Bunit;
-using Flowbite.Components;
-using Flowbite.Services;
 using Microsoft.Extensions.DependencyInjection;
+using MudBlazor;
+using MudBlazor.Services;
 using Symphony.Domain.Runs;
 using Symphony.Host.Components.Sessions;
 
@@ -11,31 +11,31 @@ public sealed class SessionStatusBadgeTests : BunitContext
 {
     public SessionStatusBadgeTests()
     {
-        Services.AddFlowbite();
+        JSInterop.Mode = JSRuntimeMode.Loose;
+        Services.AddMudServices();
+        Services.AddSingleton<IKeyInterceptorService, TestKeyInterceptorService>();
     }
 
     [Theory]
-    [InlineData(RunAttemptStatus.Succeeded, Badge.BadgeColor.Success)]
-    [InlineData(RunAttemptStatus.PreparingWorkspace, Badge.BadgeColor.Info)]
-    [InlineData(RunAttemptStatus.BuildingPrompt, Badge.BadgeColor.Info)]
-    [InlineData(RunAttemptStatus.LaunchingAgentProcess, Badge.BadgeColor.Info)]
-    [InlineData(RunAttemptStatus.InitializingSession, Badge.BadgeColor.Info)]
-    [InlineData(RunAttemptStatus.StreamingTurn, Badge.BadgeColor.Info)]
-    [InlineData(RunAttemptStatus.Finishing, Badge.BadgeColor.Info)]
-    [InlineData(RunAttemptStatus.Failed, Badge.BadgeColor.Failure)]
-    [InlineData(RunAttemptStatus.TimedOut, Badge.BadgeColor.Failure)]
-    [InlineData(RunAttemptStatus.Stalled, Badge.BadgeColor.Failure)]
-    [InlineData(RunAttemptStatus.CanceledByReconciliation, Badge.BadgeColor.Gray)]
+    [InlineData(RunAttemptStatus.Succeeded, "status-pill--success")]
+    [InlineData(RunAttemptStatus.PreparingWorkspace, "status-pill--info")]
+    [InlineData(RunAttemptStatus.BuildingPrompt, "status-pill--info")]
+    [InlineData(RunAttemptStatus.LaunchingAgentProcess, "status-pill--info")]
+    [InlineData(RunAttemptStatus.InitializingSession, "status-pill--info")]
+    [InlineData(RunAttemptStatus.StreamingTurn, "status-pill--info")]
+    [InlineData(RunAttemptStatus.Finishing, "status-pill--info")]
+    [InlineData(RunAttemptStatus.Failed, "status-pill--error")]
+    [InlineData(RunAttemptStatus.TimedOut, "status-pill--error")]
+    [InlineData(RunAttemptStatus.Stalled, "status-pill--error")]
+    [InlineData(RunAttemptStatus.CanceledByReconciliation, "status-pill--default")]
     public void SessionStatusBadge_maps_status_to_expected_badge_color(
         RunAttemptStatus status,
-        Badge.BadgeColor expectedColor)
+        string expectedClass)
     {
         var cut = Render<SessionStatusBadge>(parameters => parameters.Add(component => component.Status, status));
 
-        var badge = cut.FindComponent<Badge>();
-
-        Assert.Equal(expectedColor, badge.Instance.Color);
         Assert.Contains(status.ToString(), cut.Markup, StringComparison.Ordinal);
+        Assert.Contains(expectedClass, cut.Markup, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -44,11 +44,9 @@ public sealed class SessionStatusBadgeTests : BunitContext
         var cut = Render<SessionStatusBadge>(
             parameters => parameters
                 .Add(component => component.Text, "Active")
-                .Add(component => component.ColorOverride, Badge.BadgeColor.Info));
+                .Add(component => component.ColorOverride, Color.Info));
 
-        var badge = cut.FindComponent<Badge>();
-
-        Assert.Equal(Badge.BadgeColor.Info, badge.Instance.Color);
         Assert.Contains("Active", cut.Markup, StringComparison.Ordinal);
+        Assert.Contains("status-pill--info", cut.Markup, StringComparison.Ordinal);
     }
 }

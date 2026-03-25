@@ -1,4 +1,4 @@
-using Flowbite.Components;
+using MudBlazor;
 using Symphony.Host.Dashboard;
 
 namespace Symphony.Host.Components.SessionDetail;
@@ -9,7 +9,7 @@ public sealed record SessionActivityTimelineEntryModel(
     string TimestampLabel,
     string Title,
     string KindLabel,
-    Badge.BadgeColor KindBadgeColor,
+    Color KindBadgeColor,
     string? Summary,
     IReadOnlyList<SessionActivityFactModel> Facts,
     string? Detail,
@@ -17,7 +17,7 @@ public sealed record SessionActivityTimelineEntryModel(
     string? DetailToggleLabel,
     bool HasExpandableDetail,
     bool IsStructuredDetail,
-    TimelineColor Color);
+    Color Color);
 
 public sealed record SessionActivityFactModel(
     string Label,
