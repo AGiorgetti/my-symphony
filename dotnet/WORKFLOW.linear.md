@@ -3,7 +3,7 @@ tracker:
   kind: linear
   endpoint: https://api.linear.app/graphql
   api_key: $LINEAR_API_KEY
-  project_slug: "symphony-0c79b11b75ea"
+  project_slug: "PROJECT_SLUG"
   active_states:
     - Todo
     - In Progress
@@ -24,18 +24,18 @@ tracker:
 polling:
   interval_ms: 5000
 workspace:
-  root: ~/code/symphony-workspaces
+  root: ~/code/symphony-workspaces/OWNER/REPO
 hooks:
   after_create: |
-    git clone --depth 1 https://github.com/openai/symphony .
+    git clone --depth 1 https://github.com/OWNER/REPO .
     if command -v dotnet >/dev/null 2>&1; then
       cd dotnet && dotnet restore
     fi
   before_remove: |
     cd dotnet && dotnet clean -c Release
 agent:
-  max_concurrent_agents: 10
-  max_turns: 20
+  max_concurrent_agents: 5
+  max_turns: 10
   require_exec_marker: false
   exec_marker: "exec:agent"
 codex:
