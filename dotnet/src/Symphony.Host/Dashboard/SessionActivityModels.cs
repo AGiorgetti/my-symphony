@@ -4,6 +4,7 @@ public enum SessionActivityKind
 {
     LifecycleMilestone,
     AgentMessage,
+    DebugMessage,
     ProgressUpdate,
     Warning,
     Error,

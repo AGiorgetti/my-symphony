@@ -15,6 +15,7 @@ public sealed class CodexAppServerClientTests
     [Fact]
     public async Task RunAsync_sends_handshake_updates_session_and_handles_approval_and_tool_calls()
     {
+        var transcriptSink = new RecordingTranscriptSink();
         var sessionFactory = new TestCodexProcessSessionFactory(
             async (line, session) =>
             {
@@ -59,7 +60,7 @@ public sealed class CodexAppServerClientTests
 
                 await Task.CompletedTask;
             });
-        var client = new CodexAppServerClient(sessionFactory, TimeProvider.System, NullLogger<CodexAppServerClient>.Instance);
+        var client = CreateClient(sessionFactory, transcriptSink);
         using var testContext = CreateContext();
 
         await client.RunAsync(testContext.Context, Path.GetTempPath(), "Prompt body", CreateCodexOptions());
@@ -90,11 +91,30 @@ public sealed class CodexAppServerClientTests
             sessionFactory.Session.SentLines,
             line => line.Contains("\"error\":\"unsupported_tool_call\"", StringComparison.Ordinal));
         Assert.True(sessionFactory.Session.WasKilled);
+        Assert.Contains(
+            transcriptSink.Outbound,
+            entry => entry.Title == "Sent initialize" && entry.Payload.Contains("\"method\":\"initialize\"", StringComparison.Ordinal));
+        Assert.Contains(
+            transcriptSink.Outbound,
+            entry => entry.Title == "Sent turn/start" && entry.Payload.Contains("Prompt body", StringComparison.Ordinal));
+        Assert.Contains(
+            transcriptSink.Outbound,
+            entry => entry.Title == "Sent response approval-1" && entry.Payload.Contains("\"approved\":true", StringComparison.Ordinal));
+        Assert.Contains(
+            transcriptSink.Inbound,
+            entry => entry.Title == "Received response 1" && entry.Payload.Contains("\"id\":1", StringComparison.Ordinal));
+        Assert.Contains(
+            transcriptSink.Inbound,
+            entry => entry.Title == "Received approval/request");
+        Assert.Contains(
+            transcriptSink.Inbound,
+            entry => entry.Title == "Received turn/completed" && entry.Payload.Contains("\"message\":\"done\"", StringComparison.Ordinal));
     }
 
     [Fact]
     public async Task RunAsync_fails_when_codex_requests_user_input()
     {
+        var transcriptSink = new RecordingTranscriptSink();
         var sessionFactory = new TestCodexProcessSessionFactory(
             async (line, session) =>
             {
@@ -124,7 +144,7 @@ public sealed class CodexAppServerClientTests
 
                 await Task.CompletedTask;
             });
-        var client = new CodexAppServerClient(sessionFactory, TimeProvider.System, NullLogger<CodexAppServerClient>.Instance);
+        var client = CreateClient(sessionFactory, transcriptSink);
         using var testContext = CreateContext();
 
         var exception = await Assert.ThrowsAsync<CodexAgentException>(
@@ -138,6 +158,7 @@ public sealed class CodexAppServerClientTests
     [Fact]
     public async Task RunAsync_reuses_same_thread_for_continuation_turns_and_updates_turn_count()
     {
+        var transcriptSink = new RecordingTranscriptSink();
         var turnCounter = 0;
         var sessionFactory = new TestCodexProcessSessionFactory(
             async (line, session) =>
@@ -169,7 +190,7 @@ public sealed class CodexAppServerClientTests
 
                 await Task.CompletedTask;
             });
-        var client = new CodexAppServerClient(sessionFactory, TimeProvider.System, NullLogger<CodexAppServerClient>.Instance);
+        var client = CreateClient(sessionFactory, transcriptSink);
         using var testContext = CreateContext();
 
         await client.RunAsync(
@@ -210,6 +231,7 @@ public sealed class CodexAppServerClientTests
     [Fact]
     public async Task RunAsync_includes_stderr_when_process_exits_during_startup_handshake()
     {
+        var transcriptSink = new RecordingTranscriptSink();
         var sessionFactory = new TestCodexProcessSessionFactory(
             async (line, session) =>
             {
@@ -227,7 +249,7 @@ public sealed class CodexAppServerClientTests
 
                 await Task.CompletedTask;
             });
-        var client = new CodexAppServerClient(sessionFactory, TimeProvider.System, NullLogger<CodexAppServerClient>.Instance);
+        var client = CreateClient(sessionFactory, transcriptSink);
         using var testContext = CreateContext();
 
         var exception = await Assert.ThrowsAsync<CodexAgentException>(
@@ -240,6 +262,55 @@ public sealed class CodexAppServerClientTests
         {
             Assert.Contains("command not found", exception.Message, StringComparison.Ordinal);
         }
+        Assert.Contains(
+            transcriptSink.Diagnostics,
+            entry => entry.Title == "Received stderr" && entry.Payload.Contains("command not found", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task RunAsync_skips_agent_message_delta_transcript_entries_when_delta_tracking_is_disabled()
+    {
+        var transcriptSink = new RecordingTranscriptSink(trackAgentMessageDeltas: false);
+        var sessionFactory = new TestCodexProcessSessionFactory(
+            async (line, session) =>
+            {
+                using var document = JsonDocument.Parse(line);
+                var method = document.RootElement.TryGetProperty("method", out var methodElement)
+                    ? methodElement.GetString()
+                    : null;
+
+                if (method == "initialize")
+                {
+                    session.EnqueueStdout(new { id = 1, result = new { } });
+                    return;
+                }
+
+                if (method == "thread/start")
+                {
+                    session.EnqueueStdout(new { id = 2, result = new { thread = new { id = "thread-123" } } });
+                    return;
+                }
+
+                if (method == "turn/start")
+                {
+                    session.EnqueueStdout(new { id = 3, result = new { turn = new { id = "turn-456" } } });
+                    session.EnqueueStdout(new { method = "item/agentMessage/delta", @params = new { delta = "partial" } });
+                    session.EnqueueStdout(new { method = "turn/completed", @params = new { message = "done" } });
+                }
+
+                await Task.CompletedTask;
+            });
+        var client = CreateClient(sessionFactory, transcriptSink);
+        using var testContext = CreateContext();
+
+        await client.RunAsync(testContext.Context, Path.GetTempPath(), "Prompt body", CreateCodexOptions());
+
+        Assert.DoesNotContain(
+            transcriptSink.Inbound,
+            entry => entry.Title == "Received item/agentMessage/delta");
+        Assert.Contains(
+            transcriptSink.Inbound,
+            entry => entry.Title == "Received turn/completed");
     }
 
     private static WorkflowCodexOptions CreateCodexOptions()
@@ -273,6 +344,17 @@ public sealed class CodexAppServerClientTests
             trackedSession,
             trackedSession.CreateExecutionContext(),
             logger);
+    }
+
+    private static CodexAppServerClient CreateClient(
+        TestCodexProcessSessionFactory sessionFactory,
+        RecordingTranscriptSink transcriptSink)
+    {
+        return new CodexAppServerClient(
+            sessionFactory,
+            TimeProvider.System,
+            transcriptSink,
+            NullLogger<CodexAppServerClient>.Instance);
     }
 
     private sealed class TestExecutionContext : IDisposable
@@ -330,6 +412,39 @@ public sealed class CodexAppServerClientTests
     }
 
     private sealed record LogEntry(string Message, IReadOnlyDictionary<string, object?> State);
+
+    private sealed class RecordingTranscriptSink : IAgentDebugTranscriptSink
+    {
+        public RecordingTranscriptSink(bool trackAgentMessageDeltas = true)
+        {
+            TrackAgentMessageDeltas = trackAgentMessageDeltas;
+        }
+
+        public bool TrackAgentMessageDeltas { get; }
+
+        public List<TranscriptEntry> Outbound { get; } = [];
+
+        public List<TranscriptEntry> Inbound { get; } = [];
+
+        public List<TranscriptEntry> Diagnostics { get; } = [];
+
+        public void RecordOutbound(string issueIdentifier, DateTimeOffset timestamp, string title, string payload)
+        {
+            Outbound.Add(new TranscriptEntry(issueIdentifier, timestamp, title, payload));
+        }
+
+        public void RecordInbound(string issueIdentifier, DateTimeOffset timestamp, string title, string payload)
+        {
+            Inbound.Add(new TranscriptEntry(issueIdentifier, timestamp, title, payload));
+        }
+
+        public void RecordDiagnostic(string issueIdentifier, DateTimeOffset timestamp, string title, string detail)
+        {
+            Diagnostics.Add(new TranscriptEntry(issueIdentifier, timestamp, title, detail));
+        }
+    }
+
+    private sealed record TranscriptEntry(string IssueIdentifier, DateTimeOffset Timestamp, string Title, string Payload);
 
     private sealed class NullScope : IDisposable
     {

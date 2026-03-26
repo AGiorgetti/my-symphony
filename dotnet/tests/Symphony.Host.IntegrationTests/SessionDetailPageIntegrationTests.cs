@@ -22,7 +22,7 @@ namespace Symphony.Host.IntegrationTests;
 public sealed class SessionDetailPageIntegrationTests
 {
     [Fact]
-    public async Task Session_detail_page_renders_breadcrumb_tabs_and_live_metadata()
+    public async Task Session_detail_page_renders_breadcrumb_activity_and_compact_metadata()
     {
         var store = CreateStoreWithActiveSession();
         using var app = await StartSessionDetailApplicationAsync(
@@ -40,10 +40,8 @@ public sealed class SessionDetailPageIntegrationTests
         Assert.Contains("data-testid=\"session-detail-header\"", html, StringComparison.Ordinal);
         Assert.Contains("Open tracker issue", html, StringComparison.Ordinal);
         Assert.Contains("data-testid=\"session-header-active-indicator\"", html, StringComparison.Ordinal);
-        Assert.Contains("data-testid=\"session-detail-tabs\"", html, StringComparison.Ordinal);
-        Assert.Contains("Activity", html, StringComparison.Ordinal);
-        Assert.Contains("Details", html, StringComparison.Ordinal);
-        Assert.Contains("data-testid=\"session-detail-details-panel\"", html, StringComparison.Ordinal);
+        Assert.Contains("data-testid=\"session-detail-metadata-panel\"", html, StringComparison.Ordinal);
+        Assert.Contains("data-testid=\"session-detail-metadata-summary\"", html, StringComparison.Ordinal);
         Assert.Contains("data-testid=\"session-detail-metadata\"", html, StringComparison.Ordinal);
         Assert.Contains("thread-1-turn-2", html, StringComparison.Ordinal);
         Assert.Contains("Attempt 2", html, StringComparison.Ordinal);
@@ -109,16 +107,13 @@ public sealed class SessionDetailPageIntegrationTests
         var html = await response.Content.ReadAsStringAsync();
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Contains("Event", html, StringComparison.Ordinal);
-        Assert.Contains("turn_completed", html, StringComparison.Ordinal);
-        Assert.Contains("Files", html, StringComparison.Ordinal);
-        Assert.Contains("Program.cs", html, StringComparison.Ordinal);
-        Assert.Contains("Input", html, StringComparison.Ordinal);
-        Assert.Contains("12", html, StringComparison.Ordinal);
+        Assert.Contains("Turn completed", html, StringComparison.Ordinal);
         Assert.DoesNotContain("data-testid=\"session-detail-debug-banner\"", html, StringComparison.Ordinal);
         Assert.DoesNotContain("data-testid=\"session-detail-timeline-detail\"", html, StringComparison.Ordinal);
-        Assert.DoesNotContain("Raw payload", html, StringComparison.Ordinal);
-        Assert.Contains("Enable dashboard debug mode to inspect the raw agent payload for this event.", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("Sent turn/start", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("Received turn/completed", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("Prompt body", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("&quot;message&quot;: &quot;done&quot;", html, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -129,7 +124,8 @@ public sealed class SessionDetailPageIntegrationTests
             store,
             new StaticDashboardStateService(CreateSnapshot()),
             CreateActiveRuntimeService(),
-            debugModeEnabled: true);
+            debugModeEnabled: true,
+            trackAgentMessageDeltasEnabled: true);
         var client = CreateHttpClient(app);
 
         var response = await client.GetAsync("/sessions/ABC-3");
@@ -137,11 +133,21 @@ public sealed class SessionDetailPageIntegrationTests
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Contains("data-testid=\"session-detail-debug-banner\"", html, StringComparison.Ordinal);
+        Assert.Contains("data-testid=\"session-detail-method-filter\"", html, StringComparison.Ordinal);
+        Assert.Contains("data-testid=\"session-detail-method-filter-turn-start\"", html, StringComparison.Ordinal);
+        Assert.Contains("data-testid=\"session-detail-method-filter-turn-completed\"", html, StringComparison.Ordinal);
+        Assert.Contains("data-testid=\"session-detail-method-filter-item-agentmessage-delta\"", html, StringComparison.Ordinal);
         Assert.Contains("data-testid=\"session-detail-timeline-detail\"", html, StringComparison.Ordinal);
+        Assert.Contains("Sent turn/start", html, StringComparison.Ordinal);
+        Assert.Contains("Received turn/completed", html, StringComparison.Ordinal);
+        Assert.Contains("Received item/agentMessage/delta", html, StringComparison.Ordinal);
         Assert.Contains("View raw payload and debug metadata", html, StringComparison.Ordinal);
         Assert.Contains("Debug metadata", html, StringComparison.Ordinal);
         Assert.Contains("Raw payload", html, StringComparison.Ordinal);
-        Assert.Contains("&quot;event&quot;: &quot;turn_completed&quot;", html, StringComparison.Ordinal);
+        Assert.Contains("Prompt body", html, StringComparison.Ordinal);
+        Assert.Contains("&quot;method&quot;: &quot;turn/completed&quot;", html, StringComparison.Ordinal);
+        Assert.Contains("&quot;message&quot;: &quot;done&quot;", html, StringComparison.Ordinal);
+        Assert.Contains("&quot;method&quot;: &quot;item/agentMessage/delta&quot;", html, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -198,20 +204,58 @@ public sealed class SessionDetailPageIntegrationTests
         var startedAt = new DateTimeOffset(2026, 3, 20, 10, 0, 0, TimeSpan.Zero);
 
         store.RecordSessionStart("ABC-3", startedAt, "https://github.com/AGiorgetti/my-symphony/issues/ABC-3");
+        store.RecordActivity("ABC-3", new SessionActivityEntry(SessionActivityKind.AgentMessage, startedAt.AddSeconds(30), "Turn completed", "Applied changes"));
         store.RecordActivity(
             "ABC-3",
             new SessionActivityEntry(
-                SessionActivityKind.AgentMessage,
+                SessionActivityKind.DebugMessage,
                 startedAt.AddMinutes(1),
-                "turn_completed",
+                "Sent turn/start",
                 """
                 {
-                  "event": "turn_completed",
-                  "files": [
-                    "Program.cs"
-                  ],
-                  "stats": {
-                    "input": 12
+                  "id": 3,
+                  "method": "turn/start",
+                  "params": {
+                    "threadId": "thread-123",
+                    "input": [
+                      {
+                        "type": "text",
+                        "text": "Prompt body"
+                      }
+                    ]
+                  }
+                }
+                """));
+        store.RecordActivity(
+            "ABC-3",
+            new SessionActivityEntry(
+                SessionActivityKind.DebugMessage,
+                startedAt.AddMinutes(1).AddSeconds(1),
+                "Received turn/completed",
+                """
+                {
+                  "method": "turn/completed",
+                  "params": {
+                    "message": "done",
+                    "usage": {
+                      "input_tokens": 12,
+                      "output_tokens": 5,
+                      "total_tokens": 17
+                    }
+                  }
+                }
+                """));
+        store.RecordActivity(
+            "ABC-3",
+            new SessionActivityEntry(
+                SessionActivityKind.DebugMessage,
+                startedAt.AddMinutes(1).AddSeconds(2),
+                "Received item/agentMessage/delta",
+                """
+                {
+                  "method": "item/agentMessage/delta",
+                  "params": {
+                    "delta": "partial reply"
                   }
                 }
                 """));
@@ -290,13 +334,19 @@ public sealed class SessionDetailPageIntegrationTests
         ISessionActivityStore sessionActivityStore,
         IDashboardStateService dashboardStateService,
         IOrchestratorRuntimeService runtimeService,
-        bool debugModeEnabled = false)
+        bool debugModeEnabled = false,
+        bool trackAgentMessageDeltasEnabled = false)
     {
         var builder = WebApplication.CreateBuilder();
         builder.WebHost.UseUrls("http://127.0.0.1:0");
         builder.Services.AddRazorComponents().AddInteractiveServerComponents();
         builder.Services.AddMudServices();
-        builder.Services.Configure<DashboardUiOptions>(options => options.DebugMode = debugModeEnabled);
+        builder.Services.Configure<DashboardUiOptions>(
+            options =>
+            {
+                options.DebugMode = debugModeEnabled;
+                options.TrackAgentMessageDeltas = trackAgentMessageDeltasEnabled;
+            });
         builder.Services.AddSingleton(runtimeService);
         builder.Services.AddSingleton<IOrchestratorRuntimeService>(runtimeService);
         builder.Services.AddSingleton<IOrchestratorControl>(new StubOrchestratorControl());

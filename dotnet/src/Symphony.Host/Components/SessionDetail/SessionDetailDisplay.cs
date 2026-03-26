@@ -68,6 +68,7 @@ internal static class SessionDetailDisplay
         {
             SessionActivityKind.LifecycleMilestone => "Lifecycle",
             SessionActivityKind.AgentMessage => "Agent message",
+            SessionActivityKind.DebugMessage => "Debug transcript",
             SessionActivityKind.ProgressUpdate => "Progress",
             SessionActivityKind.Warning => "Warning",
             SessionActivityKind.Error => "Error",
@@ -81,6 +82,7 @@ internal static class SessionDetailDisplay
         return kind switch
         {
             SessionActivityKind.AgentMessage => Color.Info,
+            SessionActivityKind.DebugMessage => Color.Info,
             SessionActivityKind.Warning => Color.Warning,
             SessionActivityKind.Error => Color.Error,
             SessionActivityKind.Outcome => Color.Success,
@@ -94,6 +96,7 @@ internal static class SessionDetailDisplay
         {
             SessionActivityKind.LifecycleMilestone => Color.Default,
             SessionActivityKind.AgentMessage => Color.Info,
+            SessionActivityKind.DebugMessage => Color.Info,
             SessionActivityKind.ProgressUpdate => Color.Default,
             SessionActivityKind.Warning => Color.Warning,
             SessionActivityKind.Error => Color.Error,
@@ -356,6 +359,33 @@ internal static class SessionDetailDisplay
             facts.Add(new SessionActivityFactModel("Event", eventName));
         }
 
+        if (TryGetString(element, "method", out var method))
+        {
+            facts.Add(new SessionActivityFactModel("Method", method));
+        }
+
+        if (TryGetScalar(element, "id", out var id))
+        {
+            facts.Add(new SessionActivityFactModel("Id", id));
+        }
+
+        if (TryGetNestedString(element, ["params", "threadId"], out var paramsThreadId)
+            || TryGetNestedString(element, ["result", "thread", "id"], out paramsThreadId))
+        {
+            facts.Add(new SessionActivityFactModel("Thread", paramsThreadId));
+        }
+
+        if (TryGetNestedString(element, ["params", "turnId"], out var paramsTurnId)
+            || TryGetNestedString(element, ["result", "turn", "id"], out paramsTurnId))
+        {
+            facts.Add(new SessionActivityFactModel("Turn", paramsTurnId));
+        }
+
+        if (TryGetFirstInputText(element, out var promptText))
+        {
+            facts.Add(new SessionActivityFactModel("Prompt", TruncateText(promptText, 80)));
+        }
+
         if (element.TryGetProperty("files", out var files) && files.ValueKind == JsonValueKind.Array)
         {
             var fileNames = files.EnumerateArray()
@@ -405,6 +435,27 @@ internal static class SessionDetailDisplay
         return facts;
     }
 
+    private static bool TryGetScalar(JsonElement element, string propertyName, out string value)
+    {
+        value = string.Empty;
+
+        if (!element.TryGetProperty(propertyName, out var property))
+        {
+            return false;
+        }
+
+        value = property.ValueKind switch
+        {
+            JsonValueKind.String when !string.IsNullOrWhiteSpace(property.GetString()) => property.GetString()!,
+            JsonValueKind.Number => property.GetRawText(),
+            JsonValueKind.True => bool.TrueString.ToLowerInvariant(),
+            JsonValueKind.False => bool.FalseString.ToLowerInvariant(),
+            _ => string.Empty
+        };
+
+        return !string.IsNullOrWhiteSpace(value);
+    }
+
     private static bool TryGetString(JsonElement element, string propertyName, out string value)
     {
         value = string.Empty;
@@ -416,6 +467,71 @@ internal static class SessionDetailDisplay
 
         value = property.GetString() ?? string.Empty;
         return !string.IsNullOrWhiteSpace(value);
+    }
+
+    private static bool TryGetNestedString(JsonElement element, IReadOnlyList<string> path, out string value)
+    {
+        value = string.Empty;
+        var current = element;
+
+        foreach (var segment in path)
+        {
+            if (current.ValueKind != JsonValueKind.Object || !current.TryGetProperty(segment, out current))
+            {
+                return false;
+            }
+        }
+
+        if (current.ValueKind != JsonValueKind.String)
+        {
+            return false;
+        }
+
+        value = current.GetString() ?? string.Empty;
+        return !string.IsNullOrWhiteSpace(value);
+    }
+
+    private static bool TryGetFirstInputText(JsonElement element, out string value)
+    {
+        value = string.Empty;
+
+        if (!TryGetNestedElement(element, ["params", "input"], out var inputItems)
+            || inputItems.ValueKind != JsonValueKind.Array)
+        {
+            return false;
+        }
+
+        foreach (var item in inputItems.EnumerateArray())
+        {
+            if (item.ValueKind != JsonValueKind.Object)
+            {
+                continue;
+            }
+
+            if (TryGetString(item, "text", out value))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool TryGetNestedElement(JsonElement element, IReadOnlyList<string> path, out JsonElement value)
+    {
+        value = element;
+        var current = element;
+
+        foreach (var segment in path)
+        {
+            if (current.ValueKind != JsonValueKind.Object || !current.TryGetProperty(segment, out current))
+            {
+                return false;
+            }
+        }
+
+        value = current;
+        return true;
     }
 
     private static bool TryGetNumeric(JsonElement element, string propertyName, out string value)

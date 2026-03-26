@@ -31,6 +31,7 @@ public static class ApplicationServiceCollectionExtensions
         services.TryAddSingleton<IActiveSessionRegistry>(serviceProvider => serviceProvider.GetRequiredService<ActiveSessionRegistry>());
         services.TryAddSingleton<IOrchestratorRuntimeService, OrchestratorRuntimeService>();
         services.TryAddSingleton<IQueuedIssueWorker, NoOpQueuedIssueWorker>();
+        services.TryAddSingleton<IAgentDebugTranscriptSink, NullAgentDebugTranscriptSink>();
         services.TryAddSingleton<IPollingIterationHandler, OrchestratorPollingIterationHandler>();
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, DispatchWorkerBackgroundService>());
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, RetryDispatchBackgroundService>());

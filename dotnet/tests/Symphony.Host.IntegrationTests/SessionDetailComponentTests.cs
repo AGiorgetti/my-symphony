@@ -22,7 +22,12 @@ public sealed class SessionDetailComponentTests : BunitContext
         Services.AddMudServices();
         Services.AddSingleton<IKeyInterceptorService, TestKeyInterceptorService>();
         Services.AddOptions();
-        Services.Configure<DashboardUiOptions>(options => options.DebugMode = false);
+        Services.Configure<DashboardUiOptions>(
+            options =>
+            {
+                options.DebugMode = false;
+                options.TrackAgentMessageDeltas = false;
+            });
     }
 
     [Fact]
@@ -127,14 +132,13 @@ public sealed class SessionDetailComponentTests : BunitContext
                 .Add(component => component.Timeline, CreateStructuredTimeline())
                 .Add(component => component.DebugModeEnabled, false));
 
-        Assert.Contains("Event", cut.Markup, StringComparison.Ordinal);
         Assert.Contains("turn_completed", cut.Markup, StringComparison.Ordinal);
-        Assert.Contains("Files", cut.Markup, StringComparison.Ordinal);
-        Assert.Contains("Program.cs", cut.Markup, StringComparison.Ordinal);
         Assert.DoesNotContain("data-testid=\"session-detail-debug-banner\"", cut.Markup, StringComparison.Ordinal);
         Assert.DoesNotContain("data-testid=\"session-detail-timeline-detail\"", cut.Markup, StringComparison.Ordinal);
-        Assert.DoesNotContain("Raw payload", cut.Markup, StringComparison.Ordinal);
-        Assert.Contains("Enable dashboard debug mode to inspect the raw agent payload for this event.", cut.Markup, StringComparison.Ordinal);
+        Assert.DoesNotContain("Sent turn/start", cut.Markup, StringComparison.Ordinal);
+        Assert.DoesNotContain("Received turn/completed", cut.Markup, StringComparison.Ordinal);
+        Assert.DoesNotContain("Prompt body", cut.Markup, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"message\": \"done\"", cut.Markup, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -143,15 +147,54 @@ public sealed class SessionDetailComponentTests : BunitContext
         var cut = Render<SessionActivityTimeline>(
             parameters => parameters
                 .Add(component => component.Timeline, CreateStructuredTimeline())
-                .Add(component => component.DebugModeEnabled, true));
-
-        var details = cut.Find("[data-testid=\"session-detail-timeline-detail\"]");
+                .Add(component => component.DebugModeEnabled, true)
+                .Add(component => component.TrackAgentMessageDeltas, true));
 
         Assert.Contains("data-testid=\"session-detail-debug-banner\"", cut.Markup, StringComparison.Ordinal);
+        Assert.Contains("data-testid=\"session-detail-method-filter\"", cut.Markup, StringComparison.Ordinal);
+        Assert.Contains("turn/start", cut.Markup, StringComparison.Ordinal);
+        Assert.Contains("turn/completed", cut.Markup, StringComparison.Ordinal);
+        Assert.Contains("item/agentMessage/delta", cut.Markup, StringComparison.Ordinal);
+        Assert.Contains("Sent turn/start", cut.Markup, StringComparison.Ordinal);
+        Assert.Contains("Received turn/completed", cut.Markup, StringComparison.Ordinal);
+        Assert.Contains("Received item/agentMessage/delta", cut.Markup, StringComparison.Ordinal);
         Assert.Contains("View raw payload and debug metadata", cut.Markup, StringComparison.Ordinal);
         Assert.Contains("Debug metadata", cut.Markup, StringComparison.Ordinal);
         Assert.Contains("Raw payload", cut.Markup, StringComparison.Ordinal);
-        Assert.Contains("\"turn_completed\"", details.TextContent, StringComparison.Ordinal);
+        Assert.Contains("Prompt body", cut.Markup, StringComparison.Ordinal);
+        Assert.Contains("\"message\": \"done\"", cut.Markup, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void SessionActivityTimeline_filters_debug_entries_by_method_checkbox()
+    {
+        var cut = Render<SessionActivityTimeline>(
+            parameters => parameters
+                .Add(component => component.Timeline, CreateStructuredTimeline())
+                .Add(component => component.DebugModeEnabled, true)
+                .Add(component => component.TrackAgentMessageDeltas, true));
+
+        Assert.Contains("Received item/agentMessage/delta", cut.Markup, StringComparison.Ordinal);
+        Assert.Contains("Sent turn/start", cut.Markup, StringComparison.Ordinal);
+        Assert.Contains("Received turn/completed", cut.Markup, StringComparison.Ordinal);
+
+        cut.Find("[data-testid=\"session-detail-method-filter-item-agentmessage-delta\"]").Change(false);
+
+        Assert.DoesNotContain("Received item/agentMessage/delta", cut.Markup, StringComparison.Ordinal);
+        Assert.Contains("Sent turn/start", cut.Markup, StringComparison.Ordinal);
+        Assert.Contains("Received turn/completed", cut.Markup, StringComparison.Ordinal);
+
+        cut.Find("[data-testid=\"session-detail-method-filter-turn-start\"]").Change(false);
+
+        Assert.DoesNotContain("Sent turn/start", cut.Markup, StringComparison.Ordinal);
+        Assert.Contains("Received turn/completed", cut.Markup, StringComparison.Ordinal);
+
+        cut.Find("[data-testid=\"session-detail-method-filter-turn-completed\"]").Change(false);
+
+        Assert.DoesNotContain("Sent turn/start", cut.Markup, StringComparison.Ordinal);
+        Assert.DoesNotContain("Received turn/completed", cut.Markup, StringComparison.Ordinal);
+        Assert.DoesNotContain("Received item/agentMessage/delta", cut.Markup, StringComparison.Ordinal);
+        Assert.Contains("turn_completed", cut.Markup, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -355,14 +398,64 @@ public sealed class SessionDetailComponentTests : BunitContext
                     "turn_completed",
                     "Agent message",
                     Color.Info,
-                    "Structured event payload",
+                    "Applied changes",
+                    [],
+                    "Applied changes",
+                    null,
+                    null,
+                    false,
+                    false,
+                    Color.Info),
+                new SessionActivityTimelineEntryModel(
+                    SessionActivityKind.DebugMessage,
+                    new DateTimeOffset(2026, 3, 20, 9, 2, 1, TimeSpan.Zero),
+                    "2026-03-20 09:02:01 UTC",
+                    "Sent turn/start",
+                    "Debug transcript",
+                    Color.Info,
+                    "Method: turn/start | Prompt: Prompt body",
                     [
-                        new SessionActivityFactModel("Event", "turn_completed"),
-                        new SessionActivityFactModel("Files", "Program.cs"),
-                        new SessionActivityFactModel("Input", "12")
+                        new SessionActivityFactModel("Method", "turn/start"),
+                        new SessionActivityFactModel("Prompt", "Prompt body")
                     ],
-                    "{\n  \"event\": \"turn_completed\",\n  \"files\": [\"Program.cs\"],\n  \"stats\": { \"input\": 12 }\n}",
-                    "Event: turn_completed | Files: Program.cs | Input: 12",
+                    "{\n  \"id\": 3,\n  \"method\": \"turn/start\",\n  \"params\": {\n    \"threadId\": \"thread-123\",\n    \"input\": [\n      {\n        \"type\": \"text\",\n        \"text\": \"Prompt body\"\n      }\n    ]\n  }\n}",
+                    "Method: turn/start | Prompt: Prompt body",
+                    "View structured payload",
+                    true,
+                    true,
+                    Color.Info),
+                new SessionActivityTimelineEntryModel(
+                    SessionActivityKind.DebugMessage,
+                    new DateTimeOffset(2026, 3, 20, 9, 2, 2, TimeSpan.Zero),
+                    "2026-03-20 09:02:02 UTC",
+                    "Received turn/completed",
+                    "Debug transcript",
+                    Color.Info,
+                    "Method: turn/completed | Message: done",
+                    [
+                        new SessionActivityFactModel("Method", "turn/completed"),
+                        new SessionActivityFactModel("Message", "done")
+                    ],
+                    "{\n  \"method\": \"turn/completed\",\n  \"params\": {\n    \"message\": \"done\"\n  }\n}",
+                    "Method: turn/completed | Message: done",
+                    "View structured payload",
+                    true,
+                    true,
+                    Color.Info),
+                new SessionActivityTimelineEntryModel(
+                    SessionActivityKind.DebugMessage,
+                    new DateTimeOffset(2026, 3, 20, 9, 2, 3, TimeSpan.Zero),
+                    "2026-03-20 09:02:03 UTC",
+                    "Received item/agentMessage/delta",
+                    "Debug transcript",
+                    Color.Info,
+                    "Method: item/agentMessage/delta | Message: partial reply",
+                    [
+                        new SessionActivityFactModel("Method", "item/agentMessage/delta"),
+                        new SessionActivityFactModel("Message", "partial reply")
+                    ],
+                    "{\n  \"method\": \"item/agentMessage/delta\",\n  \"params\": {\n    \"delta\": \"partial reply\"\n  }\n}",
+                    "Method: item/agentMessage/delta | Message: partial reply",
                     "View structured payload",
                     true,
                     true,

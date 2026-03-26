@@ -1,10 +1,57 @@
-<div data-testid="session-detail-timeline">
+<div class="@GetTimelineShellClasses()" data-testid="session-detail-timeline">
+    @if (DebugModeEnabled)
+    {
+        <aside class="timeline-filter-panel" data-testid="session-detail-method-filter">
+            <p class="section-kicker">Filter</p>
+            <h3 class="timeline-filter-panel__title">Message methods</h3>
+            <p class="timeline-filter-panel__copy">
+                Toggle individual debug transcript methods without hiding lifecycle or outcome events.
+            </p>
+
+            @if (AvailableMethodFilters.Count == 0)
+            {
+                <div class="timeline-filter-panel__empty">
+                    <p class="empty-state__title">No method-tagged debug events yet</p>
+                    <p class="empty-state__copy">
+                        Start an agent run to populate method filters from the live transcript.
+                    </p>
+                </div>
+            }
+            else
+            {
+                <div class="timeline-filter-list" role="group" aria-label="Debug transcript method filters">
+                    @foreach (var filter in AvailableMethodFilters)
+                    {
+                        <label class="timeline-filter-option">
+                            <input type="checkbox"
+                                   class="timeline-filter-option__checkbox"
+                                   checked="@filter.IsEnabled"
+                                   data-testid="@($"session-detail-method-filter-{filter.Slug}")"
+                                   @onchange="@((ChangeEventArgs args) => SetMethodVisibility(filter.Method, IsChecked(args.Value)))" />
+                            <span class="timeline-filter-option__content">
+                                <span class="timeline-filter-option__label">@filter.Method</span>
+                                <span class="timeline-filter-option__count">@filter.Count</span>
+                            </span>
+                        </label>
+                    }
+                </div>
+            }
+
+            @if (!TrackAgentMessageDeltas)
+            {
+                <p class="timeline-filter-panel__note">
+                    Delta transcript capture is disabled, so <code>item/agentMessage/delta</code> may be absent from this list.
+                </p>
+            }
+        </aside>
+    }
+
     <MudPaper Class="@TimelineCardClass" Outlined="true" Elevation="0">
         <div class="panel-header__content">
             <p class="section-kicker">Timeline</p>
             <h2 class="section-title section-title--panel">Session activity</h2>
             <p class="section-copy">
-                Lifecycle milestones, agent messages, warnings, and outcomes in chronological order.
+                Lifecycle milestones, agent messages, warnings, outcomes, and debug transcript events in chronological order.
             </p>
         </div>
 
@@ -12,7 +59,7 @@
         {
             <div data-testid="session-detail-debug-banner">
                 <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
-                    <strong>Debug mode enabled:</strong> Raw agent payloads and diagnostic metadata are visible on this page only while host debug mode is on.
+                    <strong>Debug mode enabled:</strong> Full outbound requests, inbound agent replies, and diagnostics are visible on this page only while host debug mode is on.
                 </MudAlert>
             </div>
         }
@@ -35,19 +82,19 @@
             </div>
         }
 
-        @if (Timeline.Entries.Count == 0)
+        @if (VisibleEntries.Count == 0)
         {
             <div class="empty-state">
-                <p class="empty-state__title">No session activity recorded</p>
+                <p class="empty-state__title">@GetEmptyStateTitle()</p>
                 <p class="empty-state__copy">
-                    The session exists, but no timeline entries are available yet.
+                    @GetEmptyStateCopy()
                 </p>
             </div>
         }
         else
         {
             <ol class="timeline-list">
-                @foreach (var entry in Timeline.Entries)
+                @foreach (var entry in VisibleEntries)
                 {
                     <li class="timeline-item">
                         <span class="@GetTimelineDotClasses(entry)"></span>
@@ -165,6 +212,7 @@
 
 @code {
     private const string TimelineCardClass = "page-card page-card--tight";
+    private readonly Dictionary<string, bool> _methodVisibility = new(StringComparer.OrdinalIgnoreCase);
 
     [Parameter]
     [EditorRequired]
@@ -173,12 +221,21 @@
     [Parameter]
     public bool DebugModeEnabled { get; set; }
 
+    [Parameter]
+    public bool TrackAgentMessageDeltas { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        SyncMethodVisibility();
+    }
+
     private static string GetEntryContainerClasses(SessionActivityTimelineEntryModel entry)
     {
         var baseClasses = "timeline-entry";
 
         return entry.Kind switch
         {
+            SessionActivityKind.DebugMessage => $"{baseClasses} timeline-entry--debug",
             SessionActivityKind.Warning => $"{baseClasses} timeline-entry--warning",
             SessionActivityKind.Error => $"{baseClasses} timeline-entry--error",
             SessionActivityKind.Outcome when entry.Color == Color.Error => $"{baseClasses} timeline-entry--error",
@@ -199,11 +256,24 @@
         };
     }
 
+    private IReadOnlyList<SessionActivityTimelineEntryModel> VisibleEntries =>
+        DebugModeEnabled
+            ? Timeline.Entries.Where(entry => !ShouldHideEntry(entry)).ToArray()
+            : Timeline.Entries.Where(entry => !IsDebugOnlyEntry(entry)).ToArray();
+
+    private IReadOnlyList<MessageMethodFilterOption> AvailableMethodFilters =>
+        GetAvailableMethodFilters();
+
     private bool ShouldRenderExpandableDetail(SessionActivityTimelineEntryModel entry)
     {
         if (!entry.HasExpandableDetail)
         {
             return false;
+        }
+
+        if (IsDebugOnlyEntry(entry))
+        {
+            return DebugModeEnabled;
         }
 
         return DebugModeEnabled || entry.Kind != SessionActivityKind.AgentMessage || !entry.IsStructuredDetail;
@@ -216,12 +286,18 @@
             return false;
         }
 
+        if (IsDebugOnlyEntry(entry))
+        {
+            return DebugModeEnabled;
+        }
+
         return !entry.IsStructuredDetail || DebugModeEnabled || entry.Kind != SessionActivityKind.AgentMessage;
     }
 
     private bool ShouldRenderDebugMetadata(SessionActivityTimelineEntryModel entry)
     {
-        return DebugModeEnabled && entry.Kind == SessionActivityKind.AgentMessage;
+        return DebugModeEnabled
+            && (entry.Kind == SessionActivityKind.AgentMessage || entry.Kind == SessionActivityKind.DebugMessage);
     }
 
     private string GetDetailClasses(SessionActivityTimelineEntryModel entry)
@@ -240,6 +316,157 @@
 
         return entry.IsStructuredDetail
             ? "View raw payload and debug metadata"
-            : "View debug detail";
+            : "View full debug detail";
     }
+
+    private static bool IsDebugOnlyEntry(SessionActivityTimelineEntryModel entry)
+    {
+        return entry.Kind == SessionActivityKind.DebugMessage;
+    }
+
+    private bool ShouldHideEntry(SessionActivityTimelineEntryModel entry)
+    {
+        return TryGetMethod(entry, out var method)
+            && _methodVisibility.TryGetValue(method, out var isEnabled)
+            && !isEnabled;
+    }
+
+    private static bool TryGetMethod(SessionActivityTimelineEntryModel entry, out string method)
+    {
+        method = string.Empty;
+
+        if (entry.Kind != SessionActivityKind.DebugMessage)
+        {
+            return false;
+        }
+
+        var fact = entry.Facts.FirstOrDefault(candidate => string.Equals(candidate.Label, "Method", StringComparison.Ordinal));
+        if (fact is null || string.IsNullOrWhiteSpace(fact.Value))
+        {
+            return false;
+        }
+
+        method = fact.Value.Trim();
+        return true;
+    }
+
+    private IReadOnlyList<MessageMethodFilterOption> GetAvailableMethodFilters()
+    {
+        var counts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        var displayNames = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var orderedMethods = new List<string>();
+
+        foreach (var entry in Timeline.Entries)
+        {
+            if (!TryGetMethod(entry, out var method))
+            {
+                continue;
+            }
+
+            if (!counts.TryAdd(method, 1))
+            {
+                counts[method]++;
+                continue;
+            }
+
+            orderedMethods.Add(method);
+            displayNames[method] = method;
+        }
+
+        return orderedMethods
+            .Select(
+                method => new MessageMethodFilterOption(
+                    displayNames[method],
+                    GetMethodSlug(method),
+                    counts[method],
+                    _methodVisibility.TryGetValue(method, out var isEnabled) ? isEnabled : true))
+            .ToArray();
+    }
+
+    private void SyncMethodVisibility()
+    {
+        var availableMethods = Timeline.Entries
+            .Select(
+                entry => TryGetMethod(entry, out var method)
+                    ? method
+                    : null)
+            .OfType<string>()
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        foreach (var method in availableMethods)
+        {
+            _methodVisibility.TryAdd(method, true);
+        }
+
+        var availableSet = availableMethods.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var staleMethod in _methodVisibility.Keys.Where(method => !availableSet.Contains(method)).ToArray())
+        {
+            _methodVisibility.Remove(staleMethod);
+        }
+    }
+
+    private void SetMethodVisibility(string method, bool isEnabled)
+    {
+        _methodVisibility[method] = isEnabled;
+    }
+
+    private static bool IsChecked(object? value)
+    {
+        return value switch
+        {
+            bool booleanValue => booleanValue,
+            string stringValue when bool.TryParse(stringValue, out var parsed) => parsed,
+            _ => false
+        };
+    }
+
+    private string GetTimelineShellClasses()
+    {
+        return DebugModeEnabled
+            ? "session-detail-timeline-shell session-detail-timeline-shell--with-filters"
+            : "session-detail-timeline-shell";
+    }
+
+    private string GetEmptyStateTitle()
+    {
+        return DebugModeEnabled && AvailableMethodFilters.Count > 0
+            ? "No session activity matches the active filters"
+            : "No session activity recorded";
+    }
+
+    private string GetEmptyStateCopy()
+    {
+        return DebugModeEnabled && AvailableMethodFilters.Count > 0
+            ? "Adjust the method filter checkboxes to bring hidden transcript events back into view."
+            : "The session exists, but no visible timeline entries are available yet.";
+    }
+
+    private static string GetMethodSlug(string method)
+    {
+        var builder = new System.Text.StringBuilder(method.Length);
+        var previousWasSeparator = false;
+
+        foreach (var character in method)
+        {
+            if (char.IsLetterOrDigit(character))
+            {
+                builder.Append(char.ToLowerInvariant(character));
+                previousWasSeparator = false;
+            }
+            else if (!previousWasSeparator)
+            {
+                builder.Append('-');
+                previousWasSeparator = true;
+            }
+        }
+
+        return builder.ToString().Trim('-');
+    }
+
+    private sealed record MessageMethodFilterOption(
+        string Method,
+        string Slug,
+        int Count,
+        bool IsEnabled);
 }

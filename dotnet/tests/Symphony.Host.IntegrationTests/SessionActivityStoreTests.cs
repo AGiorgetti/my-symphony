@@ -1,4 +1,7 @@
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
+using Symphony.Application.Orchestration;
+using Symphony.Host.Configuration;
 using Symphony.Host.Dashboard;
 
 namespace Symphony.Host.IntegrationTests;
@@ -39,6 +42,31 @@ public sealed class SessionActivityStoreTests
         Assert.Equal(SessionActivityKind.ProgressUpdate, activity.Kind);
         Assert.Equal("Turn 2", activity.Title);
         Assert.Equal("Applied changes", activity.Detail);
+    }
+
+    [Fact]
+    public void Debug_transcript_sink_records_debug_entries_for_a_session()
+    {
+        var store = CreateStore(trackAgentMessageDeltas: true);
+        var timestamp = new DateTimeOffset(2026, 3, 19, 14, 6, 0, TimeSpan.Zero);
+
+        store.RecordSessionStart("ABC-2", timestamp.AddMinutes(-1));
+        ((IAgentDebugTranscriptSink)store).RecordOutbound("ABC-2", timestamp, "Sent turn/start", "{\"method\":\"turn/start\"}");
+
+        var activity = Assert.Single(store.GetActivities("ABC-2"));
+        Assert.Equal(SessionActivityKind.DebugMessage, activity.Kind);
+        Assert.Equal("Sent turn/start", activity.Title);
+        Assert.Equal("{\"method\":\"turn/start\"}", activity.Detail);
+    }
+
+    [Fact]
+    public void SessionActivityStore_exposes_delta_tracking_flag_from_dashboard_options()
+    {
+        var enabledStore = CreateStore(trackAgentMessageDeltas: true);
+        var disabledStore = CreateStore(trackAgentMessageDeltas: false);
+
+        Assert.True(((IAgentDebugTranscriptSink)enabledStore).TrackAgentMessageDeltas);
+        Assert.False(((IAgentDebugTranscriptSink)disabledStore).TrackAgentMessageDeltas);
     }
 
     [Fact]
@@ -110,8 +138,14 @@ public sealed class SessionActivityStoreTests
         Assert.Equal(24, store.GetActivities("ABC-4").Count);
     }
 
-    private static SessionActivityStore CreateStore()
+    private static SessionActivityStore CreateStore(bool trackAgentMessageDeltas = false)
     {
-        return new SessionActivityStore(NullLogger<SessionActivityStore>.Instance);
+        return new SessionActivityStore(
+            NullLogger<SessionActivityStore>.Instance,
+            Options.Create(
+                new DashboardUiOptions
+                {
+                    TrackAgentMessageDeltas = trackAgentMessageDeltas
+                }));
     }
 }

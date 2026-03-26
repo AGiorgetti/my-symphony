@@ -13,6 +13,7 @@ namespace Symphony.Infrastructure.Codex;
 internal sealed class CodexAppServerClient(
     ICodexProcessSessionFactory processSessionFactory,
     TimeProvider timeProvider,
+    IAgentDebugTranscriptSink debugTranscriptSink,
     ILogger<CodexAppServerClient> logger)
 {
     private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web);
@@ -49,6 +50,7 @@ internal sealed class CodexAppServerClient(
 
             await SendAsync(
                     session,
+                    context,
                     new
                     {
                         id = 1,
@@ -69,6 +71,7 @@ internal sealed class CodexAppServerClient(
 
             await SendAsync(
                     session,
+                    context,
                     new
                     {
                         method = "initialized",
@@ -81,6 +84,7 @@ internal sealed class CodexAppServerClient(
 
             await SendAsync(
                     session,
+                    context,
                     new
                     {
                         id = 2,
@@ -174,6 +178,7 @@ internal sealed class CodexAppServerClient(
     {
         await SendAsync(
                 session,
+                context,
                 new
                 {
                     id = requestId,
@@ -263,11 +268,14 @@ internal sealed class CodexAppServerClient(
             }
             catch (JsonException exception)
             {
+                RecordDiagnostic(context, "Received malformed startup payload", line);
                 throw new CodexAgentException(
                     "response_error",
                     "Codex app-server emitted malformed JSON during the startup handshake.",
                     exception);
             }
+
+            RecordInboundPayload(context, payload, line);
 
             var responseId = TryGetId(payload);
             if (responseId is not null && string.Equals(responseId, expectedId.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal))
@@ -312,6 +320,7 @@ internal sealed class CodexAppServerClient(
                 }
                 catch (JsonException)
                 {
+                    RecordDiagnostic(context, "Received malformed turn payload", line);
                     UpdateSessionMetadata(context, "malformed", "malformed_protocol_message", default);
                     logger.LogWarning(
                         "codex_protocol malformed issue_id={issue_id} issue_identifier={issue_identifier} session_id={session_id} outcome=failed",
@@ -320,6 +329,8 @@ internal sealed class CodexAppServerClient(
                         context.SessionId);
                     continue;
                 }
+
+                RecordInboundPayload(context, payload, line);
 
                 var terminalOutcome = await ProcessProtocolMessageAsync(session, context, payload, turnTimeoutCancellationTokenSource.Token)
                     .ConfigureAwait(false);
@@ -364,6 +375,7 @@ internal sealed class CodexAppServerClient(
             }
 
             RecordStartupDiagnostic(startupDiagnostics, line);
+            RecordDiagnostic(context, "Received stderr", line);
 
             logger.LogInformation(
                 "codex_stderr completed issue_id={issue_id} issue_identifier={issue_identifier} session_id={session_id} diagnostic={diagnostic} outcome=completed",
@@ -400,6 +412,7 @@ internal sealed class CodexAppServerClient(
             {
                 await SendAsync(
                         session,
+                        context,
                         new
                         {
                             id = requestId,
@@ -420,6 +433,7 @@ internal sealed class CodexAppServerClient(
             {
                 await SendAsync(
                         session,
+                        context,
                         new
                         {
                             id = requestId,
@@ -504,13 +518,47 @@ internal sealed class CodexAppServerClient(
                 context.Session.TurnCount));
     }
 
-    private static async Task SendAsync(
+    private async Task SendAsync(
         ICodexProcessSession session,
+        QueuedIssueExecutionContext context,
         object payload,
         CancellationToken cancellationToken)
     {
         var line = JsonSerializer.Serialize(payload, SerializerOptions);
+        RecordOutboundPayload(context, line);
         await session.SendAsync(line, cancellationToken).ConfigureAwait(false);
+    }
+
+    private void RecordOutboundPayload(QueuedIssueExecutionContext context, string line)
+    {
+        debugTranscriptSink.RecordOutbound(
+            context.Issue.Identifier,
+            timeProvider.GetUtcNow(),
+            CreateOutboundTranscriptTitle(line),
+            line);
+    }
+
+    private void RecordInboundPayload(QueuedIssueExecutionContext context, JsonElement payload, string line)
+    {
+        if (IsAgentMessageDelta(payload) && !debugTranscriptSink.TrackAgentMessageDeltas)
+        {
+            return;
+        }
+
+        debugTranscriptSink.RecordInbound(
+            context.Issue.Identifier,
+            timeProvider.GetUtcNow(),
+            CreateInboundTranscriptTitle(payload),
+            line);
+    }
+
+    private void RecordDiagnostic(QueuedIssueExecutionContext context, string title, string detail)
+    {
+        debugTranscriptSink.RecordDiagnostic(
+            context.Issue.Identifier,
+            timeProvider.GetUtcNow(),
+            title,
+            detail);
     }
 
     private static string ExtractRequiredNestedId(JsonElement payload, string propertyName)
@@ -603,6 +651,42 @@ internal sealed class CodexAppServerClient(
             JsonValueKind.Number => idElement.GetRawText(),
             _ => null
         };
+    }
+
+    private static string CreateOutboundTranscriptTitle(string line)
+    {
+        using var document = JsonDocument.Parse(line);
+        var payload = document.RootElement;
+        var method = TryGetMethod(payload);
+        if (!string.IsNullOrWhiteSpace(method))
+        {
+            return $"Sent {method}";
+        }
+
+        var id = TryGetId(payload);
+        return !string.IsNullOrWhiteSpace(id)
+            ? $"Sent response {id}"
+            : "Sent payload";
+    }
+
+    private static string CreateInboundTranscriptTitle(JsonElement payload)
+    {
+        var method = TryGetMethod(payload);
+        if (!string.IsNullOrWhiteSpace(method))
+        {
+            return $"Received {method}";
+        }
+
+        var id = TryGetId(payload);
+        return !string.IsNullOrWhiteSpace(id)
+            ? $"Received response {id}"
+            : "Received payload";
+    }
+
+    private static bool IsAgentMessageDelta(JsonElement payload)
+    {
+        var method = TryGetMethod(payload);
+        return string.Equals(method, "item/agentMessage/delta", StringComparison.Ordinal);
     }
 
     private static string FormatErrorMessage(JsonElement errorElement)
