@@ -84,8 +84,15 @@ public sealed class CodexAppServerClientTests
         Assert.Equal(17, latestSession.CodexTotalTokens);
 
         Assert.NotNull(sessionFactory.Session);
+        var turnStartLine = sessionFactory.Session!.SentLines.Single(
+            line => line.Contains("\"method\":\"turn/start\"", StringComparison.Ordinal));
+        using var turnStartDocument = JsonDocument.Parse(turnStartLine);
+        var sandboxPolicy = turnStartDocument.RootElement.GetProperty("params").GetProperty("sandboxPolicy");
+        Assert.Equal("workspaceWrite", sandboxPolicy.GetProperty("type").GetString());
+        Assert.True(sandboxPolicy.GetProperty("networkAccess").GetBoolean());
+
         Assert.Contains(
-            sessionFactory.Session!.SentLines,
+            sessionFactory.Session.SentLines,
             line => line.Contains("\"approved\":true", StringComparison.Ordinal));
         Assert.Contains(
             sessionFactory.Session.SentLines,
@@ -321,7 +328,8 @@ public sealed class CodexAppServerClientTests
             "workspace-write",
             new Dictionary<string, object?>(StringComparer.Ordinal)
             {
-                ["type"] = "workspaceWrite"
+                ["type"] = "workspaceWrite",
+                ["networkAccess"] = true
             },
             60_000,
             5_000,

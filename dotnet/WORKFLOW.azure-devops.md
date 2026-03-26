@@ -40,6 +40,7 @@ codex:
   thread_sandbox: workspace-write
   turn_sandbox_policy:
     type: workspaceWrite
+    networkAccess: true
 ---
 
 You are working on an Azure DevOps ticket `{{ issue.identifier }}`
