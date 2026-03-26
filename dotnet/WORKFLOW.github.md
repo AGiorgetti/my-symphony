@@ -8,18 +8,23 @@ tracker:
     - open
   terminal_states:
     - closed
+  # Optional labels that block dispatch even while the issue remains open.
+  dispatch_block_labels:
+    - backlog
+    - human-review
+    - done
 polling:
   interval_ms: 5000
 workspace:
-  root: ~/code/symphony-workspaces
+  root: ~/code/symphony-workspaces/OWNER/REPO
 hooks:
   after_create: |
     git clone --depth 1 https://github.com/OWNER/REPO .
   before_remove: |
     true
 agent:
-  max_concurrent_agents: 10
-  max_turns: 20
+  max_concurrent_agents: 5
+  max_turns: 10
   require_exec_marker: false
   exec_marker: "exec:agent"
 codex:

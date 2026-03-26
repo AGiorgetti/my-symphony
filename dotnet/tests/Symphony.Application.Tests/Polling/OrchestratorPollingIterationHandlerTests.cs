@@ -244,6 +244,34 @@ public sealed class OrchestratorPollingIterationHandlerTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_skips_issues_with_configured_dispatch_block_labels()
+    {
+        var workflowOptions = CreateWorkflowOptions(dispatchBlockLabels: ["backlog", "human-review"]);
+        var trackerClient = new StubIssueTrackerClient
+        {
+            CandidateIssues =
+            [
+                CreateIssue("1", "ABC-1", state: "Todo", labels: ["Human-Review"]),
+                CreateIssue("2", "ABC-2", state: "Todo", labels: ["ready"])
+            ]
+        };
+        var logger = new TestLogger<OrchestratorPollingIterationHandler>();
+        var queue = CreateQueue(workflowOptions);
+        var handler = CreateHandler(trackerClient, queue, CreateRegistry(), new StubWorkspaceManager(), logger: logger);
+
+        await handler.ExecuteAsync(workflowOptions, CancellationToken.None);
+
+        var queuedIssues = queue.GetSnapshot().Queued.Select(snapshot => snapshot.IssueIdentifier).ToArray();
+        Assert.Equal(["ABC-2"], queuedIssues);
+
+        var skippedEntry = Assert.Single(
+            logger.Entries,
+            entry => entry.Message.Contains("poll_dispatch skipped", StringComparison.Ordinal)
+                && Equals(entry.State["issue_identifier"], "ABC-1"));
+        Assert.Equal("blocked_by_label", Assert.IsType<string>(skippedEntry.State["reason"]));
+    }
+
+    [Fact]
     public async Task ExecuteAsync_ignores_exec_marker_when_requirement_disabled()
     {
         var workflowOptions = CreateWorkflowOptions(requireExecMarker: false);
@@ -324,7 +352,8 @@ public sealed class OrchestratorPollingIterationHandlerTests
         IReadOnlyDictionary<string, int>? maxConcurrentAgentsByState = null,
         int stallTimeoutMs = 300_000,
         bool requireExecMarker = false,
-        string execMarker = "exec:agent")
+        string execMarker = "exec:agent",
+        IReadOnlyList<string>? dispatchBlockLabels = null)
     {
         return new WorkflowServiceOptions(
             new WorkflowTrackerOptions(
@@ -336,7 +365,10 @@ public sealed class OrchestratorPollingIterationHandlerTests
                 null,
                 null,
                 ["Todo", "In Progress"],
-                ["Done", "Canceled"]),
+                ["Done", "Canceled"])
+            {
+                DispatchBlockLabels = dispatchBlockLabels ?? Array.Empty<string>()
+            },
             new WorkflowPollingOptions(1_000),
             new WorkflowWorkspaceOptions(Path.Combine(Path.GetTempPath(), "symphony-tests")),
             new WorkflowHookOptions(

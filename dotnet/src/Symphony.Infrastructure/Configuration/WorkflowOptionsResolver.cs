@@ -83,6 +83,11 @@ public sealed class WorkflowOptionsResolver : IWorkflowOptionsResolver
         var project = GetOptionalString(trackerSection, "project", "tracker.project");
         var activeStates = GetStringListOrDefault(trackerSection, "active_states", DefaultActiveStates, "tracker.active_states");
         var terminalStates = GetStringListOrDefault(trackerSection, "terminal_states", DefaultTerminalStates, "tracker.terminal_states");
+        var dispatchBlockLabels = GetNormalizedLabelListOrDefault(
+            trackerSection,
+            "dispatch_block_labels",
+            Array.Empty<string>(),
+            "tracker.dispatch_block_labels");
 
         ValidateTrackerFields(trackerKind, repository, projectSlug, organization, project, activeStates, terminalStates);
 
@@ -95,7 +100,10 @@ public sealed class WorkflowOptionsResolver : IWorkflowOptionsResolver
             organization,
             project,
             activeStates,
-            terminalStates);
+            terminalStates)
+        {
+            DispatchBlockLabels = dispatchBlockLabels
+        };
     }
 
     private static WorkflowCodexOptions ResolveCodexOptions(IReadOnlyDictionary<string, object?> codexSection)
@@ -279,6 +287,18 @@ public sealed class WorkflowOptionsResolver : IWorkflowOptionsResolver
         }
 
         return enumerable.Select(item => GetRequiredStringValue(item, fieldName)).ToArray();
+    }
+
+    private static IReadOnlyList<string> GetNormalizedLabelListOrDefault(
+        IReadOnlyDictionary<string, object?> section,
+        string key,
+        IReadOnlyList<string> defaultValue,
+        string fieldName)
+    {
+        return GetStringListOrDefault(section, key, defaultValue, fieldName)
+            .Select(static label => label.Trim().ToLowerInvariant())
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
     }
 
     private static int GetHookTimeout(IReadOnlyDictionary<string, object?> section)

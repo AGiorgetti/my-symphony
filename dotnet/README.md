@@ -52,7 +52,7 @@ Built-in workflow templates in this folder:
 Tracker configuration fields vary by adapter:
 
 - Shared: `tracker.kind`, `tracker.endpoint`, `tracker.api_key`, `tracker.active_states`,
-  `tracker.terminal_states`
+  `tracker.terminal_states`, `tracker.dispatch_block_labels`
 - GitHub: `tracker.repository` (`owner/repo`)
 - Azure DevOps: `tracker.organization`, `tracker.project`
 - Linear: `tracker.project_slug`
@@ -221,6 +221,9 @@ tracker:
   kind: github
   api_key: $GITHUB_TOKEN
   repository: "owner/repo"
+  dispatch_block_labels:
+    - backlog
+    - human-review
 workspace:
   root: ~/code/workspaces
 hooks:
@@ -254,6 +257,9 @@ Notes:
 - Candidate dispatch order follows `SPEC.md`: priority `1..4` first, then oldest `created_at`,
   then issue identifier. `Todo` issues with non-terminal blockers are skipped, and
   `agent.max_concurrent_agents_by_state` can further limit dispatch by normalized tracker state.
+- `tracker.dispatch_block_labels` is an optional tracker-level hard stop: if any normalized
+  issue label/tag matches a configured block label, Symphony skips dispatch for that issue even
+  when its tracker state is otherwise active.
 - When `agent.require_exec_marker` is `true`, Symphony schedules only issues whose normalized
   `issue.labels` include `agent.exec_marker`. The default marker is `exec:agent`.
 - The execution marker stays tracker-agnostic after normalization: GitHub labels, Linear labels,

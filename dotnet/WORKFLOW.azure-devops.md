@@ -14,18 +14,24 @@ tracker:
     - Closed
     - Done
     - Removed
+  # Optional tags that block dispatch even while the work item remains active.
+  # dispatch_block_labels:
+  #   - backlog
+  #   - human-review
+  #   - done
+  #   - status:blocked
 polling:
   interval_ms: 5000
 workspace:
-  root: ~/code/symphony-workspaces
+  root: ~/code/symphony-workspaces/YOUR_ORG/YOUR_PROJECT/REPO
 hooks:
   after_create: |
-    git clone --depth 1 https://github.com/OWNER/REPO .
+    git clone --depth 1 https://YOUR_ORG.visualstudio.com/DefaultCollection/YOUR_PROJECT/_git/REPO .
   before_remove: |
     true
 agent:
-  max_concurrent_agents: 10
-  max_turns: 20
+  max_concurrent_agents: 5
+  max_turns: 10
   require_exec_marker: false
   exec_marker: "exec:agent"
 codex:
