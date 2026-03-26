@@ -1,6 +1,7 @@
 using Bunit;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using MudBlazor;
 using MudBlazor.Services;
 using Symphony.Abstractions.Orchestration;
@@ -8,6 +9,7 @@ using Symphony.Application.Polling;
 using Symphony.Application.Runtime;
 using Symphony.Host.Components.Pages;
 using Symphony.Host.Components.SessionDetail;
+using Symphony.Host.Configuration;
 using Symphony.Host.Dashboard;
 
 namespace Symphony.Host.IntegrationTests;
@@ -19,6 +21,8 @@ public sealed class SessionDetailComponentTests : BunitContext
         JSInterop.Mode = JSRuntimeMode.Loose;
         Services.AddMudServices();
         Services.AddSingleton<IKeyInterceptorService, TestKeyInterceptorService>();
+        Services.AddOptions();
+        Services.Configure<DashboardUiOptions>(options => options.DebugMode = false);
     }
 
     [Fact]
@@ -116,44 +120,36 @@ public sealed class SessionDetailComponentTests : BunitContext
     }
 
     [Fact]
-    public void SessionActivityTimeline_renders_expandable_json_payloads_compactly()
+    public void SessionActivityTimeline_hides_raw_agent_payloads_when_debug_mode_is_disabled()
     {
         var cut = Render<SessionActivityTimeline>(
-            parameters => parameters.Add(
-                component => component.Timeline,
-                new SessionActivityTimelineModel(
-                    [
-                        new SessionActivityTimelineEntryModel(
-                            SessionActivityKind.AgentMessage,
-                            new DateTimeOffset(2026, 3, 20, 9, 2, 0, TimeSpan.Zero),
-                            "2026-03-20 09:02:00 UTC",
-                            "turn_completed",
-                            "Agent message",
-                            Color.Info,
-                            "Structured event payload",
-                            [
-                                new SessionActivityFactModel("Event", "turn_completed"),
-                                new SessionActivityFactModel("Files", "Program.cs"),
-                                new SessionActivityFactModel("Input", "12")
-                            ],
-                            "{\n  \"event\": \"turn_completed\",\n  \"files\": [\"Program.cs\"],\n  \"stats\": { \"input\": 12 }\n}",
-                            "Event: turn_completed | Files: Program.cs | Input: 12",
-                            "View structured payload",
-                            true,
-                            true,
-                            Color.Info)
-                    ],
-                    LatestAttentionAlert: null,
-                    FailureAlert: null)));
-
-        var details = cut.Find("[data-testid=\"session-detail-timeline-detail\"]");
+            parameters => parameters
+                .Add(component => component.Timeline, CreateStructuredTimeline())
+                .Add(component => component.DebugModeEnabled, false));
 
         Assert.Contains("Event", cut.Markup, StringComparison.Ordinal);
         Assert.Contains("turn_completed", cut.Markup, StringComparison.Ordinal);
         Assert.Contains("Files", cut.Markup, StringComparison.Ordinal);
         Assert.Contains("Program.cs", cut.Markup, StringComparison.Ordinal);
-        Assert.Contains("View structured payload", cut.Markup, StringComparison.Ordinal);
-        Assert.Contains("Highlights", cut.Markup, StringComparison.Ordinal);
+        Assert.DoesNotContain("data-testid=\"session-detail-debug-banner\"", cut.Markup, StringComparison.Ordinal);
+        Assert.DoesNotContain("data-testid=\"session-detail-timeline-detail\"", cut.Markup, StringComparison.Ordinal);
+        Assert.DoesNotContain("Raw payload", cut.Markup, StringComparison.Ordinal);
+        Assert.Contains("Enable dashboard debug mode to inspect the raw agent payload for this event.", cut.Markup, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void SessionActivityTimeline_renders_expandable_json_payloads_when_debug_mode_is_enabled()
+    {
+        var cut = Render<SessionActivityTimeline>(
+            parameters => parameters
+                .Add(component => component.Timeline, CreateStructuredTimeline())
+                .Add(component => component.DebugModeEnabled, true));
+
+        var details = cut.Find("[data-testid=\"session-detail-timeline-detail\"]");
+
+        Assert.Contains("data-testid=\"session-detail-debug-banner\"", cut.Markup, StringComparison.Ordinal);
+        Assert.Contains("View raw payload and debug metadata", cut.Markup, StringComparison.Ordinal);
+        Assert.Contains("Debug metadata", cut.Markup, StringComparison.Ordinal);
         Assert.Contains("Raw payload", cut.Markup, StringComparison.Ordinal);
         Assert.Contains("\"turn_completed\"", details.TextContent, StringComparison.Ordinal);
     }
@@ -346,5 +342,33 @@ public sealed class SessionDetailComponentTests : BunitContext
         {
             return new PollingRefreshReceipt(true, false, DateTimeOffset.UtcNow, ["poll", "reconcile"]);
         }
+    }
+
+    private static SessionActivityTimelineModel CreateStructuredTimeline()
+    {
+        return new SessionActivityTimelineModel(
+            [
+                new SessionActivityTimelineEntryModel(
+                    SessionActivityKind.AgentMessage,
+                    new DateTimeOffset(2026, 3, 20, 9, 2, 0, TimeSpan.Zero),
+                    "2026-03-20 09:02:00 UTC",
+                    "turn_completed",
+                    "Agent message",
+                    Color.Info,
+                    "Structured event payload",
+                    [
+                        new SessionActivityFactModel("Event", "turn_completed"),
+                        new SessionActivityFactModel("Files", "Program.cs"),
+                        new SessionActivityFactModel("Input", "12")
+                    ],
+                    "{\n  \"event\": \"turn_completed\",\n  \"files\": [\"Program.cs\"],\n  \"stats\": { \"input\": 12 }\n}",
+                    "Event: turn_completed | Files: Program.cs | Input: 12",
+                    "View structured payload",
+                    true,
+                    true,
+                    Color.Info)
+            ],
+            LatestAttentionAlert: null,
+            FailureAlert: null);
     }
 }

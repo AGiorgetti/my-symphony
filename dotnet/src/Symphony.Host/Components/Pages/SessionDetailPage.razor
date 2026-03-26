@@ -1,10 +1,13 @@
 @page "/sessions/{Identifier}"
 @implements IAsyncDisposable
+@using Microsoft.Extensions.Options
 @using Symphony.Application.Runtime
 @using Symphony.Host.Components.SessionDetail
+@using Symphony.Host.Configuration
 @inject IDashboardStateService DashboardStateService
 @inject IOrchestratorRuntimeService OrchestratorRuntimeService
 @inject ISessionActivityStore SessionActivityStore
+@inject IOptions<DashboardUiOptions> DashboardUiOptions
 
 <main class="page-shell page-stack">
     <div data-testid="session-detail-breadcrumb">
@@ -46,7 +49,7 @@
 
         <div class="detail-split">
             <div class="detail-split__primary" data-testid="session-detail-activity-panel">
-                <SessionActivityTimeline Timeline="_timeline" />
+                <SessionActivityTimeline Timeline="_timeline" DebugModeEnabled="@DashboardUiOptions.Value.DebugMode" />
             </div>
             <div class="detail-split__secondary" data-testid="session-detail-details-panel">
                 <SessionMetadataPanel Metadata="_metadata" />
@@ -60,7 +63,7 @@
                      ApplyEffectsToContainer="true">
                 <MudTabPanel Text="Activity">
                     <div data-testid="session-detail-activity-panel">
-                        <SessionActivityTimeline Timeline="_timeline" />
+                        <SessionActivityTimeline Timeline="_timeline" DebugModeEnabled="@DashboardUiOptions.Value.DebugMode" />
                     </div>
                 </MudTabPanel>
                 <MudTabPanel Text="Details">

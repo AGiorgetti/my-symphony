@@ -19,6 +19,8 @@ public static class SymphonyHostCompositionExtensions
 
         builder.ApplyConfiguredHttpServerPort();
         builder.Logging.AddSymphonyLogging(builder.Configuration);
+        builder.Services.Configure<DashboardUiOptions>(
+            builder.Configuration.GetSection(DashboardUiOptions.SectionName));
         builder.Services.Configure<OrchestratorControlOptions>(
             builder.Configuration.GetSection(OrchestratorControlOptions.SectionName));
 

@@ -8,6 +8,15 @@
             </p>
         </div>
 
+        @if (DebugModeEnabled)
+        {
+            <div data-testid="session-detail-debug-banner">
+                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+                    <strong>Debug mode enabled:</strong> Raw agent payloads and diagnostic metadata are visible on this page only while host debug mode is on.
+                </MudAlert>
+            </div>
+        }
+
         @if (Timeline.LatestAttentionAlert is not null)
         {
             <div data-testid="session-detail-latest-attention-alert">
@@ -77,13 +86,34 @@
 
                                 @if (!string.IsNullOrWhiteSpace(entry.Detail))
                                 {
-                                    @if (entry.HasExpandableDetail)
+                                    @if (ShouldRenderExpandableDetail(entry))
                                     {
-                                        <details class="timeline-entry__detail"
+                                        <details class="@GetDetailClasses(entry)"
                                                  data-testid="session-detail-timeline-detail">
                                             <summary class="timeline-entry__toggle">
-                                                @entry.DetailToggleLabel
+                                                @GetDetailToggleLabel(entry)
                                             </summary>
+
+                                            @if (ShouldRenderDebugMetadata(entry))
+                                            {
+                                                <div class="timeline-entry__detail-body">
+                                                    <p class="detail-metric-label">Debug metadata</p>
+                                                    <div class="fact-list">
+                                                        <span class="fact-pill">
+                                                            <span class="fact-pill__label">Source:</span>
+                                                            <span>@entry.KindLabel</span>
+                                                        </span>
+                                                        <span class="fact-pill">
+                                                            <span class="fact-pill__label">Timestamp:</span>
+                                                            <span>@entry.TimestampLabel</span>
+                                                        </span>
+                                                        <span class="fact-pill">
+                                                            <span class="fact-pill__label">Event:</span>
+                                                            <span>@entry.Title</span>
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            }
 
                                             @if (entry.IsStructuredDetail)
                                             {
@@ -103,19 +133,25 @@
                                                     </div>
                                                 }
 
-                                                <p class="detail-metric-label">Raw payload</p>
+                                                <p class="detail-metric-label">@(ShouldRenderDebugMetadata(entry) ? "Raw payload" : "Detail")</p>
                                                 <pre class="timeline-pre">@entry.Detail</pre>
                                             }
                                             else
                                             {
-                                                <p class="detail-metric-label">Detail</p>
+                                                <p class="detail-metric-label">@(ShouldRenderDebugMetadata(entry) ? "Debug detail" : "Detail")</p>
                                                 <p class="timeline-text">@entry.Detail</p>
                                             }
                                         </details>
                                     }
-                                    else
+                                    else if (ShouldRenderInlineDetail(entry))
                                     {
                                         <p class="timeline-text">@entry.Detail</p>
+                                    }
+                                    else
+                                    {
+                                        <p class="timeline-entry__summary timeline-entry__summary--muted">
+                                            Enable dashboard debug mode to inspect the raw agent payload for this event.
+                                        </p>
                                     }
                                 }
                             </div>
@@ -133,6 +169,9 @@
     [Parameter]
     [EditorRequired]
     public required SessionActivityTimelineModel Timeline { get; set; }
+
+    [Parameter]
+    public bool DebugModeEnabled { get; set; }
 
     private static string GetEntryContainerClasses(SessionActivityTimelineEntryModel entry)
     {
@@ -158,5 +197,49 @@
             Color.Success => "timeline-dot timeline-dot--success",
             _ => "timeline-dot timeline-dot--default"
         };
+    }
+
+    private bool ShouldRenderExpandableDetail(SessionActivityTimelineEntryModel entry)
+    {
+        if (!entry.HasExpandableDetail)
+        {
+            return false;
+        }
+
+        return DebugModeEnabled || entry.Kind != SessionActivityKind.AgentMessage || !entry.IsStructuredDetail;
+    }
+
+    private bool ShouldRenderInlineDetail(SessionActivityTimelineEntryModel entry)
+    {
+        if (entry.HasExpandableDetail)
+        {
+            return false;
+        }
+
+        return !entry.IsStructuredDetail || DebugModeEnabled || entry.Kind != SessionActivityKind.AgentMessage;
+    }
+
+    private bool ShouldRenderDebugMetadata(SessionActivityTimelineEntryModel entry)
+    {
+        return DebugModeEnabled && entry.Kind == SessionActivityKind.AgentMessage;
+    }
+
+    private string GetDetailClasses(SessionActivityTimelineEntryModel entry)
+    {
+        return ShouldRenderDebugMetadata(entry)
+            ? "timeline-entry__detail timeline-entry__detail--debug"
+            : "timeline-entry__detail";
+    }
+
+    private string? GetDetailToggleLabel(SessionActivityTimelineEntryModel entry)
+    {
+        if (!ShouldRenderDebugMetadata(entry))
+        {
+            return entry.DetailToggleLabel;
+        }
+
+        return entry.IsStructuredDetail
+            ? "View raw payload and debug metadata"
+            : "View debug detail";
     }
 }

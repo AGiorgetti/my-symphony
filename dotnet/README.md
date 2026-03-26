@@ -251,6 +251,9 @@ Notes:
 - `Orchestration:InitialState` in `appsettings*.json` controls whether the host boots in
   `Started` or `Stopped` mode. `Stopped` blocks new poll ticks and new issue assignment until an
   operator resumes orchestration.
+- `Dashboard:DebugMode` in `appsettings*.json` controls whether the session detail UI exposes raw
+  agent payloads and extra diagnostic metadata. The default is `false` so the normal operator view
+  stays compact.
 - Each poll tick reconciles currently running issues before fetching new candidates. Terminal
   tracker transitions cancel the active worker and trigger workspace cleanup; non-active,
   non-terminal transitions cancel the worker without deleting the workspace.
@@ -315,7 +318,8 @@ surface only: if dashboard rendering fails, the orchestrator and JSON API contin
 - The session explorer is now available at `/sessions`, with All / Active / Ended filters and deep
   links into `/sessions/{identifier}` for individual run inspection, breadcrumb navigation, a
   chronological activity timeline, richer structured payload highlights, and an Activity / Details
-  tab split for live metadata while keeping the raw payload expandable for inspection.
+  tab split for live metadata. Raw agent payloads on the session detail page are gated behind
+  `Dashboard:DebugMode` and are visually marked as debug-only when enabled.
 - The dashboard health cards now expose last poll tick, last successful poll age, and workflow load
   status so degraded polling or workflow-reload fallback is visible without reading logs.
 - The sidebar footer includes a theme switcher for the built-in `dark-yellow`, `dark-blue`, and

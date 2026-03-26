@@ -13,6 +13,7 @@ using Symphony.Application.Polling;
 using Symphony.Application.Runtime;
 using Symphony.Host.Api;
 using Symphony.Host.Components;
+using Symphony.Host.Configuration;
 using Symphony.Host.Dashboard;
 using Symphony.Host.Theming;
 
@@ -94,13 +95,14 @@ public sealed class SessionDetailPageIntegrationTests
     }
 
     [Fact]
-    public async Task Session_detail_page_renders_structured_payloads_inside_collapsible_timeline_blocks()
+    public async Task Session_detail_page_hides_raw_payloads_when_debug_mode_is_disabled()
     {
         var store = CreateStoreWithStructuredPayloadSession();
         using var app = await StartSessionDetailApplicationAsync(
             store,
             new StaticDashboardStateService(CreateSnapshot()),
-            CreateActiveRuntimeService());
+            CreateActiveRuntimeService(),
+            debugModeEnabled: false);
         var client = CreateHttpClient(app);
 
         var response = await client.GetAsync("/sessions/ABC-3");
@@ -113,9 +115,31 @@ public sealed class SessionDetailPageIntegrationTests
         Assert.Contains("Program.cs", html, StringComparison.Ordinal);
         Assert.Contains("Input", html, StringComparison.Ordinal);
         Assert.Contains("12", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("data-testid=\"session-detail-debug-banner\"", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("data-testid=\"session-detail-timeline-detail\"", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("Raw payload", html, StringComparison.Ordinal);
+        Assert.Contains("Enable dashboard debug mode to inspect the raw agent payload for this event.", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Session_detail_page_renders_structured_payloads_when_debug_mode_is_enabled()
+    {
+        var store = CreateStoreWithStructuredPayloadSession();
+        using var app = await StartSessionDetailApplicationAsync(
+            store,
+            new StaticDashboardStateService(CreateSnapshot()),
+            CreateActiveRuntimeService(),
+            debugModeEnabled: true);
+        var client = CreateHttpClient(app);
+
+        var response = await client.GetAsync("/sessions/ABC-3");
+        var html = await response.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains("data-testid=\"session-detail-debug-banner\"", html, StringComparison.Ordinal);
         Assert.Contains("data-testid=\"session-detail-timeline-detail\"", html, StringComparison.Ordinal);
-        Assert.Contains("View structured payload", html, StringComparison.Ordinal);
-        Assert.Contains("Highlights", html, StringComparison.Ordinal);
+        Assert.Contains("View raw payload and debug metadata", html, StringComparison.Ordinal);
+        Assert.Contains("Debug metadata", html, StringComparison.Ordinal);
         Assert.Contains("Raw payload", html, StringComparison.Ordinal);
         Assert.Contains("&quot;event&quot;: &quot;turn_completed&quot;", html, StringComparison.Ordinal);
     }
@@ -265,12 +289,14 @@ public sealed class SessionDetailPageIntegrationTests
     private static async Task<WebApplication> StartSessionDetailApplicationAsync(
         ISessionActivityStore sessionActivityStore,
         IDashboardStateService dashboardStateService,
-        IOrchestratorRuntimeService runtimeService)
+        IOrchestratorRuntimeService runtimeService,
+        bool debugModeEnabled = false)
     {
         var builder = WebApplication.CreateBuilder();
         builder.WebHost.UseUrls("http://127.0.0.1:0");
         builder.Services.AddRazorComponents().AddInteractiveServerComponents();
         builder.Services.AddMudServices();
+        builder.Services.Configure<DashboardUiOptions>(options => options.DebugMode = debugModeEnabled);
         builder.Services.AddSingleton(runtimeService);
         builder.Services.AddSingleton<IOrchestratorRuntimeService>(runtimeService);
         builder.Services.AddSingleton<IOrchestratorControl>(new StubOrchestratorControl());

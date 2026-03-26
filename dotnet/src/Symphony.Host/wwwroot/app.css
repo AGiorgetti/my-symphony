@@ -968,6 +968,11 @@ code {
     line-height: 1.65;
 }
 
+.timeline-entry__summary--muted {
+    color: color-mix(in oklab, var(--color-on-surface-secondary) 88%, transparent);
+    font-style: italic;
+}
+
 .fact-list {
     display: flex;
     flex-wrap: wrap;
@@ -996,6 +1001,11 @@ code {
     border-radius: 1rem;
     background: color-mix(in oklab, var(--color-surface-base) 74%, transparent);
     padding: 0.9rem 1rem;
+}
+
+.timeline-entry__detail--debug {
+    border-color: color-mix(in oklab, var(--shell-info) 38%, transparent);
+    background: color-mix(in oklab, var(--shell-info) 9%, var(--color-surface-base));
 }
 
 .timeline-entry__toggle {
