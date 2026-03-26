@@ -1,51 +1,57 @@
 <div data-testid="session-detail-metadata">
     <MudPaper Class="@MetadataCardClass" Outlined="true" Elevation="0">
-        <div class="panel-header__content">
-            <p class="section-kicker">Details</p>
-            <h2 class="section-title section-title--panel">Session metadata</h2>
-            <p class="section-copy">
-                Live runtime token counters plus the latest known session identity and attempt metadata.
-            </p>
-        </div>
+        <details class="session-metadata-panel__details" data-testid="session-detail-metadata-details">
+            <summary class="session-metadata-panel__summary" data-testid="session-detail-metadata-summary">
+                <div class="session-metadata-panel__heading">
+                    <p class="section-kicker">Details</p>
+                    <h2 class="session-metadata-panel__title">Session metadata</h2>
+                </div>
 
-        @if (!string.IsNullOrWhiteSpace(Metadata.AvailabilityMessage))
-        {
-            <div class="detail-note">
-                @Metadata.AvailabilityMessage
-            </div>
-        }
+                <div class="session-metadata-strip">
+                    <div class="session-metadata-chip" data-testid="session-detail-metadata-input-tokens">
+                        <span class="session-metadata-chip__label">In</span>
+                        <span class="session-metadata-chip__value">@FormatLong(Metadata.InputTokens)</span>
+                    </div>
+                    <div class="session-metadata-chip" data-testid="session-detail-metadata-output-tokens">
+                        <span class="session-metadata-chip__label">Out</span>
+                        <span class="session-metadata-chip__value">@FormatLong(Metadata.OutputTokens)</span>
+                    </div>
+                    <div class="session-metadata-chip" data-testid="session-detail-metadata-total-tokens">
+                        <span class="session-metadata-chip__label">Total</span>
+                        <span class="session-metadata-chip__value">@FormatLong(Metadata.TotalTokens)</span>
+                    </div>
+                    <div class="session-metadata-chip" data-testid="session-detail-metadata-turn-count">
+                        <span class="session-metadata-chip__label">Turns</span>
+                        <span class="session-metadata-chip__value">@FormatInt(Metadata.TurnCount)</span>
+                    </div>
+                    <div class="session-metadata-chip" data-testid="session-detail-metadata-attempt">
+                        <span class="session-metadata-chip__label">Attempt</span>
+                        <span class="session-metadata-chip__value">@SessionDetailDisplay.GetAttemptLabel(Metadata.Attempt, Metadata.IsAttemptKnown)</span>
+                    </div>
+                </div>
+            </summary>
 
-        <div class="detail-metrics-grid detail-metrics-grid--metadata">
-            <div class="detail-metric-card" data-testid="session-detail-metadata-input-tokens">
-                <p class="detail-metric-label">Input tokens</p>
-                <p class="detail-metric-value">@FormatLong(Metadata.InputTokens)</p>
+            <div class="session-metadata-panel__body">
+                @if (!string.IsNullOrWhiteSpace(Metadata.AvailabilityMessage))
+                {
+                    <div class="detail-note">
+                        @Metadata.AvailabilityMessage
+                    </div>
+                }
+
+                <div class="detail-metrics-grid detail-metrics-grid--metadata">
+                    <div class="detail-metric-card" data-testid="session-detail-metadata-session-id">
+                        <p class="detail-metric-label">Session ID</p>
+                        <p class="detail-metric-value detail-metric-value--break">@FormatText(Metadata.SessionId)</p>
+                    </div>
+                </div>
             </div>
-            <div class="detail-metric-card" data-testid="session-detail-metadata-output-tokens">
-                <p class="detail-metric-label">Output tokens</p>
-                <p class="detail-metric-value">@FormatLong(Metadata.OutputTokens)</p>
-            </div>
-            <div class="detail-metric-card" data-testid="session-detail-metadata-total-tokens">
-                <p class="detail-metric-label">Combined tokens</p>
-                <p class="detail-metric-value">@FormatLong(Metadata.TotalTokens)</p>
-            </div>
-            <div class="detail-metric-card" data-testid="session-detail-metadata-turn-count">
-                <p class="detail-metric-label">Turn count</p>
-                <p class="detail-metric-value">@FormatInt(Metadata.TurnCount)</p>
-            </div>
-            <div class="detail-metric-card" data-testid="session-detail-metadata-session-id">
-                <p class="detail-metric-label">Session ID</p>
-                <p class="detail-metric-value detail-metric-value--break">@FormatText(Metadata.SessionId)</p>
-            </div>
-            <div class="detail-metric-card" data-testid="session-detail-metadata-attempt">
-                <p class="detail-metric-label">Attempt</p>
-                <p class="detail-metric-value">@SessionDetailDisplay.GetAttemptLabel(Metadata.Attempt, Metadata.IsAttemptKnown)</p>
-            </div>
-        </div>
+        </details>
     </MudPaper>
 </div>
 
 @code {
-    private const string MetadataCardClass = "page-card";
+    private const string MetadataCardClass = "page-card page-card--tight session-metadata-panel";
 
     [Parameter]
     [EditorRequired]

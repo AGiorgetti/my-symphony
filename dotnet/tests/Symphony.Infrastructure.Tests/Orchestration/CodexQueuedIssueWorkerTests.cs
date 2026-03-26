@@ -61,7 +61,7 @@ public sealed class CodexQueuedIssueWorkerTests
 
                     await Task.CompletedTask;
                 });
-            var client = new CodexAppServerClient(sessionFactory, TimeProvider.System, NullLogger<CodexAppServerClient>.Instance);
+            var client = CreateClient(sessionFactory);
             var processRunner = new RecordingProcessRunner();
             var worker = new CodexQueuedIssueWorker(
                 new StaticWorkflowOptionsProvider(CreateWorkflowOptions()),
@@ -132,7 +132,7 @@ public sealed class CodexQueuedIssueWorkerTests
                 new StaticWorkspaceManager(new Workspace(workspacePath, "GH-21", createdNow: true)),
                 new RecordingProcessRunner(exitCodes: [1]),
                 new WorkflowPromptRenderer(),
-                new CodexAppServerClient(sessionFactory, TimeProvider.System, NullLogger<CodexAppServerClient>.Instance),
+                CreateClient(sessionFactory),
                 NullLogger<CodexQueuedIssueWorker>.Instance);
 
             using var testContext = CreateContext(attempt: null);
@@ -165,7 +165,7 @@ public sealed class CodexQueuedIssueWorkerTests
                         request.WorkingDirectory,
                         request.Timeout ?? TimeSpan.FromMilliseconds(1))),
                 new WorkflowPromptRenderer(),
-                new CodexAppServerClient(new TestCodexProcessSessionFactory(), TimeProvider.System, NullLogger<CodexAppServerClient>.Instance),
+                CreateClient(new TestCodexProcessSessionFactory()),
                 NullLogger<CodexQueuedIssueWorker>.Instance);
 
             using var testContext = CreateContext(attempt: null);
@@ -193,7 +193,7 @@ public sealed class CodexQueuedIssueWorkerTests
                 new StaticWorkspaceManager(new Workspace(workspacePath, "GH-21", createdNow: true)),
                 new RecordingProcessRunner(),
                 new WorkflowPromptRenderer(),
-                new CodexAppServerClient(new TestCodexProcessSessionFactory(), TimeProvider.System, NullLogger<CodexAppServerClient>.Instance),
+                CreateClient(new TestCodexProcessSessionFactory()),
                 NullLogger<CodexQueuedIssueWorker>.Instance);
 
             using var testContext = CreateContext(attempt: null);
@@ -249,7 +249,7 @@ public sealed class CodexQueuedIssueWorkerTests
 
                     await Task.CompletedTask;
                 });
-            var client = new CodexAppServerClient(sessionFactory, TimeProvider.System, NullLogger<CodexAppServerClient>.Instance);
+            var client = CreateClient(sessionFactory);
             var processRunner = new RecordingProcessRunner();
             var issueTrackerClient = new RecordingIssueTrackerClient(
             [
@@ -340,7 +340,7 @@ public sealed class CodexQueuedIssueWorkerTests
                 new StaticWorkspaceManager(new Workspace(workspacePath, "GH-21", createdNow: true)),
                 new RecordingProcessRunner(),
                 new WorkflowPromptRenderer(),
-                new CodexAppServerClient(sessionFactory, TimeProvider.System, NullLogger<CodexAppServerClient>.Instance),
+                CreateClient(sessionFactory),
                 NullLogger<CodexQueuedIssueWorker>.Instance);
             using var testContext = CreateContext(attempt: null);
 
@@ -408,6 +408,15 @@ public sealed class CodexQueuedIssueWorkerTests
             trackedSession,
             trackedSession.CreateExecutionContext(),
             logger);
+    }
+
+    private static CodexAppServerClient CreateClient(TestCodexProcessSessionFactory sessionFactory)
+    {
+        return new CodexAppServerClient(
+            sessionFactory,
+            TimeProvider.System,
+            new NoOpTranscriptSink(),
+            NullLogger<CodexAppServerClient>.Instance);
     }
 
     private static Issue CreateIssue(string state = "Todo")
@@ -569,6 +578,23 @@ public sealed class CodexQueuedIssueWorkerTests
     }
 
     private sealed record LogEntry(string Message, IReadOnlyDictionary<string, object?> State);
+
+    private sealed class NoOpTranscriptSink : IAgentDebugTranscriptSink
+    {
+        public bool TrackAgentMessageDeltas => false;
+
+        public void RecordOutbound(string issueIdentifier, DateTimeOffset timestamp, string title, string payload)
+        {
+        }
+
+        public void RecordInbound(string issueIdentifier, DateTimeOffset timestamp, string title, string payload)
+        {
+        }
+
+        public void RecordDiagnostic(string issueIdentifier, DateTimeOffset timestamp, string title, string detail)
+        {
+        }
+    }
 
     private sealed class NullScope : IDisposable
     {

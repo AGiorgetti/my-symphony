@@ -8,8 +8,6 @@ namespace Symphony.Infrastructure.Tests.Workflows;
 
 public sealed class WorkflowStartupValidationHostedServiceTests
 {
-    private static readonly SemaphoreSlim CurrentDirectoryGate = new(1, 1);
-
     [Fact]
     public async Task StartAsync_invalid_workflow_logs_actionable_error_and_throws()
     {
@@ -31,7 +29,7 @@ public sealed class WorkflowStartupValidationHostedServiceTests
             CreateProvider(),
             loggerFactory.CreateLogger<WorkflowStartupValidationHostedService>());
 
-        await CurrentDirectoryGate.WaitAsync();
+        await CurrentDirectoryTestScope.WaitAsync();
 
         try
         {
@@ -55,7 +53,7 @@ public sealed class WorkflowStartupValidationHostedServiceTests
         }
         finally
         {
-            CurrentDirectoryGate.Release();
+            CurrentDirectoryTestScope.Release();
         }
     }
 
@@ -81,7 +79,7 @@ public sealed class WorkflowStartupValidationHostedServiceTests
             CreateProvider(),
             loggerFactory.CreateLogger<WorkflowStartupValidationHostedService>());
 
-        await CurrentDirectoryGate.WaitAsync();
+        await CurrentDirectoryTestScope.WaitAsync();
 
         try
         {
@@ -105,7 +103,7 @@ public sealed class WorkflowStartupValidationHostedServiceTests
         }
         finally
         {
-            CurrentDirectoryGate.Release();
+            CurrentDirectoryTestScope.Release();
         }
     }
 

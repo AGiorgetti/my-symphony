@@ -8,7 +8,6 @@ namespace Symphony.Infrastructure.Tests.Configuration;
 
 public sealed class WorkflowOptionsProviderTests
 {
-    private static readonly SemaphoreSlim CurrentDirectoryGate = new(1, 1);
     private static long _lastWriteSequence;
 
     [Fact]
@@ -34,7 +33,7 @@ public sealed class WorkflowOptionsProviderTests
         var workflowLoadStatusTracker = new WorkflowLoadStatusTracker();
         using var provider = CreateProvider(logger, workflowLoadStatusTracker);
 
-        await CurrentDirectoryGate.WaitAsync();
+        await CurrentDirectoryTestScope.WaitAsync();
 
         try
         {
@@ -80,7 +79,7 @@ public sealed class WorkflowOptionsProviderTests
         }
         finally
         {
-            CurrentDirectoryGate.Release();
+            CurrentDirectoryTestScope.Release();
         }
     }
 
@@ -107,7 +106,7 @@ public sealed class WorkflowOptionsProviderTests
         var workflowLoadStatusTracker = new WorkflowLoadStatusTracker();
         using var provider = CreateProvider(logger, workflowLoadStatusTracker);
 
-        await CurrentDirectoryGate.WaitAsync();
+        await CurrentDirectoryTestScope.WaitAsync();
 
         try
         {
@@ -157,7 +156,7 @@ public sealed class WorkflowOptionsProviderTests
         }
         finally
         {
-            CurrentDirectoryGate.Release();
+            CurrentDirectoryTestScope.Release();
         }
     }
 

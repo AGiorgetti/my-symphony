@@ -19,6 +19,8 @@ public static class SymphonyHostCompositionExtensions
 
         builder.ApplyConfiguredHttpServerPort();
         builder.Logging.AddSymphonyLogging(builder.Configuration);
+        builder.Services.Configure<DashboardUiOptions>(
+            builder.Configuration.GetSection(DashboardUiOptions.SectionName));
         builder.Services.Configure<OrchestratorControlOptions>(
             builder.Configuration.GetSection(OrchestratorControlOptions.SectionName));
 
@@ -32,7 +34,9 @@ public static class SymphonyHostCompositionExtensions
             .AddSymphonyInfrastructure()
             .AddConfiguredTrackerAdapter(builder.Configuration);
         builder.Services.AddSingleton<ServiceHealthSnapshotProvider>();
-        builder.Services.AddSingleton<ISessionActivityStore, SessionActivityStore>();
+        builder.Services.AddSingleton<SessionActivityStore>();
+        builder.Services.AddSingleton<ISessionActivityStore>(serviceProvider => serviceProvider.GetRequiredService<SessionActivityStore>());
+        builder.Services.AddSingleton<IAgentDebugTranscriptSink>(serviceProvider => serviceProvider.GetRequiredService<SessionActivityStore>());
         builder.Services.AddSingleton<IDashboardStateService, DashboardStateService>();
         builder.Services.AddScoped<IThemeService, ThemeService>();
         builder.Services.AddScoped<ThemeService>();

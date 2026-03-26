@@ -1,14 +1,21 @@
 using System.Collections.Concurrent;
 using System.Collections.Immutable;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using Symphony.Application.Orchestration;
+using Symphony.Host.Configuration;
 
 namespace Symphony.Host.Dashboard;
 
-public sealed class SessionActivityStore(ILogger<SessionActivityStore> logger) : ISessionActivityStore
+public sealed class SessionActivityStore(
+    ILogger<SessionActivityStore> logger,
+    IOptions<DashboardUiOptions>? dashboardUiOptions = null) : ISessionActivityStore, IAgentDebugTranscriptSink
 {
     private const int ActivityHistoryLimit = 500;
 
     private readonly ConcurrentDictionary<string, SessionState> _sessions = new(StringComparer.OrdinalIgnoreCase);
+
+    public bool TrackAgentMessageDeltas => dashboardUiOptions?.Value.TrackAgentMessageDeltas ?? false;
 
     public void RecordSessionStart(string issueIdentifier, DateTimeOffset startedAt, string? issueUrl = null)
     {
@@ -76,6 +83,21 @@ public sealed class SessionActivityStore(ILogger<SessionActivityStore> logger) :
                         }
                     });
             });
+    }
+
+    public void RecordOutbound(string issueIdentifier, DateTimeOffset timestamp, string title, string payload)
+    {
+        RecordActivity(issueIdentifier, new SessionActivityEntry(SessionActivityKind.DebugMessage, timestamp, title, payload));
+    }
+
+    public void RecordInbound(string issueIdentifier, DateTimeOffset timestamp, string title, string payload)
+    {
+        RecordActivity(issueIdentifier, new SessionActivityEntry(SessionActivityKind.DebugMessage, timestamp, title, payload));
+    }
+
+    public void RecordDiagnostic(string issueIdentifier, DateTimeOffset timestamp, string title, string detail)
+    {
+        RecordActivity(issueIdentifier, new SessionActivityEntry(SessionActivityKind.DebugMessage, timestamp, title, detail));
     }
 
     public IReadOnlyList<SessionRecord> GetAllSessions()

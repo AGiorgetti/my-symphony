@@ -1519,6 +1519,21 @@ Enablement (extension):
   retry delays, token consumption, runtime totals, recent events, and health/error indicators).
 - It is up to the implementation whether this is server-generated HTML or a client-side app that
   consumes the JSON API below.
+- If the implementation exposes per-session runtime detail pages, raw agent payloads should be
+  treated as debug-only output rather than always-on operator UI.
+  - A host configuration flag such as `appsettings.json` `Dashboard.DebugMode` may enable those
+    payloads.
+  - A separate host flag such as `Dashboard.TrackAgentMessageDeltas` may control whether
+    high-volume `item/agentMessage/delta` transcript events are recorded at all.
+  - The default operator experience should keep raw payloads hidden.
+  - When enabled, the UI should clearly label the extra payload/metadata section as debug-only.
+  - When enabled, the per-session view should expose the full outbound agent/request transcript and
+    the full inbound agent replies/events/diagnostics so operators can verify workflow adherence
+    without relying only on summarized state.
+  - The per-session debug UI should keep a persistent method-filter panel visible beside the
+    transcript and expose one checkbox per observed transcript `method` value.
+  - When `item/agentMessage/delta` tracking is enabled, that method should appear in the same
+    filter panel and behave like any other method-level visibility toggle.
 
 #### 13.7.2 JSON REST API (`/api/v1/*`)
 
