@@ -67,7 +67,7 @@ internal sealed class CodexAppServerClient(
                     },
                     context.CancellationToken)
                 .ConfigureAwait(false);
-            _ = await ReadResponseAsync(session, 1, codexOptions.ReadTimeoutMs, context, startupDiagnostics, context.CancellationToken).ConfigureAwait(false);
+            _ = await ReadResponseAsync(session, 1, codexOptions.ReadTimeoutMs, context, startupDiagnostics, codexOptions.ApprovalPolicy, context.CancellationToken).ConfigureAwait(false);
 
             await SendAsync(
                     session,
@@ -98,7 +98,7 @@ internal sealed class CodexAppServerClient(
                     },
                     context.CancellationToken)
                 .ConfigureAwait(false);
-            var threadStartResponse = await ReadResponseAsync(session, 2, codexOptions.ReadTimeoutMs, context, startupDiagnostics, context.CancellationToken)
+            var threadStartResponse = await ReadResponseAsync(session, 2, codexOptions.ReadTimeoutMs, context, startupDiagnostics, codexOptions.ApprovalPolicy, context.CancellationToken)
                 .ConfigureAwait(false);
             var threadId = ExtractRequiredNestedId(threadStartResponse, "thread");
 
@@ -234,6 +234,7 @@ internal sealed class CodexAppServerClient(
                 codexOptions.ReadTimeoutMs,
                 context,
                 startupDiagnostics,
+                codexOptions.ApprovalPolicy,
                 context.CancellationToken)
             .ConfigureAwait(false);
         var turnId = ExtractRequiredNestedId(turnStartResponse, "turn");
@@ -249,7 +250,7 @@ internal sealed class CodexAppServerClient(
                 turnCount: turnNumber));
         context.UpdateStatus(RunAttemptStatus.StreamingTurn);
 
-        await ReadTurnStreamAsync(session, context, codexOptions.TurnTimeoutMs).ConfigureAwait(false);
+        await ReadTurnStreamAsync(session, context, codexOptions.TurnTimeoutMs, codexOptions.ApprovalPolicy).ConfigureAwait(false);
     }
 
     private async Task<JsonElement> ReadResponseAsync(
@@ -258,6 +259,7 @@ internal sealed class CodexAppServerClient(
         int readTimeoutMs,
         QueuedIssueExecutionContext context,
         ConcurrentQueue<string> startupDiagnostics,
+        string? approvalPolicy,
         CancellationToken cancellationToken)
     {
         while (true)
@@ -314,14 +316,15 @@ internal sealed class CodexAppServerClient(
                 return payload;
             }
 
-            await ProcessProtocolMessageAsync(session, context, payload, cancellationToken).ConfigureAwait(false);
+            await ProcessProtocolMessageAsync(session, context, payload, approvalPolicy, cancellationToken).ConfigureAwait(false);
         }
     }
 
     private async Task ReadTurnStreamAsync(
         ICodexProcessSession session,
         QueuedIssueExecutionContext context,
-        int turnTimeoutMs)
+        int turnTimeoutMs,
+        string? approvalPolicy)
     {
         using var turnTimeoutCancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(context.CancellationToken);
         turnTimeoutCancellationTokenSource.CancelAfter(TimeSpan.FromMilliseconds(turnTimeoutMs));
@@ -358,7 +361,7 @@ internal sealed class CodexAppServerClient(
 
                 RecordInboundPayload(context, payload, line);
 
-                var terminalOutcome = await ProcessProtocolMessageAsync(session, context, payload, turnTimeoutCancellationTokenSource.Token)
+                var terminalOutcome = await ProcessProtocolMessageAsync(session, context, payload, approvalPolicy, turnTimeoutCancellationTokenSource.Token)
                     .ConfigureAwait(false);
                 if (terminalOutcome == CodexTerminalOutcome.Completed)
                 {
@@ -416,6 +419,7 @@ internal sealed class CodexAppServerClient(
         ICodexProcessSession session,
         QueuedIssueExecutionContext context,
         JsonElement payload,
+        string? approvalPolicy,
         CancellationToken cancellationToken)
     {
         var method = TryGetMethod(payload);
@@ -424,11 +428,50 @@ internal sealed class CodexAppServerClient(
             return CodexTerminalOutcome.None;
         }
 
-        if (TryGetId(payload) is { } requestId)
+        if (TryGetResponseId(payload, out var requestId))
         {
+            if (IsToolRequestUserInputMethod(method)
+                && string.Equals(approvalPolicy, "never", StringComparison.OrdinalIgnoreCase)
+                && TryCreateToolRequestUserInputApprovalResponse(payload, out var toolRequestApprovalResponse))
+            {
+                await SendAsync(
+                        session,
+                        context,
+                        new
+                        {
+                            id = requestId,
+                            result = toolRequestApprovalResponse
+                        },
+                        cancellationToken)
+                    .ConfigureAwait(false);
+
+                UpdateSessionMetadata(context, "tool_request_user_input_auto_approved", "tool_request_user_input_auto_approved", payload);
+                return CodexTerminalOutcome.None;
+            }
+
+            if (IsMcpServerElicitationRequestMethod(method)
+                && string.Equals(approvalPolicy, "never", StringComparison.OrdinalIgnoreCase)
+                && TryCreateMcpToolCallElicitationApprovalResponse(payload, out var elicitationApprovalResponse))
+            {
+                await SendAsync(
+                        session,
+                        context,
+                        new
+                        {
+                            id = requestId,
+                            result = elicitationApprovalResponse
+                        },
+                        cancellationToken)
+                    .ConfigureAwait(false);
+
+                UpdateSessionMetadata(context, "mcp_tool_call_elicitation_auto_approved", "mcp_tool_call_elicitation_auto_approved", payload);
+                return CodexTerminalOutcome.None;
+            }
+
             if (method.Contains("requestUserInput", StringComparison.OrdinalIgnoreCase)
                 || method.Contains("user_input", StringComparison.OrdinalIgnoreCase)
-                || method.Contains("input_required", StringComparison.OrdinalIgnoreCase))
+                || method.Contains("input_required", StringComparison.OrdinalIgnoreCase)
+                || IsMcpServerElicitationRequestMethod(method))
             {
                 UpdateSessionMetadata(context, "turn_input_required", "user_input_required", payload);
                 throw new CodexAgentException("turn_input_required", "Codex app-server requested user input.");
@@ -679,6 +722,28 @@ internal sealed class CodexAppServerClient(
         };
     }
 
+    private static bool TryGetResponseId(JsonElement payload, out object requestId)
+    {
+        requestId = default!;
+
+        if (!payload.TryGetProperty("id", out var idElement))
+        {
+            return false;
+        }
+
+        switch (idElement.ValueKind)
+        {
+            case JsonValueKind.String:
+                requestId = idElement.GetString()!;
+                return true;
+            case JsonValueKind.Number:
+                requestId = idElement.Clone();
+                return true;
+            default:
+                return false;
+        }
+    }
+
     private static string CreateOutboundTranscriptTitle(string line)
     {
         using var document = JsonDocument.Parse(line);
@@ -713,6 +778,161 @@ internal sealed class CodexAppServerClient(
     {
         var method = TryGetMethod(payload);
         return string.Equals(method, "item/agentMessage/delta", StringComparison.Ordinal);
+    }
+
+    private static bool IsToolRequestUserInputMethod(string method)
+    {
+        return string.Equals(method, "item/tool/requestUserInput", StringComparison.Ordinal);
+    }
+
+    private static bool IsMcpServerElicitationRequestMethod(string method)
+    {
+        return string.Equals(method, "mcpServer/elicitation/request", StringComparison.Ordinal);
+    }
+
+    private static bool TryCreateToolRequestUserInputApprovalResponse(JsonElement payload, out object response)
+    {
+        response = default!;
+
+        if (!payload.TryGetProperty("params", out var parameters)
+            || parameters.ValueKind != JsonValueKind.Object
+            || !parameters.TryGetProperty("questions", out var questionsElement)
+            || questionsElement.ValueKind != JsonValueKind.Array)
+        {
+            return false;
+        }
+
+        var answers = new Dictionary<string, object>(StringComparer.Ordinal);
+
+        foreach (var question in questionsElement.EnumerateArray())
+        {
+            if (question.ValueKind != JsonValueKind.Object
+                || !question.TryGetProperty("id", out var questionIdElement)
+                || questionIdElement.ValueKind != JsonValueKind.String
+                || string.IsNullOrWhiteSpace(questionIdElement.GetString())
+                || !question.TryGetProperty("options", out var optionsElement)
+                || optionsElement.ValueKind != JsonValueKind.Array
+                || !TrySelectAutoApprovalOption(optionsElement, out var selectedOptionLabel))
+            {
+                return false;
+            }
+
+            answers[questionIdElement.GetString()!] = new
+            {
+                answers = new[] { selectedOptionLabel }
+            };
+        }
+
+        response = new
+        {
+            answers
+        };
+        return answers.Count > 0;
+    }
+
+    private static bool TryCreateMcpToolCallElicitationApprovalResponse(JsonElement payload, out object response)
+    {
+        response = default!;
+
+        if (!payload.TryGetProperty("params", out var parameters)
+            || parameters.ValueKind != JsonValueKind.Object
+            || !TryGetApprovalKind(parameters, out var approvalKind)
+            || !string.Equals(approvalKind, "mcp_tool_call", StringComparison.Ordinal)
+            || !HasFormMode(parameters)
+            || !HasObjectRequestedSchema(parameters))
+        {
+            return false;
+        }
+
+        response = new
+        {
+            action = "accept",
+            content = new Dictionary<string, object?>(StringComparer.Ordinal)
+        };
+        return true;
+    }
+
+    private static bool TryGetApprovalKind(JsonElement parameters, out string approvalKind)
+    {
+        approvalKind = string.Empty;
+
+        if (!parameters.TryGetProperty("_meta", out var metadata)
+            || metadata.ValueKind != JsonValueKind.Object
+            || !metadata.TryGetProperty("codex_approval_kind", out var approvalKindElement)
+            || approvalKindElement.ValueKind != JsonValueKind.String)
+        {
+            return false;
+        }
+
+        var approvalKindValue = approvalKindElement.GetString();
+        if (string.IsNullOrWhiteSpace(approvalKindValue))
+        {
+            return false;
+        }
+
+        approvalKind = approvalKindValue;
+        return true;
+    }
+
+    private static bool HasFormMode(JsonElement parameters)
+    {
+        return !parameters.TryGetProperty("mode", out var modeElement)
+               || (modeElement.ValueKind == JsonValueKind.String
+                   && string.Equals(modeElement.GetString(), "form", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static bool HasObjectRequestedSchema(JsonElement parameters)
+    {
+        return parameters.TryGetProperty("requestedSchema", out var requestedSchema)
+               && requestedSchema.ValueKind == JsonValueKind.Object
+               && requestedSchema.TryGetProperty("type", out var typeElement)
+               && typeElement.ValueKind == JsonValueKind.String
+               && string.Equals(typeElement.GetString(), "object", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool TrySelectAutoApprovalOption(JsonElement optionsElement, out string selectedOptionLabel)
+    {
+        selectedOptionLabel = string.Empty;
+        string? allowOnceLabel = null;
+
+        foreach (var option in optionsElement.EnumerateArray())
+        {
+            if (option.ValueKind != JsonValueKind.Object
+                || !option.TryGetProperty("label", out var labelElement)
+                || labelElement.ValueKind != JsonValueKind.String)
+            {
+                continue;
+            }
+
+            var label = labelElement.GetString();
+            if (string.IsNullOrWhiteSpace(label))
+            {
+                continue;
+            }
+
+            if (string.Equals(label, "Allow for this session", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(label, "Approve this Session", StringComparison.OrdinalIgnoreCase))
+            {
+                selectedOptionLabel = label;
+                return true;
+            }
+
+            if (allowOnceLabel is null
+                && (string.Equals(label, "Allow", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(label, "Approve Once", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(label, "Approve", StringComparison.OrdinalIgnoreCase)))
+            {
+                allowOnceLabel = label;
+            }
+        }
+
+        if (allowOnceLabel is null)
+        {
+            return false;
+        }
+
+        selectedOptionLabel = allowOnceLabel;
+        return true;
     }
 
     private static string FormatErrorMessage(JsonElement errorElement)

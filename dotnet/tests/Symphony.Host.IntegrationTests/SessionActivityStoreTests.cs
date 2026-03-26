@@ -70,7 +70,7 @@ public sealed class SessionActivityStoreTests
     }
 
     [Fact]
-    public void RecordActivity_trims_history_to_500_entries_and_appends_warning()
+    public void RecordActivity_preserves_full_activity_history()
     {
         var store = CreateStore();
         var baseTimestamp = new DateTimeOffset(2026, 3, 19, 15, 0, 0, TimeSpan.Zero);
@@ -90,12 +90,10 @@ public sealed class SessionActivityStoreTests
 
         var activities = store.GetActivities("ABC-3");
 
-        Assert.Equal(500, activities.Count);
-        Assert.DoesNotContain(activities, activity => activity.Title == "Message 0");
-        Assert.DoesNotContain(activities, activity => activity.Title == "Message 1");
-        Assert.Equal("Message 500", activities[^2].Title);
-        Assert.Equal(SessionActivityKind.Warning, activities[^1].Kind);
-        Assert.Equal("Activity history trimmed", activities[^1].Title);
+        Assert.Equal(501, activities.Count);
+        Assert.Equal("Message 0", activities[0].Title);
+        Assert.Equal("Message 500", activities[^1].Title);
+        Assert.DoesNotContain(activities, activity => activity.Title == "Activity history trimmed");
     }
 
     [Fact]
