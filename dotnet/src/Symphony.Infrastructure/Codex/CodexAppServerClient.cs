@@ -141,6 +141,21 @@ internal sealed class CodexAppServerClient(
                 context.Issue.Identifier,
                 context.SessionId);
         }
+        catch (CodexAgentException exception) when (exception.Code == "port_exit")
+        {
+            await AwaitStandardErrorPumpAsync(standardErrorPump).ConfigureAwait(false);
+
+            if (exception.Message.Contains("startup handshake", StringComparison.Ordinal)
+                && !exception.Message.Contains("stderr=", StringComparison.Ordinal))
+            {
+                throw new CodexAgentException(
+                    exception.Code,
+                    BuildStartupHandshakeExitMessage(session, startupDiagnostics),
+                    exception);
+            }
+
+            throw;
+        }
         finally
         {
             stderrCancellationTokenSource.Cancel();
@@ -161,6 +176,17 @@ internal sealed class CodexAppServerClient(
             catch (OperationCanceledException)
             {
             }
+        }
+    }
+
+    private static async Task AwaitStandardErrorPumpAsync(Task standardErrorPump)
+    {
+        try
+        {
+            await standardErrorPump.ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
         }
     }
 
