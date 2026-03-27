@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text;
 using Microsoft.Extensions.Logging;
 using Symphony.Abstractions.Processes;
@@ -13,94 +14,119 @@ public sealed class WorkspaceManager(
     IProcessRunner processRunner,
     ILogger<WorkspaceManager> logger) : IWorkspaceManager
 {
+    private readonly ConcurrentDictionary<string, SemaphoreSlim> _workspaceLocks = new(GetWorkspacePathComparer());
+
     public async Task<Workspace> CreateForIssueAsync(string issueIdentifier, CancellationToken cancellationToken = default)
     {
         var options = await workflowOptionsProvider.GetCurrentAsync(cancellationToken).ConfigureAwait(false);
         var workspacePathInfo = ResolveWorkspacePath(issueIdentifier, options.Workspace.Root);
-
-        if (File.Exists(workspacePathInfo.WorkspacePath) && !Directory.Exists(workspacePathInfo.WorkspacePath))
-        {
-            throw new InvalidOperationException(
-                $"Cannot create workspace '{workspacePathInfo.WorkspacePath}' because a non-directory entry already exists at that path.");
-        }
-
-        var createdNow = false;
-        if (!Directory.Exists(workspacePathInfo.WorkspacePath))
-        {
-            Directory.CreateDirectory(workspacePathInfo.WorkspacePath);
-            createdNow = true;
-        }
+        var workspaceLock = await AcquireWorkspaceLockAsync(workspacePathInfo.WorkspacePath, cancellationToken).ConfigureAwait(false);
 
         try
         {
-            if (createdNow && options.Hooks.AfterCreate is not null)
+            if (File.Exists(workspacePathInfo.WorkspacePath) && !Directory.Exists(workspacePathInfo.WorkspacePath))
             {
-                await RunRequiredHookAsync(
-                        "after_create",
-                        options.Hooks.AfterCreate,
-                        issueIdentifier,
-                        workspacePathInfo.WorkspacePath,
-                        options.Hooks.TimeoutMs,
-                        cancellationToken)
-                    .ConfigureAwait(false);
+                throw new InvalidOperationException(
+                    $"Cannot create workspace '{workspacePathInfo.WorkspacePath}' because a non-directory entry already exists at that path.");
             }
+
+            var createdNow = false;
+            if (!Directory.Exists(workspacePathInfo.WorkspacePath))
+            {
+                Directory.CreateDirectory(workspacePathInfo.WorkspacePath);
+                createdNow = true;
+            }
+
+            try
+            {
+                if (createdNow && options.Hooks.AfterCreate is not null)
+                {
+                    await RunRequiredHookAsync(
+                            "after_create",
+                            options.Hooks.AfterCreate,
+                            issueIdentifier,
+                            workspacePathInfo.WorkspacePath,
+                            options.Hooks.TimeoutMs,
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                }
+            }
+            catch
+            {
+                if (createdNow && Directory.Exists(workspacePathInfo.WorkspacePath))
+                {
+                    Directory.Delete(workspacePathInfo.WorkspacePath, recursive: true);
+                }
+
+                throw;
+            }
+
+            logger.LogInformation(
+                "workspace_create completed issue_identifier={issue_identifier} workspace_key={workspace_key} workspace_path={workspace_path} created_now={created_now} outcome=completed",
+                issueIdentifier,
+                workspacePathInfo.WorkspaceKey,
+                workspacePathInfo.WorkspacePath,
+                createdNow);
+            return new Workspace(workspacePathInfo.WorkspacePath, workspacePathInfo.WorkspaceKey, createdNow);
         }
-        catch
+        finally
         {
-            if (createdNow && Directory.Exists(workspacePathInfo.WorkspacePath))
-            {
-                Directory.Delete(workspacePathInfo.WorkspacePath, recursive: true);
-            }
-
-            throw;
+            workspaceLock.Release();
         }
-
-        logger.LogInformation(
-            "workspace_create completed issue_identifier={issue_identifier} workspace_key={workspace_key} workspace_path={workspace_path} created_now={created_now} outcome=completed",
-            issueIdentifier,
-            workspacePathInfo.WorkspaceKey,
-            workspacePathInfo.WorkspacePath,
-            createdNow);
-        return new Workspace(workspacePathInfo.WorkspacePath, workspacePathInfo.WorkspaceKey, createdNow);
     }
 
     public async Task DeleteForIssueAsync(string issueIdentifier, CancellationToken cancellationToken = default)
     {
         var options = await workflowOptionsProvider.GetCurrentAsync(cancellationToken).ConfigureAwait(false);
         var workspacePathInfo = ResolveWorkspacePath(issueIdentifier, options.Workspace.Root);
+        var workspaceLock = await AcquireWorkspaceLockAsync(workspacePathInfo.WorkspacePath, cancellationToken).ConfigureAwait(false);
 
-        if (Directory.Exists(workspacePathInfo.WorkspacePath))
+        try
         {
-            if (options.Hooks.BeforeRemove is not null)
+            if (Directory.Exists(workspacePathInfo.WorkspacePath))
             {
-                await RunBestEffortHookAsync(
-                        "before_remove",
-                        options.Hooks.BeforeRemove,
-                        issueIdentifier,
-                        workspacePathInfo.WorkspacePath,
-                        options.Hooks.TimeoutMs,
-                        cancellationToken)
-                    .ConfigureAwait(false);
+                if (options.Hooks.BeforeRemove is not null)
+                {
+                    await RunBestEffortHookAsync(
+                            "before_remove",
+                            options.Hooks.BeforeRemove,
+                            issueIdentifier,
+                            workspacePathInfo.WorkspacePath,
+                            options.Hooks.TimeoutMs,
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                }
+
+                Directory.Delete(workspacePathInfo.WorkspacePath, recursive: true);
+                logger.LogInformation(
+                    "workspace_cleanup completed issue_identifier={issue_identifier} workspace_key={workspace_key} workspace_path={workspace_path} outcome=completed",
+                    issueIdentifier,
+                    workspacePathInfo.WorkspaceKey,
+                    workspacePathInfo.WorkspacePath);
+                return;
             }
 
-            Directory.Delete(workspacePathInfo.WorkspacePath, recursive: true);
-            logger.LogInformation(
-                "workspace_cleanup completed issue_identifier={issue_identifier} workspace_key={workspace_key} workspace_path={workspace_path} outcome=completed",
-                issueIdentifier,
-                workspacePathInfo.WorkspaceKey,
-                workspacePathInfo.WorkspacePath);
-            return;
+            if (File.Exists(workspacePathInfo.WorkspacePath))
+            {
+                File.Delete(workspacePathInfo.WorkspacePath);
+                logger.LogInformation(
+                    "workspace_cleanup completed issue_identifier={issue_identifier} workspace_key={workspace_key} workspace_path={workspace_path} outcome=completed",
+                    issueIdentifier,
+                    workspacePathInfo.WorkspaceKey,
+                    workspacePathInfo.WorkspacePath);
+            }
         }
-
-        if (File.Exists(workspacePathInfo.WorkspacePath))
+        finally
         {
-            File.Delete(workspacePathInfo.WorkspacePath);
-            logger.LogInformation(
-                "workspace_cleanup completed issue_identifier={issue_identifier} workspace_key={workspace_key} workspace_path={workspace_path} outcome=completed",
-                issueIdentifier,
-                workspacePathInfo.WorkspaceKey,
-                workspacePathInfo.WorkspacePath);
+            workspaceLock.Release();
         }
+    }
+
+    private async Task<SemaphoreSlim> AcquireWorkspaceLockAsync(string workspacePath, CancellationToken cancellationToken)
+    {
+        var workspaceLock = _workspaceLocks.GetOrAdd(workspacePath, static _ => new SemaphoreSlim(1, 1));
+        await workspaceLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        return workspaceLock;
     }
 
     private async Task RunRequiredHookAsync(
@@ -250,6 +276,13 @@ public sealed class WorkspaceManager(
         return normalizedWorkspacePath.StartsWith(
             normalizedWorkspaceRoot + Path.DirectorySeparatorChar,
             comparison);
+    }
+
+    private static StringComparer GetWorkspacePathComparer()
+    {
+        return OperatingSystem.IsWindows()
+            ? StringComparer.OrdinalIgnoreCase
+            : StringComparer.Ordinal;
     }
 
     private sealed record WorkspacePathInfo(string WorkspacePath, string WorkspaceKey);
