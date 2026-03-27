@@ -35,6 +35,35 @@ public sealed class WorkspaceManagerTests
     }
 
     [Fact]
+    public async Task CreateForIssueAsync_canonicalizes_existing_workspace_root_segments_on_windows()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var workspaceParent = CreateTemporaryWorkspaceRoot();
+        var canonicalWorkspaceRoot = Path.Combine(workspaceParent, "CaseSensitiveRoot");
+        Directory.CreateDirectory(canonicalWorkspaceRoot);
+
+        try
+        {
+            var configuredWorkspaceRoot = Path.Combine(workspaceParent, "casesensitiveroot");
+            var manager = CreateWorkspaceManager(
+                configuredWorkspaceRoot,
+                processRunner: new RecordingProcessRunner());
+
+            var workspace = await manager.CreateForIssueAsync("ISSUE-42");
+
+            Assert.Equal(Path.Combine(canonicalWorkspaceRoot, "ISSUE-42"), workspace.Path);
+        }
+        finally
+        {
+            DeleteDirectoryIfPresent(workspaceParent);
+        }
+    }
+
+    [Fact]
     public async Task CreateForIssueAsync_rejects_workspace_path_outside_root()
     {
         var workspaceRoot = CreateTemporaryWorkspaceRoot();

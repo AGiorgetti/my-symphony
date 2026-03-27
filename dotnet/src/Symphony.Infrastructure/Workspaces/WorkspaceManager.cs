@@ -5,6 +5,7 @@ using Symphony.Abstractions.Processes;
 using Symphony.Abstractions.Workspaces;
 using Symphony.Application.Configuration;
 using Symphony.Domain.Workspaces;
+using Symphony.Infrastructure.IO;
 using Symphony.Infrastructure.Processes;
 
 namespace Symphony.Infrastructure.Workspaces;
@@ -222,8 +223,8 @@ public sealed class WorkspaceManager(
         ArgumentException.ThrowIfNullOrWhiteSpace(issueIdentifier);
 
         var workspaceKey = SanitizeIssueIdentifier(issueIdentifier);
-        var normalizedWorkspaceRoot = Path.GetFullPath(workspaceRoot);
-        var workspacePath = Path.GetFullPath(Path.Combine(normalizedWorkspaceRoot, workspaceKey));
+        var normalizedWorkspaceRoot = FileSystemPathCanonicalizer.Canonicalize(workspaceRoot);
+        var workspacePath = FileSystemPathCanonicalizer.Canonicalize(Path.Combine(normalizedWorkspaceRoot, workspaceKey));
 
         if (!IsWithinRoot(normalizedWorkspaceRoot, workspacePath))
         {

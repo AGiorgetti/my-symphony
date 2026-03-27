@@ -4,6 +4,7 @@ using System.Globalization;
 using Symphony.Abstractions.Trackers;
 using Symphony.Application.Configuration;
 using Symphony.Domain.Workflows;
+using Symphony.Infrastructure.IO;
 
 namespace Symphony.Infrastructure.Configuration;
 
@@ -287,7 +288,7 @@ public sealed class WorkflowOptionsResolver : IWorkflowOptionsResolver
 
         if (ContainsDirectorySeparator(resolvedRoot) || Path.IsPathRooted(resolvedRoot))
         {
-            return Path.GetFullPath(resolvedRoot);
+            return FileSystemPathCanonicalizer.Canonicalize(resolvedRoot);
         }
 
         return resolvedRoot;

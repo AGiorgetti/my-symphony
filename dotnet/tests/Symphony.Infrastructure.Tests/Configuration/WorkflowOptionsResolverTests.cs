@@ -119,6 +119,52 @@ public sealed class WorkflowOptionsResolverTests
     }
 
     [Fact]
+    public void Resolve_canonicalizes_existing_workspace_root_segments_on_windows()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        const string workspaceRootVariable = "SYMPHONY_TEST_CANONICAL_WORKSPACE_ROOT";
+        var workspaceParent = Path.Combine(Path.GetTempPath(), "resolver-root", Guid.NewGuid().ToString("N"));
+        var canonicalWorkspaceRoot = Path.Combine(workspaceParent, "CaseSensitiveRoot");
+        Directory.CreateDirectory(canonicalWorkspaceRoot);
+
+        using var workspaceRootScope = new EnvironmentVariableScope(
+            workspaceRootVariable,
+            Path.Combine(workspaceParent, "casesensitiveroot"));
+
+        try
+        {
+            var definition = CreateDefinition(new Dictionary<string, object?>
+            {
+                ["tracker"] = new Dictionary<string, object?>
+                {
+                    ["kind"] = "github",
+                    ["api_key"] = "gh-token",
+                    ["repository"] = "AGiorgetti/my-symphony"
+                },
+                ["workspace"] = new Dictionary<string, object?>
+                {
+                    ["root"] = $"${workspaceRootVariable}"
+                }
+            });
+
+            var options = _resolver.Resolve(definition);
+
+            Assert.Equal(canonicalWorkspaceRoot, options.Workspace.Root);
+        }
+        finally
+        {
+            if (Directory.Exists(workspaceParent))
+            {
+                Directory.Delete(workspaceParent, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
     public void Resolve_rejects_workspace_write_turn_policy_without_explicit_network_access()
     {
         var definition = CreateDefinition(new Dictionary<string, object?>
