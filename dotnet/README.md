@@ -295,6 +295,9 @@ Notes:
   cancellations, surface as `TimedOut` run attempts, and still enter the standard retry backoff.
 - `codex.turn_sandbox_policy` is treated as a structured object and is forwarded to Codex in the
   `turn/start` payload instead of being flattened into a string.
+- When `codex.turn_sandbox_policy.type` is `workspaceWrite`, set `networkAccess` explicitly. Codex
+  defaults workspace-write network access to `false`, so Symphony should set it in the typed
+  `turn/start` sandbox payload instead of relying on shell-level `codex --config ...` overrides.
 - Per-issue workspaces live under `workspace.root` using a sanitized issue identifier that keeps
   only letters, digits, `.`, `_`, and `-`.
 - Workspace paths that resolve outside the configured `workspace.root` are rejected before any

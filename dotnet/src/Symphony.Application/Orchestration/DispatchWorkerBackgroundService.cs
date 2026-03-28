@@ -1,6 +1,9 @@
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Symphony.Abstractions.Trackers;
+using Symphony.Application.Configuration;
 using Symphony.Application.Runtime;
+using Symphony.Domain.Issues;
 using Symphony.Domain.Runs;
 
 namespace Symphony.Application.Orchestration;
@@ -10,6 +13,8 @@ public sealed class DispatchWorkerBackgroundService(
     IOrchestratorExecutionGate orchestratorExecutionGate,
     ActiveSessionRegistry activeSessionRegistry,
     AttemptHistoryTracker attemptHistoryTracker,
+    IIssueTrackerClient issueTrackerClient,
+    IWorkflowOptionsProvider workflowOptionsProvider,
     TimeProvider timeProvider,
     IQueuedIssueWorker queuedIssueWorker,
     ILogger<DispatchWorkerBackgroundService> logger) : BackgroundService
@@ -84,8 +89,12 @@ public sealed class DispatchWorkerBackgroundService(
                 attemptStartedAt,
                 timeProvider.GetUtcNow(),
                 sessionId: executionContext.SessionId);
-            await dispatchQueue.ScheduleContinuationRetryAsync(workItem, cancellationToken).ConfigureAwait(false);
-            executionLease.PreserveClaimForRetry();
+            var continuationIssue = await TryResolveContinuationIssueAsync(workItem.Issue, cancellationToken).ConfigureAwait(false);
+            if (continuationIssue is not null)
+            {
+                await dispatchQueue.ScheduleContinuationRetryAsync(workItem with { Issue = continuationIssue }, cancellationToken).ConfigureAwait(false);
+                executionLease.PreserveClaimForRetry();
+            }
         }
         catch (OperationCanceledException) when (activeSession.WasCanceledByStall)
         {
@@ -202,5 +211,51 @@ public sealed class DispatchWorkerBackgroundService(
             await dispatchQueue.ScheduleFailureRetryAsync(workItem, exception, cancellationToken).ConfigureAwait(false);
             executionLease.PreserveClaimForRetry();
         }
+    }
+
+    private async Task<Issue?> TryResolveContinuationIssueAsync(Issue issue, CancellationToken cancellationToken)
+    {
+        IReadOnlyList<Issue> refreshedIssues;
+        try
+        {
+            refreshedIssues = await issueTrackerClient.FetchIssueStatesByIdsAsync([issue.Id], cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            logger.LogWarning(
+                exception,
+                "dispatch_continuation skipped issue_id={issue_id} issue_identifier={issue_identifier} reason=tracker_refresh_failed outcome=skipped",
+                issue.Id,
+                issue.Identifier);
+            return null;
+        }
+
+        var refreshedIssue = refreshedIssues.FirstOrDefault(candidate => string.Equals(candidate.Id, issue.Id, StringComparison.Ordinal));
+        if (refreshedIssue is null)
+        {
+            logger.LogInformation(
+                "dispatch_continuation skipped issue_id={issue_id} issue_identifier={issue_identifier} reason=issue_missing outcome=skipped",
+                issue.Id,
+                issue.Identifier);
+            return null;
+        }
+
+        var workflowOptions = await workflowOptionsProvider.GetCurrentAsync(cancellationToken).ConfigureAwait(false);
+        if (!IssueDispatchEligibility.CanDispatch(refreshedIssue, workflowOptions, out var skipReason))
+        {
+            logger.LogInformation(
+                "dispatch_continuation skipped issue_id={issue_id} issue_identifier={issue_identifier} issue_state={issue_state} reason={reason} outcome=skipped",
+                refreshedIssue.Id,
+                refreshedIssue.Identifier,
+                refreshedIssue.State,
+                skipReason);
+            return null;
+        }
+
+        return refreshedIssue;
     }
 }

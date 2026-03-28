@@ -4,6 +4,7 @@ using System.Globalization;
 using Symphony.Abstractions.Trackers;
 using Symphony.Application.Configuration;
 using Symphony.Domain.Workflows;
+using Symphony.Infrastructure.IO;
 
 namespace Symphony.Infrastructure.Configuration;
 
@@ -121,14 +122,75 @@ public sealed class WorkflowOptionsResolver : IWorkflowOptionsResolver
             throw InvalidConfiguration("codex.command must not be empty.");
         }
 
-        return new WorkflowCodexOptions(
+        var turnSandboxPolicy = NormalizeTurnSandboxPolicy(
+            GetOptionalObjectMap(codexSection, "turn_sandbox_policy", "codex.turn_sandbox_policy"));
+
+        var options = new WorkflowCodexOptions(
             command,
             GetOptionalString(codexSection, "approval_policy", "codex.approval_policy"),
             GetOptionalString(codexSection, "thread_sandbox", "codex.thread_sandbox"),
-            GetOptionalObjectMap(codexSection, "turn_sandbox_policy", "codex.turn_sandbox_policy"),
+            turnSandboxPolicy,
             GetPositiveIntOrDefault(codexSection, "turn_timeout_ms", DefaultTurnTimeoutMs, "codex.turn_timeout_ms"),
             GetPositiveIntOrDefault(codexSection, "read_timeout_ms", DefaultReadTimeoutMs, "codex.read_timeout_ms"),
             GetIntOrDefault(codexSection, "stall_timeout_ms", DefaultStallTimeoutMs, "codex.stall_timeout_ms"));
+
+        ValidateCodexOptions(options);
+        return options;
+    }
+
+    private static IReadOnlyDictionary<string, object?>? NormalizeTurnSandboxPolicy(
+        IReadOnlyDictionary<string, object?>? turnSandboxPolicy)
+    {
+        if (turnSandboxPolicy is null)
+        {
+            return null;
+        }
+
+        if (!turnSandboxPolicy.TryGetValue("networkAccess", out var rawNetworkAccess)
+            || !TryGetBool(rawNetworkAccess, out var parsedNetworkAccess))
+        {
+            return turnSandboxPolicy;
+        }
+
+        if (rawNetworkAccess is bool)
+        {
+            return turnSandboxPolicy;
+        }
+
+        var normalized = turnSandboxPolicy.ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal);
+        normalized["networkAccess"] = parsedNetworkAccess;
+        return new ReadOnlyDictionary<string, object?>(normalized);
+    }
+
+    private static void ValidateCodexOptions(WorkflowCodexOptions options)
+    {
+        if (options.TurnSandboxPolicy is null)
+        {
+            return;
+        }
+
+        if (!options.TurnSandboxPolicy.TryGetValue("type", out var rawType) || rawType is not string sandboxType)
+        {
+            return;
+        }
+
+        if (!string.Equals(sandboxType, "workspaceWrite", StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        if (!options.TurnSandboxPolicy.TryGetValue("networkAccess", out var rawNetworkAccess) || rawNetworkAccess is null)
+        {
+            throw InvalidConfiguration(
+                "codex.turn_sandbox_policy.networkAccess must be set explicitly when codex.turn_sandbox_policy.type is 'workspaceWrite'; " +
+                "turn/start sandbox overrides replace process-level Codex defaults.");
+        }
+
+        if (!TryGetBool(rawNetworkAccess, out _))
+        {
+            throw InvalidConfiguration(
+                "codex.turn_sandbox_policy.networkAccess must be a boolean when codex.turn_sandbox_policy.type is 'workspaceWrite'.");
+        }
     }
 
     private static void ValidateTrackerFields(
@@ -226,7 +288,7 @@ public sealed class WorkflowOptionsResolver : IWorkflowOptionsResolver
 
         if (ContainsDirectorySeparator(resolvedRoot) || Path.IsPathRooted(resolvedRoot))
         {
-            return Path.GetFullPath(resolvedRoot);
+            return FileSystemPathCanonicalizer.Canonicalize(resolvedRoot);
         }
 
         return resolvedRoot;

@@ -105,6 +105,7 @@ public sealed class CodexQueuedIssueWorkerTests
             Assert.Equal("#21: Implement Codex agent runner", turnStartParams.GetProperty("title").GetString());
             Assert.Contains("Issue #21", turnStartParams.GetProperty("input")[0].GetProperty("text").GetString(), StringComparison.Ordinal);
             Assert.Contains("Attempt 3", turnStartParams.GetProperty("input")[0].GetProperty("text").GetString(), StringComparison.Ordinal);
+            Assert.True(turnStartParams.GetProperty("sandboxPolicy").GetProperty("networkAccess").GetBoolean());
 
             var latestSession = Assert.IsType<LiveSessionMetadata>(testContext.Context.Session);
             Assert.Equal("thread-abc-turn-xyz", latestSession.SessionId);
@@ -390,7 +391,8 @@ public sealed class CodexQueuedIssueWorkerTests
                 "workspace-write",
                 new Dictionary<string, object?>(StringComparer.Ordinal)
                 {
-                    ["type"] = "workspaceWrite"
+                    ["type"] = "workspaceWrite",
+                    ["networkAccess"] = true
                 },
                 60_000,
                 readTimeoutMs,

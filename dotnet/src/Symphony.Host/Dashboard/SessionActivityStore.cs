@@ -11,8 +11,6 @@ public sealed class SessionActivityStore(
     ILogger<SessionActivityStore> logger,
     IOptions<DashboardUiOptions>? dashboardUiOptions = null) : ISessionActivityStore, IAgentDebugTranscriptSink
 {
-    private const int ActivityHistoryLimit = 500;
-
     private readonly ConcurrentDictionary<string, SessionState> _sessions = new(StringComparer.OrdinalIgnoreCase);
 
     public bool TrackAgentMessageDeltas => dashboardUiOptions?.Value.TrackAgentMessageDeltas ?? false;
@@ -53,10 +51,10 @@ public sealed class SessionActivityStore(
                     issueIdentifier,
                     _ => new SessionState(
                         new SessionRecord(issueIdentifier, null, activity.Timestamp, null, null, null, true),
-                        TrimActivities(ImmutableList<SessionActivityEntry>.Empty.Add(activity), activity.Timestamp)),
+                        ImmutableList<SessionActivityEntry>.Empty.Add(activity)),
                     (_, existing) => existing with
                     {
-                        Activities = TrimActivities(existing.Activities.Add(activity), activity.Timestamp)
+                        Activities = existing.Activities.Add(activity)
                     });
             });
     }
@@ -152,24 +150,6 @@ public sealed class SessionActivityStore(
         {
             logger.LogDebug(exception, "Failed to update session activity state for {IssueIdentifier}.", issueIdentifier);
         }
-    }
-
-    private static ImmutableList<SessionActivityEntry> TrimActivities(
-        ImmutableList<SessionActivityEntry> activities,
-        DateTimeOffset timestamp)
-    {
-        if (activities.Count <= ActivityHistoryLimit)
-        {
-            return activities;
-        }
-
-        return activities.GetRange(activities.Count - 499, 499)
-            .Add(
-                new SessionActivityEntry(
-                    SessionActivityKind.Warning,
-                    timestamp,
-                    "Activity history trimmed",
-                    "Older session activity entries were removed to keep the timeline bounded."));
     }
 
     private sealed record SessionState(SessionRecord Record, ImmutableList<SessionActivityEntry> Activities);

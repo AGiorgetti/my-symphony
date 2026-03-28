@@ -20,9 +20,9 @@ public sealed class OrchestratorPollingIterationHandler(
     {
         ArgumentNullException.ThrowIfNull(workflowOptions);
 
-        var activeStates = CreateStateSet(workflowOptions.Tracker.ActiveStates);
-        var terminalStates = CreateStateSet(workflowOptions.Tracker.TerminalStates);
-        var dispatchBlockLabels = CreateStateSet(workflowOptions.Tracker.DispatchBlockLabels);
+        var activeStates = IssueDispatchEligibility.CreateStateSet(workflowOptions.Tracker.ActiveStates);
+        var terminalStates = IssueDispatchEligibility.CreateStateSet(workflowOptions.Tracker.TerminalStates);
+        var dispatchBlockLabels = IssueDispatchEligibility.CreateStateSet(workflowOptions.Tracker.DispatchBlockLabels);
 
         await ReconcileRunningIssuesAsync(
                 activeStates,
@@ -243,29 +243,15 @@ public sealed class OrchestratorPollingIterationHandler(
         Dictionary<string, int> plannedByState,
         out string skipReason)
     {
-        if (!activeStates.Contains(issue.NormalizedState) || terminalStates.Contains(issue.NormalizedState))
+        if (!IssueDispatchEligibility.CanDispatch(
+                issue,
+                activeStates,
+                terminalStates,
+                dispatchBlockLabels,
+                requireExecMarker,
+                execMarker,
+                out skipReason))
         {
-            skipReason = "state_not_dispatchable";
-            return false;
-        }
-
-        if (string.Equals(issue.NormalizedState, "todo", StringComparison.Ordinal)
-            && issue.BlockedBy.Any(blocker => blocker.NormalizedState is null || !terminalStates.Contains(blocker.NormalizedState)))
-        {
-            skipReason = "blocked_by_dependency";
-            return false;
-        }
-
-        if (dispatchBlockLabels.Count > 0
-            && issue.Labels.Any(dispatchBlockLabels.Contains))
-        {
-            skipReason = "blocked_by_label";
-            return false;
-        }
-
-        if (requireExecMarker && !issue.Labels.Contains(execMarker, StringComparer.Ordinal))
-        {
-            skipReason = "missing_exec_marker";
             return false;
         }
 
@@ -285,14 +271,6 @@ public sealed class OrchestratorPollingIterationHandler(
         return issue.Priority is >= 1 and <= 4
             ? issue.Priority.Value
             : int.MaxValue;
-    }
-
-    private static HashSet<string> CreateStateSet(IEnumerable<string> states)
-    {
-        return states
-            .Where(state => !string.IsNullOrWhiteSpace(state))
-            .Select(state => state.Trim().ToLowerInvariant())
-            .ToHashSet(StringComparer.Ordinal);
     }
 
     private static Dictionary<string, int> CountRunningStates(IEnumerable<ActiveSessionSnapshot> activeSessions)

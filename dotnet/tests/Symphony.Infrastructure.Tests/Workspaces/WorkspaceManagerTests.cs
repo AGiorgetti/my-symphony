@@ -35,6 +35,35 @@ public sealed class WorkspaceManagerTests
     }
 
     [Fact]
+    public async Task CreateForIssueAsync_canonicalizes_existing_workspace_root_segments_on_windows()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var workspaceParent = CreateTemporaryWorkspaceRoot();
+        var canonicalWorkspaceRoot = Path.Combine(workspaceParent, "CaseSensitiveRoot");
+        Directory.CreateDirectory(canonicalWorkspaceRoot);
+
+        try
+        {
+            var configuredWorkspaceRoot = Path.Combine(workspaceParent, "casesensitiveroot");
+            var manager = CreateWorkspaceManager(
+                configuredWorkspaceRoot,
+                processRunner: new RecordingProcessRunner());
+
+            var workspace = await manager.CreateForIssueAsync("ISSUE-42");
+
+            Assert.Equal(Path.Combine(canonicalWorkspaceRoot, "ISSUE-42"), workspace.Path);
+        }
+        finally
+        {
+            DeleteDirectoryIfPresent(workspaceParent);
+        }
+    }
+
+    [Fact]
     public async Task CreateForIssueAsync_rejects_workspace_path_outside_root()
     {
         var workspaceRoot = CreateTemporaryWorkspaceRoot();
@@ -113,6 +142,43 @@ public sealed class WorkspaceManagerTests
     }
 
     [Fact]
+    public async Task CreateForIssueAsync_waits_for_in_progress_after_create_hook_before_reusing_workspace()
+    {
+        var workspaceRoot = CreateTemporaryWorkspaceRoot();
+        var processRunner = new BlockingProcessRunner();
+
+        try
+        {
+            var manager = CreateWorkspaceManager(
+                workspaceRoot,
+                processRunner,
+                afterCreate: "Write-Host created");
+
+            var firstCreateTask = manager.CreateForIssueAsync("ISSUE-42");
+            await processRunner.HookStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+            var secondCreateTask = manager.CreateForIssueAsync("ISSUE-42");
+            await Task.Delay(100);
+
+            Assert.False(secondCreateTask.IsCompleted, "Concurrent callers should wait for the first after_create hook to finish.");
+
+            processRunner.AllowCompletion.SetResult();
+
+            var createdWorkspace = await firstCreateTask;
+            var reusedWorkspace = await secondCreateTask;
+
+            Assert.Single(processRunner.Requests);
+            Assert.True(createdWorkspace.CreatedNow);
+            Assert.False(reusedWorkspace.CreatedNow);
+            Assert.Equal(createdWorkspace.Path, reusedWorkspace.Path);
+        }
+        finally
+        {
+            DeleteDirectoryIfPresent(workspaceRoot);
+        }
+    }
+
+    [Fact]
     public async Task DeleteForIssueAsync_runs_before_remove_and_ignores_failures()
     {
         var workspaceRoot = CreateTemporaryWorkspaceRoot();
@@ -182,7 +248,7 @@ public sealed class WorkspaceManagerTests
 
     private static WorkspaceManager CreateWorkspaceManager(
         string workspaceRoot,
-        RecordingProcessRunner processRunner,
+        IProcessRunner processRunner,
         string? afterCreate = null,
         string? beforeRemove = null,
         int hookTimeoutMs = 60_000)
@@ -260,6 +326,29 @@ public sealed class WorkspaceManagerTests
                     standardError: string.Empty,
                     startedAt: DateTimeOffset.UtcNow,
                     finishedAt: DateTimeOffset.UtcNow));
+        }
+    }
+
+    private sealed class BlockingProcessRunner : IProcessRunner
+    {
+        public List<ProcessRunRequest> Requests { get; } = [];
+
+        public TaskCompletionSource HookStarted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public TaskCompletionSource AllowCompletion { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public async Task<ProcessRunResult> RunAsync(ProcessRunRequest request, CancellationToken cancellationToken = default)
+        {
+            Requests.Add(request);
+            HookStarted.TrySetResult();
+            await AllowCompletion.Task.WaitAsync(cancellationToken);
+
+            return new ProcessRunResult(
+                exitCode: 0,
+                standardOutput: string.Empty,
+                standardError: string.Empty,
+                startedAt: DateTimeOffset.UtcNow,
+                finishedAt: DateTimeOffset.UtcNow);
         }
     }
 }

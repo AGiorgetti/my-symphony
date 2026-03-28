@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Symphony.Abstractions.Orchestration;
+using Symphony.Abstractions.Trackers;
 using Symphony.Application.Configuration;
 using Symphony.Application.Orchestration;
 using Symphony.Application.Polling;
@@ -22,8 +23,9 @@ public sealed class OrchestratorDispatchQueueTests
         var queue = CreateQueue(maxConcurrentAgents: 1);
         var worker = new BlockingQueuedIssueWorker();
         var registry = CreateRegistry();
-        var hostedService = CreateHostedService(queue, registry, worker);
         var issue = CreateIssue("1", "ABC-1");
+        var trackerClient = CreateTracker(issue);
+        var hostedService = CreateHostedService(queue, registry, worker, trackerClient);
 
         var enqueueResult = await queue.QueueAsync(issue);
 
@@ -155,8 +157,9 @@ public sealed class OrchestratorDispatchQueueTests
         var registry = CreateRegistry();
         var attemptHistoryTracker = new AttemptHistoryTracker();
         var worker = new BlockingQueuedIssueWorker();
-        var hostedService = CreateHostedService(queue, registry, attemptHistoryTracker, worker);
         var issue = CreateIssue("123", "ABC-123");
+        var trackerClient = CreateTracker(issue);
+        var hostedService = CreateHostedService(queue, registry, attemptHistoryTracker, worker, trackerClient: trackerClient);
 
         await hostedService.StartAsync(CancellationToken.None);
         await queue.QueueAsync(issue);
@@ -271,6 +274,53 @@ public sealed class OrchestratorDispatchQueueTests
         await dispatchHostedService.StopAsync(CancellationToken.None);
 
         Assert.Equal(new int?[] { null, 1 }, worker.Attempts.ToArray());
+    }
+
+    [Fact]
+    public async Task DispatchWorker_does_not_schedule_continuation_retry_when_refreshed_issue_is_blocked()
+    {
+        var workflowOptions = CreateWorkflowOptions(
+            maxConcurrentAgents: 1,
+            activeStates: ["open"],
+            terminalStates: ["closed"],
+            dispatchBlockLabels: ["human-review"]);
+        var queue = CreateQueue(new StaticWorkflowOptionsProvider(workflowOptions));
+        var registry = CreateRegistry();
+        var attemptHistoryTracker = new AttemptHistoryTracker();
+        var worker = new BlockingQueuedIssueWorker();
+        var issue = CreateIssue("1", "ABC-1", state: "open");
+        var trackerClient = CreateTracker(
+            new Issue(
+                issue.Id,
+                issue.Identifier,
+                issue.Title,
+                issue.Description,
+                issue.Priority,
+                issue.State,
+                issue.BranchName,
+                issue.Url,
+                labels: ["human-review"],
+                blockedBy: issue.BlockedBy,
+                createdAt: issue.CreatedAt,
+                updatedAt: issue.UpdatedAt));
+        var hostedService = CreateHostedService(
+            queue,
+            registry,
+            attemptHistoryTracker,
+            worker,
+            trackerClient: trackerClient,
+            workflowOptionsProvider: new StaticWorkflowOptionsProvider(workflowOptions));
+
+        await hostedService.StartAsync(CancellationToken.None);
+        await queue.QueueAsync(issue);
+        await worker.ExecutionStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+        worker.AllowCompletion("ABC-1");
+        await worker.WaitForCompletionAsync("ABC-1", TimeSpan.FromSeconds(2));
+        await Task.Delay(100);
+        await hostedService.StopAsync(CancellationToken.None);
+
+        Assert.Empty(queue.GetSnapshot().Retrying);
     }
 
     [Fact]
@@ -472,9 +522,17 @@ public sealed class OrchestratorDispatchQueueTests
     private static DispatchWorkerBackgroundService CreateHostedService(
         OrchestratorDispatchQueue queue,
         ActiveSessionRegistry registry,
-        IQueuedIssueWorker queuedIssueWorker)
+        IQueuedIssueWorker queuedIssueWorker,
+        IIssueTrackerClient? trackerClient = null)
     {
-        return CreateHostedService(queue, registry, new AttemptHistoryTracker(), queuedIssueWorker, timeProvider: null);
+        return CreateHostedService(
+            queue,
+            registry,
+            new AttemptHistoryTracker(),
+            queuedIssueWorker,
+            timeProvider: null,
+            executionGate: null,
+            trackerClient: trackerClient);
     }
 
     private static DispatchWorkerBackgroundService CreateHostedService(
@@ -483,13 +541,17 @@ public sealed class OrchestratorDispatchQueueTests
         AttemptHistoryTracker attemptHistoryTracker,
         IQueuedIssueWorker queuedIssueWorker,
         TimeProvider? timeProvider = null,
-        IOrchestratorExecutionGate? executionGate = null)
+        IOrchestratorExecutionGate? executionGate = null,
+        IIssueTrackerClient? trackerClient = null,
+        IWorkflowOptionsProvider? workflowOptionsProvider = null)
     {
         return new DispatchWorkerBackgroundService(
             queue,
             executionGate ?? CreateExecutionGate(timeProvider),
             registry,
             attemptHistoryTracker,
+            trackerClient ?? new StubIssueTrackerClient(),
+            workflowOptionsProvider ?? new StaticWorkflowOptionsProvider(CreateWorkflowOptions(maxConcurrentAgents: 1)),
             timeProvider ?? TimeProvider.System,
             queuedIssueWorker,
             NullLogger<DispatchWorkerBackgroundService>.Instance);
@@ -516,7 +578,12 @@ public sealed class OrchestratorDispatchQueueTests
 
     private static WorkflowServiceOptions CreateWorkflowOptions(
         int maxConcurrentAgents,
-        int maxRetryBackoffMs = 300_000)
+        int maxRetryBackoffMs = 300_000,
+        IReadOnlyList<string>? activeStates = null,
+        IReadOnlyList<string>? terminalStates = null,
+        IReadOnlyList<string>? dispatchBlockLabels = null,
+        bool requireExecMarker = false,
+        string execMarker = "exec:agent")
     {
         return new WorkflowServiceOptions(
             new WorkflowTrackerOptions(
@@ -527,8 +594,11 @@ public sealed class OrchestratorDispatchQueueTests
                 "owner/repo",
                 null,
                 null,
-                ["Todo"],
-                ["Done"]),
+                activeStates ?? ["Todo"],
+                terminalStates ?? ["Done"])
+            {
+                DispatchBlockLabels = dispatchBlockLabels ?? Array.Empty<string>()
+            },
             new WorkflowPollingOptions(1_000),
             new WorkflowWorkspaceOptions(Path.Combine(Path.GetTempPath(), "symphony-tests")),
             new WorkflowHookOptions(
@@ -542,8 +612,8 @@ public sealed class OrchestratorDispatchQueueTests
                 20,
                 maxRetryBackoffMs,
                 new Dictionary<string, int>(StringComparer.Ordinal),
-                false,
-                "exec:agent"),
+                requireExecMarker,
+                execMarker),
             new WorkflowCodexOptions(
                 "codex app-server",
                 null,
@@ -556,13 +626,29 @@ public sealed class OrchestratorDispatchQueueTests
 
     private static Issue CreateIssue(string id, string identifier)
     {
+        return CreateIssue(id, identifier, state: "Todo");
+    }
+
+    private static Issue CreateIssue(string id, string identifier, string state)
+    {
         return new Issue(
             id,
             identifier,
             $"Issue {identifier}",
             description: "Dispatch queue test",
-            state: "Todo",
+            state: state,
             createdAt: DateTimeOffset.UtcNow);
+    }
+
+    private static StubIssueTrackerClient CreateTracker(params Issue[] issues)
+    {
+        var trackerClient = new StubIssueTrackerClient();
+        foreach (var issue in issues)
+        {
+            trackerClient.RefreshedIssuesById[issue.Id] = issue;
+        }
+
+        return trackerClient;
     }
 
     private static async Task WaitForConditionAsync(Func<bool> condition, TimeSpan timeout)
@@ -596,6 +682,35 @@ public sealed class OrchestratorDispatchQueueTests
         public Task<WorkflowServiceOptions> GetCurrentAsync(CancellationToken cancellationToken = default)
         {
             return Task.FromResult(Current);
+        }
+    }
+
+    private sealed class StubIssueTrackerClient : IIssueTrackerClient
+    {
+        public Dictionary<string, Issue> RefreshedIssuesById { get; } = new(StringComparer.Ordinal);
+
+        public Task<IReadOnlyList<Issue>> FetchCandidateIssuesAsync(CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<IReadOnlyList<Issue>>(Array.Empty<Issue>());
+        }
+
+        public Task<IReadOnlyList<Issue>> FetchIssuesByStatesAsync(
+            IReadOnlyCollection<string> stateNames,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<IReadOnlyList<Issue>>(Array.Empty<Issue>());
+        }
+
+        public Task<IReadOnlyList<Issue>> FetchIssueStatesByIdsAsync(
+            IReadOnlyCollection<string> issueIds,
+            CancellationToken cancellationToken = default)
+        {
+            var issues = issueIds
+                .Where(RefreshedIssuesById.ContainsKey)
+                .Select(issueId => RefreshedIssuesById[issueId])
+                .ToArray();
+
+            return Task.FromResult<IReadOnlyList<Issue>>(issues);
         }
     }
 

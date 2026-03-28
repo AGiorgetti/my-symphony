@@ -84,8 +84,15 @@ public sealed class CodexAppServerClientTests
         Assert.Equal(17, latestSession.CodexTotalTokens);
 
         Assert.NotNull(sessionFactory.Session);
+        var turnStartLine = sessionFactory.Session!.SentLines.Single(
+            line => line.Contains("\"method\":\"turn/start\"", StringComparison.Ordinal));
+        using var turnStartDocument = JsonDocument.Parse(turnStartLine);
+        var sandboxPolicy = turnStartDocument.RootElement.GetProperty("params").GetProperty("sandboxPolicy");
+        Assert.Equal("workspaceWrite", sandboxPolicy.GetProperty("type").GetString());
+        Assert.True(sandboxPolicy.GetProperty("networkAccess").GetBoolean());
+
         Assert.Contains(
-            sessionFactory.Session!.SentLines,
+            sessionFactory.Session.SentLines,
             line => line.Contains("\"approved\":true", StringComparison.Ordinal));
         Assert.Contains(
             sessionFactory.Session.SentLines,
@@ -140,6 +147,236 @@ public sealed class CodexAppServerClientTests
                 {
                     session.EnqueueStdout(new { id = 3, result = new { turn = new { id = "turn-456" } } });
                     session.EnqueueStdout(new { id = "input-1", method = "item/tool/requestUserInput", @params = new { prompt = "Need help" } });
+                }
+
+                await Task.CompletedTask;
+            });
+        var client = CreateClient(sessionFactory, transcriptSink);
+        using var testContext = CreateContext();
+
+        var exception = await Assert.ThrowsAsync<CodexAgentException>(
+            () => client.RunAsync(testContext.Context, Path.GetTempPath(), "Prompt body", CreateCodexOptions()));
+
+        Assert.Equal("turn_input_required", exception.Code);
+        Assert.NotNull(sessionFactory.Session);
+        Assert.True(sessionFactory.Session!.WasKilled);
+    }
+
+    [Fact]
+    public async Task RunAsync_auto_approves_mcp_tool_request_user_input_when_approval_policy_is_never()
+    {
+        var transcriptSink = new RecordingTranscriptSink();
+        var sessionFactory = new TestCodexProcessSessionFactory(
+            async (line, session) =>
+            {
+                using var document = JsonDocument.Parse(line);
+                var root = document.RootElement;
+                var method = root.TryGetProperty("method", out var methodElement)
+                    ? methodElement.GetString()
+                    : null;
+
+                if (method == "initialize")
+                {
+                    session.EnqueueStdout(new { id = 1, result = new { } });
+                    return;
+                }
+
+                if (method == "thread/start")
+                {
+                    session.EnqueueStdout(new { id = 2, result = new { thread = new { id = "thread-123" } } });
+                    return;
+                }
+
+                if (method == "turn/start")
+                {
+                    session.EnqueueStdout(new { id = 3, result = new { turn = new { id = "turn-456" } } });
+                    session.EnqueueStdout(new
+                    {
+                        id = 0,
+                        method = "item/tool/requestUserInput",
+                        @params = new
+                        {
+                            questions = new object[]
+                            {
+                                new
+                                {
+                                    id = "mcp_tool_call_approval_call-717",
+                                    question = "Allow GitHub to add a comment to a pull request?",
+                                    options = new object[]
+                                    {
+                                        new { label = "Allow" },
+                                        new { label = "Allow for this session" },
+                                        new { label = "Cancel" }
+                                    }
+                                }
+                            }
+                        }
+                    });
+                    return;
+                }
+
+                if (root.TryGetProperty("id", out var idElement)
+                    && idElement.ValueKind == JsonValueKind.Number
+                    && idElement.GetInt32() == 0)
+                {
+                    session.EnqueueStdout(new { method = "turn/completed", @params = new { message = "done" } });
+                }
+
+                await Task.CompletedTask;
+            });
+        var client = CreateClient(sessionFactory, transcriptSink);
+        using var testContext = CreateContext();
+
+        await client.RunAsync(testContext.Context, Path.GetTempPath(), "Prompt body", CreateCodexOptions());
+
+        Assert.NotNull(sessionFactory.Session);
+        var autoApprovalLine = sessionFactory.Session!.SentLines.Single(
+            line => line.Contains("\"id\":0", StringComparison.Ordinal));
+        using var approvalDocument = JsonDocument.Parse(autoApprovalLine);
+        var answers = approvalDocument.RootElement
+            .GetProperty("result")
+            .GetProperty("answers")
+            .GetProperty("mcp_tool_call_approval_call-717")
+            .GetProperty("answers");
+
+        Assert.Equal("Allow for this session", answers[0].GetString());
+        Assert.Contains(
+            transcriptSink.Outbound,
+            entry => entry.Title == "Sent response 0"
+                && entry.Payload.Contains("Allow for this session", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task RunAsync_auto_approves_mcp_tool_elicitation_request_when_approval_policy_is_never()
+    {
+        var transcriptSink = new RecordingTranscriptSink();
+        var sessionFactory = new TestCodexProcessSessionFactory(
+            async (line, session) =>
+            {
+                using var document = JsonDocument.Parse(line);
+                var root = document.RootElement;
+                var method = root.TryGetProperty("method", out var methodElement)
+                    ? methodElement.GetString()
+                    : null;
+
+                if (method == "initialize")
+                {
+                    session.EnqueueStdout(new { id = 1, result = new { } });
+                    return;
+                }
+
+                if (method == "thread/start")
+                {
+                    session.EnqueueStdout(new { id = 2, result = new { thread = new { id = "thread-123" } } });
+                    return;
+                }
+
+                if (method == "turn/start")
+                {
+                    session.EnqueueStdout(new { id = 3, result = new { turn = new { id = "turn-456" } } });
+                    session.EnqueueStdout(new
+                    {
+                        id = 0,
+                        method = "mcpServer/elicitation/request",
+                        @params = new
+                        {
+                            threadId = "019d2eb6-640f-7780-834c-d6ec7e4ffb9c",
+                            turnId = "019d2eb6-643b-77c0-b5a8-4278f8cb8383",
+                            serverName = "codex_apps",
+                            mode = "form",
+                            _meta = new
+                            {
+                                codex_approval_kind = "mcp_tool_call",
+                                tool_title = "update_issue_comment"
+                            },
+                            message = "Allow GitHub to update an issue comment?",
+                            requestedSchema = new
+                            {
+                                type = "object",
+                                properties = new { }
+                            }
+                        }
+                    });
+                    return;
+                }
+
+                if (root.TryGetProperty("id", out var idElement)
+                    && idElement.ValueKind == JsonValueKind.Number
+                    && idElement.GetInt32() == 0)
+                {
+                    session.EnqueueStdout(new { method = "turn/completed", @params = new { message = "done" } });
+                }
+
+                await Task.CompletedTask;
+            });
+        var client = CreateClient(sessionFactory, transcriptSink);
+        using var testContext = CreateContext();
+
+        await client.RunAsync(testContext.Context, Path.GetTempPath(), "Prompt body", CreateCodexOptions());
+
+        Assert.NotNull(sessionFactory.Session);
+        var autoApprovalLine = sessionFactory.Session!.SentLines.Single(
+            line => line.Contains("\"id\":0", StringComparison.Ordinal));
+        using var approvalDocument = JsonDocument.Parse(autoApprovalLine);
+        var result = approvalDocument.RootElement.GetProperty("result");
+
+        Assert.Equal("accept", result.GetProperty("action").GetString());
+        Assert.Equal(JsonValueKind.Object, result.GetProperty("content").ValueKind);
+        Assert.Contains(
+            transcriptSink.Outbound,
+            entry => entry.Title == "Sent response 0"
+                && entry.Payload.Contains("\"action\":\"accept\"", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task RunAsync_fails_fast_when_non_approvable_mcp_elicitation_requests_user_input()
+    {
+        var transcriptSink = new RecordingTranscriptSink();
+        var sessionFactory = new TestCodexProcessSessionFactory(
+            async (line, session) =>
+            {
+                using var document = JsonDocument.Parse(line);
+                var root = document.RootElement;
+                var method = root.TryGetProperty("method", out var methodElement)
+                    ? methodElement.GetString()
+                    : null;
+
+                if (method == "initialize")
+                {
+                    session.EnqueueStdout(new { id = 1, result = new { } });
+                    return;
+                }
+
+                if (method == "thread/start")
+                {
+                    session.EnqueueStdout(new { id = 2, result = new { thread = new { id = "thread-123" } } });
+                    return;
+                }
+
+                if (method == "turn/start")
+                {
+                    session.EnqueueStdout(new { id = 3, result = new { turn = new { id = "turn-456" } } });
+                    session.EnqueueStdout(new
+                    {
+                        id = 0,
+                        method = "mcpServer/elicitation/request",
+                        @params = new
+                        {
+                            mode = "form",
+                            message = "Need a human choice",
+                            requestedSchema = new
+                            {
+                                type = "object",
+                                properties = new
+                                {
+                                    choice = new
+                                    {
+                                        type = "string"
+                                    }
+                                }
+                            }
+                        }
+                    });
                 }
 
                 await Task.CompletedTask;
@@ -321,7 +558,8 @@ public sealed class CodexAppServerClientTests
             "workspace-write",
             new Dictionary<string, object?>(StringComparer.Ordinal)
             {
-                ["type"] = "workspaceWrite"
+                ["type"] = "workspaceWrite",
+                ["networkAccess"] = true
             },
             60_000,
             5_000,
