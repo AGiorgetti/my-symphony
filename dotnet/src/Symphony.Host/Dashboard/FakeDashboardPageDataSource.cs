@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Symphony.Abstractions.Orchestration;
 using Symphony.Application.Orchestration;
@@ -451,26 +452,30 @@ public sealed class FakeDashboardPageDataSource
     {
         var startedAt = new DateTimeOffset(2026, 4, 1, 8, 55, 0, TimeSpan.Zero);
         var failedAt = startedAt.AddMinutes(3);
+        var threadId = "fake-thread-404";
+        var turnId = "fake-thread-404-turn-3";
+        var largePrompt = BuildLargeUserPrompt();
+        var deltaChunks = BuildAgentMessageDeltaChunks();
+        var completedMessage = string.Concat(deltaChunks);
+
         store.RecordSessionStart("ABC-404", startedAt, "https://example.invalid/issues/ABC-404");
-        store.RecordActivity("ABC-404", new SessionActivityEntry(SessionActivityKind.LifecycleMilestone, startedAt, "Session started", "Large payload scenario seeded for debug mode validation."));
+        store.RecordActivity("ABC-404", new SessionActivityEntry(SessionActivityKind.LifecycleMilestone, startedAt, "Session started", "Codex-like large payload scenario seeded for debug mode validation."));
         store.RecordActivity(
             "ABC-404",
             new SessionActivityEntry(
                 SessionActivityKind.DebugMessage,
-                startedAt.AddMinutes(1),
-                "Sent turn/start",
+                startedAt.AddSeconds(2),
+                "Sent initialize",
                 """
                 {
-                  "id": 18,
-                  "method": "turn/start",
+                  "id": 1,
+                  "method": "initialize",
                   "params": {
-                    "threadId": "fake-thread-404-turn-3",
-                    "input": [
-                      {
-                        "type": "text",
-                        "text": "Summarize the diagnostics bundle and explain the failure."
-                      }
-                    ]
+                    "clientInfo": {
+                      "name": "symphony",
+                      "version": "1.0.0"
+                    },
+                    "capabilities": {}
                   }
                 }
                 """));
@@ -478,17 +483,44 @@ public sealed class FakeDashboardPageDataSource
             "ABC-404",
             new SessionActivityEntry(
                 SessionActivityKind.DebugMessage,
-                startedAt.AddMinutes(1).AddSeconds(1),
-                "Received turn/completed",
+                startedAt.AddSeconds(3),
+                "Received response 1",
                 """
                 {
-                  "method": "turn/completed",
+                  "id": 1,
+                  "result": {
+                    "userAgent": "codex_vscode/0.94.0-alpha.7 (Mac OS 26.2.0; arm64) vscode/2.4.22 (codex_vscode; 0.1.0)"
+                  }
+                }
+                """));
+        store.RecordActivity(
+            "ABC-404",
+            new SessionActivityEntry(
+                SessionActivityKind.DebugMessage,
+                startedAt.AddSeconds(4),
+                "Sent initialized",
+                """
+                {
+                  "method": "initialized",
+                  "params": {}
+                }
+                """));
+        store.RecordActivity(
+            "ABC-404",
+            new SessionActivityEntry(
+                SessionActivityKind.DebugMessage,
+                startedAt.AddSeconds(5),
+                "Sent thread/start",
+                """
+                {
+                  "id": 2,
+                  "method": "thread/start",
                   "params": {
-                    "message": "loaded",
-                    "usage": {
-                      "input_tokens": 280,
-                      "output_tokens": 84,
-                      "total_tokens": 364
+                    "approvalPolicy": "never",
+                    "cwd": "/workspace/fake-abc-404",
+                    "sandbox": {
+                      "type": "workspaceWrite",
+                      "networkAccess": false
                     }
                   }
                 }
@@ -497,16 +529,199 @@ public sealed class FakeDashboardPageDataSource
             "ABC-404",
             new SessionActivityEntry(
                 SessionActivityKind.DebugMessage,
-                startedAt.AddMinutes(1).AddSeconds(2),
-                "Received item/agentMessage/delta",
-                """
-                {
-                  "method": "item/agentMessage/delta",
-                  "params": {
-                    "delta": "Diagnostics excerpt: stack trace line 1, stack trace line 2, configuration snapshot line 3..."
-                  }
-                }
-                """));
+                startedAt.AddSeconds(6),
+                "Received response 2",
+                SerializeDebugPayload(
+                    new
+                    {
+                        id = 2,
+                        result = new
+                        {
+                            thread = new
+                            {
+                                id = threadId
+                            }
+                        }
+                    })));
+        store.RecordActivity(
+            "ABC-404",
+            new SessionActivityEntry(
+                SessionActivityKind.DebugMessage,
+                startedAt.AddSeconds(8),
+                "Sent turn/start",
+                SerializeDebugPayload(
+                    new
+                    {
+                        id = 3,
+                        method = "turn/start",
+                        @params = new
+                        {
+                            threadId,
+                            cwd = "/workspace/fake-abc-404",
+                            title = "ABC-404: Investigate failing diagnostics import",
+                            approvalPolicy = "never",
+                            sandboxPolicy = new
+                            {
+                                type = "workspaceWrite",
+                                networkAccess = false
+                            },
+                            input = new object[]
+                            {
+                                new
+                                {
+                                    type = "text",
+                                    text = largePrompt
+                                }
+                            }
+                        }
+                    })));
+        store.RecordActivity(
+            "ABC-404",
+            new SessionActivityEntry(
+                SessionActivityKind.DebugMessage,
+                startedAt.AddSeconds(9),
+                "Received response 3",
+                SerializeDebugPayload(
+                    new
+                    {
+                        id = 3,
+                        result = new
+                        {
+                            turn = new
+                            {
+                                id = turnId
+                            }
+                        }
+                    })));
+        store.RecordActivity(
+            "ABC-404",
+            new SessionActivityEntry(
+                SessionActivityKind.DebugMessage,
+                startedAt.AddSeconds(10),
+                "Received thread/started",
+                SerializeDebugPayload(
+                    new
+                    {
+                        method = "thread/started",
+                        @params = new
+                        {
+                            threadId
+                        }
+                    })));
+        store.RecordActivity(
+            "ABC-404",
+            new SessionActivityEntry(
+                SessionActivityKind.DebugMessage,
+                startedAt.AddSeconds(11),
+                "Received turn/started",
+                SerializeDebugPayload(
+                    new
+                    {
+                        method = "turn/started",
+                        @params = new
+                        {
+                            threadId,
+                            turnId
+                        }
+                    })));
+        store.RecordActivity(
+            "ABC-404",
+            new SessionActivityEntry(
+                SessionActivityKind.DebugMessage,
+                startedAt.AddSeconds(12),
+                "Received item/started",
+                SerializeDebugPayload(
+                    new
+                    {
+                        method = "item/started",
+                        @params = new
+                        {
+                            threadId,
+                            turnId,
+                            item = new
+                            {
+                                id = "item-user-message-1",
+                                type = "userMessage",
+                                role = "user",
+                                text = largePrompt
+                            }
+                        }
+                    })));
+        for (var index = 0; index < deltaChunks.Length; index++)
+        {
+            store.RecordActivity(
+                "ABC-404",
+                new SessionActivityEntry(
+                    SessionActivityKind.DebugMessage,
+                    startedAt.AddSeconds(20 + index),
+                    "Received item/agentMessage/delta",
+                    SerializeDebugPayload(
+                        new
+                        {
+                            method = "item/agentMessage/delta",
+                            @params = new
+                            {
+                                threadId,
+                                turnId,
+                                itemId = "item-agent-message-1",
+                                deltaIndex = index,
+                                delta = deltaChunks[index]
+                            }
+                        })));
+        }
+        store.RecordActivity(
+            "ABC-404",
+            new SessionActivityEntry(
+                SessionActivityKind.DebugMessage,
+                startedAt.AddSeconds(30),
+                "Received item/completed",
+                SerializeDebugPayload(
+                    new
+                    {
+                        method = "item/completed",
+                        @params = new
+                        {
+                            threadId,
+                            turnId,
+                            item = new
+                            {
+                                id = "item-agent-message-1",
+                                type = "agentMessage",
+                                role = "assistant",
+                                content = new object[]
+                                {
+                                    new
+                                    {
+                                        type = "output_text",
+                                        text = completedMessage
+                                    }
+                                }
+                            }
+                        }
+                    })));
+        store.RecordActivity(
+            "ABC-404",
+            new SessionActivityEntry(
+                SessionActivityKind.DebugMessage,
+                startedAt.AddSeconds(31),
+                "Received turn/completed",
+                SerializeDebugPayload(
+                    new
+                    {
+                        method = "turn/completed",
+                        @params = new
+                        {
+                            threadId,
+                            turnId,
+                            usage = new
+                            {
+                                input_tokens = 2384,
+                                output_tokens = 912,
+                                total_tokens = 3296
+                            },
+                            message = "Diagnostics summary completed."
+                        }
+                    })));
         store.RecordActivity("ABC-404", new SessionActivityEntry(SessionActivityKind.Error, failedAt, "Prompt build failed", "Prompt build failed after loading a large diagnostics payload."));
         store.RecordSessionEnd("ABC-404", failedAt, "Failed", "Prompt build failed after loading a large diagnostics payload.");
     }
@@ -524,4 +739,48 @@ public sealed class FakeDashboardPageDataSource
     private sealed record FakeDashboardFixtureState(
         DashboardSnapshot DashboardSnapshot,
         IReadOnlyDictionary<string, OrchestratorIssueSnapshot> IssueSnapshots);
+
+    private static string BuildLargeUserPrompt()
+    {
+        return string.Join(
+            "\n",
+            [
+                "Investigate the diagnostics import failure for ABC-404.",
+                "Summarize the failing execution, the likely root cause, and the safest next steps.",
+                "Use the following structure in the answer:",
+                "1. Short diagnosis",
+                "2. Evidence",
+                "3. Affected files",
+                "4. Suggested remediation",
+                "",
+                "Diagnostics bundle excerpts:",
+                .. Enumerable.Range(1, 24).Select(index =>
+                    $" - diagnostics/trace-{index:00}.json: stack frame {index:00}, import path /workspace/fake-abc-404/src/module-{index:00}.ts, note=payload chunk {index:000}")
+            ]);
+    }
+
+    private static string[] BuildAgentMessageDeltaChunks()
+    {
+        return
+        [
+            "Diagnosis: the import pipeline is loading a diagnostics bundle whose JSON payload now exceeds the UI preview assumptions.\n\n",
+            "Evidence:\n- initialize/thread/start/turn/start all succeeded\n- the large prompt and diagnostics bundle were accepted by the fake harness\n- repeated payload chunks show long nested traces and multi-file references\n\n",
+            "Affected files:\n- src/module-07.ts\n- src/module-11.ts\n- src/module-18.ts\n- config/diagnostics-import.json\n\n",
+            string.Join(
+                "\n",
+                Enumerable.Range(1, 36).Select(index =>
+                    $"Trace sample {index:00}: module=module-{(index % 18) + 1:00}, stage=diagnostics-import, message=Captured long payload segment {index:000} with nested stack frames and config snapshots.")) + "\n\n",
+            "Suggested remediation:\n1. preserve raw payload rendering behind debug mode only\n2. keep method filters available for item/agentMessage/delta\n3. add truncation only to summaries, never to the raw payload view\n4. validate the page with a transcript long enough to require scrolling in the details expander\n"
+        ];
+    }
+
+    private static string SerializeDebugPayload(object payload)
+    {
+        return JsonSerializer.Serialize(
+            payload,
+            new JsonSerializerOptions
+            {
+                WriteIndented = true
+            });
+    }
 }

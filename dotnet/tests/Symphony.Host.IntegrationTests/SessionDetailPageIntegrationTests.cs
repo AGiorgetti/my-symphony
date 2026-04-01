@@ -206,6 +206,10 @@ public sealed class SessionDetailPageIntegrationTests
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Contains("Prompt build failed", html, StringComparison.Ordinal);
         Assert.Contains("fake-thread-404-turn-3", html, StringComparison.Ordinal);
+        Assert.Contains("Sent initialize", html, StringComparison.Ordinal);
+        Assert.Contains("Received response 1", html, StringComparison.Ordinal);
+        Assert.Contains("item/agentMessage/delta", html, StringComparison.Ordinal);
+        Assert.Contains("Trace sample 36", html, StringComparison.Ordinal);
         Assert.Contains("Sent turn/start", html, StringComparison.Ordinal);
         Assert.Contains("href=\"/?mode=fake\"", html, StringComparison.Ordinal);
         Assert.Contains("href=\"/sessions?mode=fake\"", html, StringComparison.Ordinal);
