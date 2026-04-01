@@ -6,11 +6,14 @@ using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.Extensions.DependencyInjection;
 using Symphony.Abstractions.Orchestration;
+using Symphony.Abstractions.Trackers;
 using Symphony.Application.Configuration;
+using Symphony.Application.Orchestration;
 using Symphony.Application.Polling;
 using Symphony.Application.Runtime;
 using Symphony.Host.Api;
 using Symphony.Host.Health;
+using Symphony.Domain.Issues;
 
 namespace Symphony.Host.IntegrationTests;
 
@@ -94,6 +97,125 @@ public sealed class SymphonyApiEndpointRouteBuilderExtensionsTests
         var payload = await response.Content.ReadFromJsonAsync<ErrorEnvelopeDto>();
         Assert.NotNull(payload);
         Assert.Equal("issue_not_found", payload!.Error.Code);
+    }
+
+    [Fact]
+    public async Task State_endpoint_includes_blocked_counts_and_issue_summaries()
+    {
+        using var app = await StartApiApplicationAsync(
+            new StubRuntimeService
+            {
+                StateSnapshot = new OrchestratorStateSnapshot(
+                    new DateTimeOffset(2026, 3, 16, 15, 0, 0, TimeSpan.Zero),
+                    Array.Empty<RunningIssueSnapshot>(),
+                    Array.Empty<Symphony.Abstractions.Orchestration.RetryDispatchSnapshot>(),
+                    new CodexTotalsSnapshot(0, 0, 0, 0d),
+                    RateLimits: null,
+                    Blocked:
+                    [
+                        new BlockedDispatchSnapshot(
+                            "1",
+                            "ABC-1",
+                            "orch-123",
+                            2,
+                            new DateTimeOffset(2026, 3, 16, 15, 0, 0, TimeSpan.Zero),
+                            BlockingReasonCode.InputRequired,
+                            "Need human input",
+                            "Provide the required input or choose an option, then resolve the follow-up action to resume the run.",
+                            "fai-1")
+                    ],
+                    FollowUpActions:
+                    [
+                        new FollowUpActionSnapshot(
+                            "fai-1",
+                            "1",
+                            "ABC-1",
+                            "orch-123",
+                            new DateTimeOffset(2026, 3, 16, 15, 0, 0, TimeSpan.Zero),
+                            BlockingReasonCode.InputRequired,
+                            "Need human input",
+                            "Provide the required input or choose an option, then resolve the follow-up action to resume the run.",
+                            [new FollowUpActionOptionSnapshot("resume", "Resume", "Continue after review.")],
+                            FollowUpActionStatus.Pending,
+                            ResolvedBy: null,
+                            ResolvedAt: null,
+                            SelectedOptionId: null,
+                            Notes: null)
+                    ])
+            });
+        var client = CreateHttpClient(app);
+
+        var response = await client.GetAsync("/api/v1/state");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var payload = await response.Content.ReadFromJsonAsync<StateResponseDto>();
+        Assert.NotNull(payload);
+        Assert.Equal(1, payload!.Counts.Blocked);
+        var blocked = Assert.Single(payload.Blocked);
+        Assert.Equal("ABC-1", blocked.IssueIdentifier);
+        Assert.Equal("orch-123", blocked.OrchestratorSessionId);
+        Assert.Equal("fai-1", blocked.FollowUpActionId);
+    }
+
+    [Fact]
+    public async Task Issue_endpoint_returns_blocked_issue_and_follow_up_actions()
+    {
+        using var app = await StartApiApplicationAsync(
+            new StubRuntimeService
+            {
+                IssueSnapshot = new OrchestratorIssueSnapshot(
+                    "ABC-1",
+                    "1",
+                    "blocked_error",
+                    RestartCount: 1,
+                    CurrentRetryAttempt: 2,
+                    Running: null,
+                    Retry: null,
+                    LastError: "Need human input",
+                    RecentEvents: [],
+                    OrchestratorSessionId: "orch-123",
+                    Blocked: new BlockedDispatchSnapshot(
+                        "1",
+                        "ABC-1",
+                        "orch-123",
+                        2,
+                        new DateTimeOffset(2026, 3, 16, 15, 0, 0, TimeSpan.Zero),
+                        BlockingReasonCode.InputRequired,
+                        "Need human input",
+                        "Provide the required input or choose an option, then resolve the follow-up action to resume the run.",
+                        "fai-1"),
+                    FollowUpActions:
+                    [
+                        new FollowUpActionSnapshot(
+                            "fai-1",
+                            "1",
+                            "ABC-1",
+                            "orch-123",
+                            new DateTimeOffset(2026, 3, 16, 15, 0, 0, TimeSpan.Zero),
+                            BlockingReasonCode.InputRequired,
+                            "Need human input",
+                            "Provide the required input or choose an option, then resolve the follow-up action to resume the run.",
+                            [new FollowUpActionOptionSnapshot("resume", "Resume", "Continue after review.")],
+                            FollowUpActionStatus.Pending,
+                            ResolvedBy: null,
+                            ResolvedAt: null,
+                            SelectedOptionId: null,
+                            Notes: null)
+                    ])
+            });
+        var client = CreateHttpClient(app);
+
+        var response = await client.GetAsync("/api/v1/ABC-1");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var payload = await response.Content.ReadFromJsonAsync<IssueResponseDto>();
+        Assert.NotNull(payload);
+        Assert.Equal("orch-123", payload!.OrchestratorSessionId);
+        Assert.NotNull(payload.Blocked);
+        Assert.Equal("fai-1", payload.Blocked!.FollowUpActionId);
+        var action = Assert.Single(payload.FollowUpActions);
+        Assert.Equal("fai-1", action.FollowUpActionId);
+        Assert.Equal("Pending", action.Status);
     }
 
     [Fact]
@@ -208,44 +330,12 @@ public sealed class SymphonyApiEndpointRouteBuilderExtensionsTests
             workflowLoadStatusReader
             ?? new StaticWorkflowLoadStatusReader(
                 new WorkflowLoadStatusSnapshot("Starting", null, null, null, null, null, null)));
-        builder.Services.AddSingleton(timeProvider ?? TimeProvider.System);
+        var resolvedTimeProvider = timeProvider ?? TimeProvider.System;
+        var workflowOptionsProvider = CreateWorkflowOptionsProvider();
+        builder.Services.AddSingleton(resolvedTimeProvider);
         builder.Services.AddSingleton<ServiceHealthSnapshotProvider>();
-        builder.Services.AddSingleton<IWorkflowOptionsProvider>(
-            new StaticWorkflowOptionsProvider(
-                new WorkflowServiceOptions(
-                    new WorkflowTrackerOptions(
-                        "github",
-                        "https://api.github.com",
-                        "token",
-                        null,
-                        "owner/repo",
-                        null,
-                        null,
-                        ["Todo"],
-                        ["Done"]),
-                    new WorkflowPollingOptions(1_000),
-                    new WorkflowWorkspaceOptions(Path.Combine(Path.GetTempPath(), "symphony-tests")),
-                    new WorkflowHookOptions(
-                        null,
-                        null,
-                        null,
-                        null,
-                        60_000),
-                    new WorkflowAgentOptions(
-                        1,
-                        20,
-                        300_000,
-                        new Dictionary<string, int>(StringComparer.Ordinal),
-                        false,
-                        "exec:agent"),
-                    new WorkflowCodexOptions(
-                        "codex app-server",
-                        null,
-                        null,
-                        null,
-                        3_600_000,
-                        5_000,
-                        300_000))));
+        builder.Services.AddSingleton<IWorkflowOptionsProvider>(workflowOptionsProvider);
+        builder.Services.AddSingleton(CreateFollowUpActionResolutionService(workflowOptionsProvider, resolvedTimeProvider));
 
         var app = builder.Build();
         app.MapSymphonyApi();
@@ -293,6 +383,84 @@ public sealed class SymphonyApiEndpointRouteBuilderExtensionsTests
         public Task<WorkflowServiceOptions> GetCurrentAsync(CancellationToken cancellationToken = default)
         {
             return Task.FromResult(workflowOptions);
+        }
+    }
+
+    private static StaticWorkflowOptionsProvider CreateWorkflowOptionsProvider()
+    {
+        return new StaticWorkflowOptionsProvider(
+            new WorkflowServiceOptions(
+                new WorkflowTrackerOptions(
+                    "github",
+                    "https://api.github.com",
+                    "token",
+                    null,
+                    "owner/repo",
+                    null,
+                    null,
+                    ["Todo"],
+                    ["Done"]),
+                new WorkflowPollingOptions(1_000),
+                new WorkflowWorkspaceOptions(Path.Combine(Path.GetTempPath(), "symphony-tests")),
+                new WorkflowHookOptions(
+                    null,
+                    null,
+                    null,
+                    null,
+                    60_000),
+                new WorkflowAgentOptions(
+                    1,
+                    20,
+                    300_000,
+                    new Dictionary<string, int>(StringComparer.Ordinal),
+                    false,
+                    "exec:agent"),
+                new WorkflowCodexOptions(
+                    "codex app-server",
+                    null,
+                    null,
+                    null,
+                    3_600_000,
+                    5_000,
+                    300_000)));
+    }
+
+    private static FollowUpActionResolutionService CreateFollowUpActionResolutionService(
+        IWorkflowOptionsProvider workflowOptionsProvider,
+        TimeProvider timeProvider)
+    {
+        var queue = new OrchestratorDispatchQueue(
+            workflowOptionsProvider,
+            new RetryDelayPlanner(() => 1d),
+            timeProvider,
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<OrchestratorDispatchQueue>.Instance);
+
+        return new FollowUpActionResolutionService(
+            new FollowUpActionRegistry(timeProvider),
+            queue,
+            new StubIssueTrackerClient(),
+            workflowOptionsProvider);
+    }
+
+    private sealed class StubIssueTrackerClient : IIssueTrackerClient
+    {
+        public Task<IReadOnlyList<Issue>> FetchCandidateIssuesAsync(CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<IReadOnlyList<Issue>>(Array.Empty<Issue>());
+        }
+
+        public Task<IReadOnlyList<Issue>> FetchIssuesByStatesAsync(
+            IReadOnlyCollection<string> stateNames,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<IReadOnlyList<Issue>>(Array.Empty<Issue>());
+        }
+
+        public Task<IReadOnlyList<Issue>> FetchIssueStatesByIdsAsync(
+            IReadOnlyCollection<string> issueIds,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<IReadOnlyList<Issue>>(Array.Empty<Issue>());
         }
     }
 

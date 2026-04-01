@@ -95,6 +95,57 @@ public sealed class OrchestratorRuntimeServiceTests
         Assert.Equal(["poll", "reconcile"], secondRequest.Operations);
     }
 
+    [Fact]
+    public async Task GetIssueSnapshotAsync_returns_blocked_issue_details_and_follow_up_actions_when_present()
+    {
+        var timeProvider = new FakeTimeProvider(new DateTimeOffset(2026, 3, 16, 15, 0, 0, TimeSpan.Zero));
+        var registry = new ActiveSessionRegistry(timeProvider, NullLogger<ActiveSessionRegistry>.Instance);
+        var queue = CreateQueue(timeProvider);
+        var followUpActionRegistry = new FollowUpActionRegistry(timeProvider);
+        var issue = CreateIssue("2", "ABC-2");
+        var followUpAction = followUpActionRegistry.CreatePending(
+            issue.Id,
+            issue.Identifier,
+            "orch-123",
+            BlockingReasonCode.ManualDecisionRequired,
+            "Need a human choice",
+            "Review the requested manual decision, then resolve the follow-up action to resume the run.",
+            [new FollowUpActionOptionSnapshot("resume", "Resume", "Continue after review.")]);
+        queue.BlockAsync(
+            issue,
+            "orch-123",
+            attempt: 2,
+            BlockingReasonCode.ManualDecisionRequired,
+            "Need a human choice",
+            "Review the requested manual decision, then resolve the follow-up action to resume the run.",
+            followUpAction.FollowUpActionId);
+        var service = new OrchestratorRuntimeService(
+            registry,
+            queue,
+            new PollingRefreshTrigger(timeProvider),
+            timeProvider,
+            followUpActionRegistry);
+
+        var stateSnapshot = await service.GetStateSnapshotAsync();
+        var issueSnapshot = await service.GetIssueSnapshotAsync("abc-2");
+
+        var blocked = Assert.Single(stateSnapshot.Blocked ?? []);
+        var action = Assert.Single(stateSnapshot.FollowUpActions ?? []);
+        Assert.Equal("ABC-2", blocked.IssueIdentifier);
+        Assert.Equal("orch-123", blocked.OrchestratorSessionId);
+        Assert.Equal(followUpAction.FollowUpActionId, blocked.FollowUpActionId);
+        Assert.Equal(FollowUpActionStatus.Pending, action.Status);
+
+        Assert.NotNull(issueSnapshot);
+        Assert.Equal("blocked_error", issueSnapshot!.Status);
+        Assert.Equal("orch-123", issueSnapshot.OrchestratorSessionId);
+        Assert.Equal(1, issueSnapshot.RestartCount);
+        Assert.Equal(2, issueSnapshot.CurrentRetryAttempt);
+        Assert.NotNull(issueSnapshot.Blocked);
+        Assert.Single(issueSnapshot.FollowUpActions ?? []);
+        Assert.Equal("Need a human choice", issueSnapshot.LastError);
+    }
+
     private static OrchestratorDispatchQueue CreateQueue(TimeProvider timeProvider)
     {
         return new OrchestratorDispatchQueue(

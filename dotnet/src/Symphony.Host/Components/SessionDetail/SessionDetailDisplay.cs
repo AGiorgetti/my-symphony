@@ -23,6 +23,9 @@ internal static class SessionDetailDisplay
         return statusText.Trim().ToLowerInvariant() switch
         {
             "succeeded" => Color.Success,
+            "needs attention" => Color.Warning,
+            "blocked_error" => Color.Warning,
+            "blockederror" => Color.Warning,
             "retrying" => Color.Warning,
             "failed" => Color.Error,
             "timedout" => Color.Error,
@@ -70,6 +73,7 @@ internal static class SessionDetailDisplay
             SessionActivityKind.AgentMessage => "Agent message",
             SessionActivityKind.DebugMessage => "Debug transcript",
             SessionActivityKind.ProgressUpdate => "Progress",
+            SessionActivityKind.AttentionRequired => "Attention",
             SessionActivityKind.Warning => "Warning",
             SessionActivityKind.Error => "Error",
             SessionActivityKind.Outcome => "Outcome",
@@ -83,6 +87,7 @@ internal static class SessionDetailDisplay
         {
             SessionActivityKind.AgentMessage => Color.Info,
             SessionActivityKind.DebugMessage => Color.Info,
+            SessionActivityKind.AttentionRequired => Color.Warning,
             SessionActivityKind.Warning => Color.Warning,
             SessionActivityKind.Error => Color.Error,
             SessionActivityKind.Outcome => Color.Success,
@@ -98,6 +103,7 @@ internal static class SessionDetailDisplay
             SessionActivityKind.AgentMessage => Color.Info,
             SessionActivityKind.DebugMessage => Color.Info,
             SessionActivityKind.ProgressUpdate => Color.Default,
+            SessionActivityKind.AttentionRequired => Color.Warning,
             SessionActivityKind.Warning => Color.Warning,
             SessionActivityKind.Error => Color.Error,
             SessionActivityKind.Outcome => IsSuccessfulOutcome(entry) ? Color.Success : Color.Error,

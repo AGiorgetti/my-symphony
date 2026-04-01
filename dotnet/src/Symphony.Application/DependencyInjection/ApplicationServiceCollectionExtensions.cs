@@ -20,6 +20,8 @@ public static class ApplicationServiceCollectionExtensions
         services.TryAddSingleton<PollingStatusTracker>();
         services.TryAddSingleton<AttemptHistoryTracker>();
         services.TryAddSingleton<RetryDelayPlanner>();
+        services.TryAddSingleton<FollowUpActionRegistry>();
+        services.TryAddSingleton<FollowUpActionResolutionService>();
         services.TryAddSingleton<OrchestratorControlService>();
         services.TryAddSingleton<IOrchestratorControl>(serviceProvider => serviceProvider.GetRequiredService<OrchestratorControlService>());
         services.TryAddSingleton<IOrchestratorControlStatusReader>(serviceProvider => serviceProvider.GetRequiredService<OrchestratorControlService>());

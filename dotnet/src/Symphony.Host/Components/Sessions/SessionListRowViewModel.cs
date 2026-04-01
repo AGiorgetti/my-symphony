@@ -4,6 +4,7 @@ public sealed record SessionListRowViewModel(
     string IssueIdentifier,
     string? IssueUrl,
     bool IsActive,
+    bool NeedsAttention,
     string Status,
     DateTimeOffset StartedAt,
     DateTimeOffset? EndedAt,

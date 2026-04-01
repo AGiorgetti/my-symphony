@@ -1,3 +1,4 @@
+using Symphony.Abstractions.Orchestration;
 using Symphony.Application.Polling;
 using Symphony.Application.Runtime;
 using Symphony.Host.Health;
@@ -39,6 +40,16 @@ public sealed class DashboardStateService(
                     retry.DueAt,
                     retry.Error))
             .ToArray();
+        var blockedSessions = (runtimeSnapshot.Blocked ?? [])
+            .Select(
+                blocked => new DashboardBlockedSessionSnapshot(
+                    blocked.IssueIdentifier,
+                    blocked.OrchestratorSessionId,
+                    blocked.FollowUpActionId,
+                    blocked.BlockedAt,
+                    blocked.ErrorMessage,
+                    blocked.RequiredUserAction))
+            .ToArray();
         var recentAttempts = attemptHistoryTracker.GetRecentAttempts()
             .Select(
                 attempt => new DashboardRecentAttemptSnapshot(
@@ -48,7 +59,8 @@ public sealed class DashboardStateService(
                     attempt.CompletedAt,
                     attempt.DurationSeconds,
                     attempt.Error,
-                    attempt.SessionId))
+                    attempt.SessionId,
+                    attempt.OrchestratorSessionId))
             .ToArray();
 
         var snapshot = new DashboardSnapshot(
@@ -72,7 +84,10 @@ public sealed class DashboardStateService(
             retryQueue,
             recentAttempts,
             healthSnapshot.PollLastError,
-            healthSnapshot.WorkflowLastError);
+            healthSnapshot.WorkflowLastError,
+            blockedSessions.Length,
+            blockedSessions,
+            runtimeSnapshot.FollowUpActions ?? Array.Empty<FollowUpActionSnapshot>());
 
         lock (_snapshotLock)
         {
@@ -91,6 +106,11 @@ public sealed class DashboardStateService(
             .ToDictionary(session => session.IssueIdentifier, StringComparer.OrdinalIgnoreCase);
         var previousRetry = new HashSet<DashboardRetrySnapshot>(previousSnapshot?.RetryQueue ?? []);
         var previousAttempts = new HashSet<DashboardRecentAttemptSnapshot>(previousSnapshot?.RecentAttempts ?? []);
+        var previousBlocked = new HashSet<string>(
+            (previousSnapshot?.BlockedSessions ?? []).Select(session => session.FollowUpActionId),
+            StringComparer.Ordinal);
+        var previousActions = (previousSnapshot?.FollowUpActions ?? [])
+            .ToDictionary(action => action.FollowUpActionId, StringComparer.Ordinal);
         var latestAttemptsByIssue = currentSnapshot.RecentAttempts
             .GroupBy(attempt => attempt.IssueIdentifier, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(
@@ -187,6 +207,55 @@ public sealed class DashboardStateService(
                     retry.DueAt,
                     "Queued for retry",
                     retry.Error));
+        }
+
+        foreach (var blocked in currentSnapshot.BlockedSessions ?? [])
+        {
+            if (previousBlocked.Contains(blocked.FollowUpActionId))
+            {
+                continue;
+            }
+
+            sessionActivityStore.RecordActivity(
+                blocked.IssueIdentifier,
+                new SessionActivityEntry(
+                    SessionActivityKind.AttentionRequired,
+                    blocked.BlockedAt,
+                    "Follow-up action created",
+                    $"{blocked.ErrorMessage} Action: {blocked.RequiredUserAction}"));
+        }
+
+        foreach (var action in currentSnapshot.FollowUpActions ?? [])
+        {
+            if (action.Status != FollowUpActionStatus.Resolved)
+            {
+                continue;
+            }
+
+            if (previousActions.TryGetValue(action.FollowUpActionId, out var previousAction)
+                && previousAction.Status == FollowUpActionStatus.Resolved)
+            {
+                continue;
+            }
+
+            var resolutionDetail = $"Resolved by {action.ResolvedBy ?? "operator"}";
+            if (!string.IsNullOrWhiteSpace(action.SelectedOptionId))
+            {
+                resolutionDetail += $" using {action.SelectedOptionId}";
+            }
+
+            if (!string.IsNullOrWhiteSpace(action.Notes))
+            {
+                resolutionDetail += $". {action.Notes}";
+            }
+
+            sessionActivityStore.RecordActivity(
+                action.IssueIdentifier,
+                new SessionActivityEntry(
+                    SessionActivityKind.AttentionRequired,
+                    action.ResolvedAt ?? action.CreatedAt,
+                    "Follow-up action resolved",
+                    resolutionDetail));
         }
 
         foreach (var attempt in currentSnapshot.RecentAttempts)

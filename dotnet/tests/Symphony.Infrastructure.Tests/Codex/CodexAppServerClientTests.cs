@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Symphony.Abstractions.Orchestration;
 using Symphony.Application.Configuration;
 using Symphony.Application.Orchestration;
 using Symphony.Domain.Issues;
@@ -119,7 +120,7 @@ public sealed class CodexAppServerClientTests
     }
 
     [Fact]
-    public async Task RunAsync_fails_when_codex_requests_user_input()
+    public async Task RunAsync_blocks_when_codex_requests_user_input()
     {
         var transcriptSink = new RecordingTranscriptSink();
         var sessionFactory = new TestCodexProcessSessionFactory(
@@ -154,10 +155,11 @@ public sealed class CodexAppServerClientTests
         var client = CreateClient(sessionFactory, transcriptSink);
         using var testContext = CreateContext();
 
-        var exception = await Assert.ThrowsAsync<CodexAgentException>(
+        var exception = await Assert.ThrowsAsync<IssueBlockingException>(
             () => client.RunAsync(testContext.Context, Path.GetTempPath(), "Prompt body", CreateCodexOptions()));
 
-        Assert.Equal("turn_input_required", exception.Code);
+        Assert.Equal(BlockingReasonCode.InputRequired, exception.ReasonCode);
+        Assert.Equal("Provide the required input or choose an option, then resolve the follow-up action to resume the run.", exception.RequiredUserAction);
         Assert.NotNull(sessionFactory.Session);
         Assert.True(sessionFactory.Session!.WasKilled);
     }
@@ -329,7 +331,7 @@ public sealed class CodexAppServerClientTests
     }
 
     [Fact]
-    public async Task RunAsync_fails_fast_when_non_approvable_mcp_elicitation_requests_user_input()
+    public async Task RunAsync_blocks_when_non_approvable_mcp_elicitation_requests_user_input()
     {
         var transcriptSink = new RecordingTranscriptSink();
         var sessionFactory = new TestCodexProcessSessionFactory(
@@ -384,10 +386,12 @@ public sealed class CodexAppServerClientTests
         var client = CreateClient(sessionFactory, transcriptSink);
         using var testContext = CreateContext();
 
-        var exception = await Assert.ThrowsAsync<CodexAgentException>(
+        var exception = await Assert.ThrowsAsync<IssueBlockingException>(
             () => client.RunAsync(testContext.Context, Path.GetTempPath(), "Prompt body", CreateCodexOptions()));
 
-        Assert.Equal("turn_input_required", exception.Code);
+        Assert.Equal(BlockingReasonCode.ManualDecisionRequired, exception.ReasonCode);
+        Assert.Equal("Need a human choice", exception.Message);
+        Assert.Equal("Review the requested manual decision, then resolve the follow-up action to resume the run.", exception.RequiredUserAction);
         Assert.NotNull(sessionFactory.Session);
         Assert.True(sessionFactory.Session!.WasKilled);
     }

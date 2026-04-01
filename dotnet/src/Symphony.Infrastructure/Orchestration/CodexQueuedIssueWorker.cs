@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using Symphony.Abstractions.Orchestration;
 using Symphony.Abstractions.Processes;
 using Symphony.Abstractions.Trackers;
 using Symphony.Abstractions.Workspaces;
@@ -104,6 +105,14 @@ internal sealed class CodexQueuedIssueWorker(
             throw new IssueExecutionTimedOutException(
                 $"Issue '{context.Issue.Identifier}' timed out while waiting for Codex.",
                 exception);
+        }
+        catch (CodexAgentException exception) when (exception.Code == "codex_not_found")
+        {
+            throw new IssueBlockingException(
+                BlockingReasonCode.ToolUnavailable,
+                exception.Message,
+                "Install or make the required Codex command available to Symphony, then resolve the follow-up action to resume the run.",
+                innerException: exception);
         }
         catch (WorkflowPromptRenderer.WorkflowPromptException exception)
         {

@@ -67,6 +67,8 @@ internal static class DashboardDisplay
             "streaming" => Color.Info,
             "finishing" => Color.Info,
             "retrying" => Color.Warning,
+            "needs attention" => Color.Warning,
+            "blocked_error" => Color.Warning,
             "succeeded" => Color.Success,
             "failed" => Color.Error,
             "timedout" => Color.Error,
@@ -82,6 +84,7 @@ internal static class DashboardDisplay
         {
             "succeeded" => Color.Success,
             "retrying" => Color.Warning,
+            "blockederror" => Color.Warning,
             "failed" => Color.Error,
             "timedout" => Color.Error,
             "stalled" => Color.Error,
@@ -176,6 +179,13 @@ internal static class DashboardDisplay
                 Severity.Warning,
                 "Workflow reload warning:",
                 snapshot.WorkflowLastError));
+        }
+        else if (snapshot.BlockedCount > 0)
+        {
+            alerts.Add(new DashboardAlertMessage(
+                Severity.Warning,
+                "Needs attention:",
+                $"{snapshot.BlockedCount} blocked session(s) require explicit operator resolution."));
         }
         else if (string.Equals(snapshot.ServiceHealth, "Degraded", StringComparison.Ordinal))
         {

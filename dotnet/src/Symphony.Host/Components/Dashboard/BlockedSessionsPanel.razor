@@ -1,0 +1,54 @@
+@using Symphony.Host.Dashboard
+
+<MudPaper Class="@PanelClass" Outlined="true" Elevation="0" data-testid="dashboard-blocked-sessions">
+    <div class="panel-header">
+        <div class="panel-header__content">
+            <p class="section-kicker">Needs Attention</p>
+            <h2 class="section-title section-title--panel">Blocked sessions</h2>
+            <p class="section-copy">
+                Sessions stopped by unresolved intervention or precondition blockers.
+            </p>
+        </div>
+        <StatusPill Text="@Entries.Count.ToString()" Color="Color.Warning" />
+    </div>
+
+    @if (Entries.Count == 0)
+    {
+        <div class="empty-state">
+            <p class="empty-state__title">No blocked sessions</p>
+            <p class="empty-state__copy">
+                Sessions that need explicit operator resolution will appear here.
+            </p>
+        </div>
+    }
+    else
+    {
+        <ul class="panel-list">
+            @foreach (var entry in Entries)
+            {
+                <li class="panel-item">
+                    <div class="panel-item__header">
+                        <a class="accent-link"
+                           href="/sessions/@Uri.EscapeDataString(entry.IssueIdentifier)">
+                            @entry.IssueIdentifier
+                        </a>
+                        <StatusPill Text="Needs attention" Color="Color.Warning" />
+                    </div>
+                    <div class="panel-item__meta">
+                        <p>Blocked @DashboardDisplay.FormatTimestamp(entry.BlockedAt) · session @entry.OrchestratorSessionId</p>
+                        <p>@entry.ErrorMessage</p>
+                        <p>Action: @entry.RequiredUserAction</p>
+                    </div>
+                </li>
+            }
+        </ul>
+    }
+</MudPaper>
+
+@code {
+    private const string PanelClass = "panel-card";
+
+    [Parameter]
+    [EditorRequired]
+    public required IReadOnlyList<DashboardBlockedSessionSnapshot> Entries { get; set; }
+}

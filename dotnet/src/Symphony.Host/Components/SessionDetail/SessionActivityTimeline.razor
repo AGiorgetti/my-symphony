@@ -236,6 +236,7 @@
         return entry.Kind switch
         {
             SessionActivityKind.DebugMessage => $"{baseClasses} timeline-entry--debug",
+            SessionActivityKind.AttentionRequired => $"{baseClasses} timeline-entry--warning",
             SessionActivityKind.Warning => $"{baseClasses} timeline-entry--warning",
             SessionActivityKind.Error => $"{baseClasses} timeline-entry--error",
             SessionActivityKind.Outcome when entry.Color == Color.Error => $"{baseClasses} timeline-entry--error",

@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
+using Symphony.Abstractions.Orchestration;
 using Symphony.Application.Configuration;
 using Symphony.Application.Orchestration;
 using Symphony.Domain.Runs;
@@ -474,7 +475,7 @@ internal sealed class CodexAppServerClient(
                 || IsMcpServerElicitationRequestMethod(method))
             {
                 UpdateSessionMetadata(context, "turn_input_required", "user_input_required", payload);
-                throw new CodexAgentException("turn_input_required", "Codex app-server requested user input.");
+                throw CreateBlockingException(method, payload);
             }
 
             if (method.Contains("approval", StringComparison.OrdinalIgnoreCase))
@@ -790,6 +791,36 @@ internal sealed class CodexAppServerClient(
         return string.Equals(method, "mcpServer/elicitation/request", StringComparison.Ordinal);
     }
 
+    private static IssueBlockingException CreateBlockingException(string method, JsonElement payload)
+    {
+        var options = ExtractFollowUpOptions(payload);
+        var errorMessage = ExtractMessage(payload) ?? "Codex app-server requested human intervention.";
+
+        if (IsMcpServerElicitationRequestMethod(method))
+        {
+            return new IssueBlockingException(
+                BlockingReasonCode.ManualDecisionRequired,
+                errorMessage,
+                "Review the requested manual decision, then resolve the follow-up action to resume the run.",
+                options);
+        }
+
+        if (IsApprovalRequest(payload))
+        {
+            return new IssueBlockingException(
+                BlockingReasonCode.ApprovalRequired,
+                errorMessage,
+                "Review the requested approval, then resolve the follow-up action to resume the run.",
+                options);
+        }
+
+        return new IssueBlockingException(
+            BlockingReasonCode.InputRequired,
+            errorMessage,
+            "Provide the required input or choose an option, then resolve the follow-up action to resume the run.",
+            options);
+    }
+
     private static bool TryCreateToolRequestUserInputApprovalResponse(JsonElement payload, out object response)
     {
         response = default!;
@@ -1039,6 +1070,73 @@ internal sealed class CodexAppServerClient(
         }
 
         return null;
+    }
+
+    private static bool IsApprovalRequest(JsonElement payload)
+    {
+        if (payload.TryGetProperty("params", out var parameters)
+            && parameters.ValueKind == JsonValueKind.Object
+            && parameters.TryGetProperty("questions", out var questionsElement)
+            && questionsElement.ValueKind == JsonValueKind.Array)
+        {
+            return questionsElement.EnumerateArray().Any(question =>
+                question.ValueKind == JsonValueKind.Object
+                && question.TryGetProperty("options", out var optionsElement)
+                && optionsElement.ValueKind == JsonValueKind.Array
+                && optionsElement.GetArrayLength() > 0);
+        }
+
+        return false;
+    }
+
+    private static IReadOnlyList<FollowUpActionOptionSnapshot> ExtractFollowUpOptions(JsonElement payload)
+    {
+        if (!payload.TryGetProperty("params", out var parameters) || parameters.ValueKind != JsonValueKind.Object)
+        {
+            return Array.Empty<FollowUpActionOptionSnapshot>();
+        }
+
+        if (parameters.TryGetProperty("questions", out var questionsElement) && questionsElement.ValueKind == JsonValueKind.Array)
+        {
+            var options = new List<FollowUpActionOptionSnapshot>();
+            foreach (var question in questionsElement.EnumerateArray())
+            {
+                if (question.ValueKind != JsonValueKind.Object
+                    || !question.TryGetProperty("options", out var optionsElement)
+                    || optionsElement.ValueKind != JsonValueKind.Array)
+                {
+                    continue;
+                }
+
+                foreach (var option in optionsElement.EnumerateArray())
+                {
+                    if (option.ValueKind != JsonValueKind.Object
+                        || !option.TryGetProperty("label", out var labelElement)
+                        || labelElement.ValueKind != JsonValueKind.String)
+                    {
+                        continue;
+                    }
+
+                    var label = labelElement.GetString();
+                    if (string.IsNullOrWhiteSpace(label))
+                    {
+                        continue;
+                    }
+
+                    var id = option.TryGetProperty("id", out var idElement) && idElement.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(idElement.GetString())
+                        ? idElement.GetString()!
+                        : label.Trim().ToLowerInvariant().Replace(' ', '-');
+                    var description = option.TryGetProperty("description", out var descriptionElement) && descriptionElement.ValueKind == JsonValueKind.String
+                        ? descriptionElement.GetString()
+                        : null;
+                    options.Add(new FollowUpActionOptionSnapshot(id, label.Trim(), string.IsNullOrWhiteSpace(description) ? null : description.Trim()));
+                }
+            }
+
+            return options;
+        }
+
+        return Array.Empty<FollowUpActionOptionSnapshot>();
     }
 
     private readonly record struct UsageInfo(int? InputTokens, int? OutputTokens, int? TotalTokens);

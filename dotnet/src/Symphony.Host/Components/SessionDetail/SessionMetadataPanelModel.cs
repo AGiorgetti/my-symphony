@@ -6,6 +6,7 @@ public sealed record SessionMetadataPanelModel(
     long? TotalTokens,
     int? TurnCount,
     string? SessionId,
+    string? OrchestratorSessionId,
     int? Attempt,
     bool IsAttemptKnown,
     string? AvailabilityMessage);

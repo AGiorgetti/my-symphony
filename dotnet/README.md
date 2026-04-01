@@ -322,10 +322,13 @@ The dashboard shell is implemented as an interactive-server Blazor page. It is a
 surface only: if dashboard rendering fails, the orchestrator and JSON API continue running.
 - The dashboard now includes active-session, retry-queue, and recent-attempt panels so operators
   can see live execution, next retry ETA, and concise outcome/error summaries without reading raw logs.
+- The dashboard also surfaces blocked sessions that need attention, including the orchestrator-owned
+  session/run identifier and the follow-up action that must be resolved before the issue can resume.
 - The session explorer is now available at `/sessions`, with All / Active / Ended filters and deep
   links into `/sessions/{identifier}` for individual run inspection, breadcrumb navigation, a
   chronological activity timeline, richer structured payload highlights, and an Activity / Details
-  tab split for live metadata. Raw agent payloads on the session detail page are gated behind
+  tab split for live metadata. Blocked sessions render a dedicated follow-up-action panel with the
+  required operator action and a resolve CTA. Raw agent payloads on the session detail page are gated behind
   `Dashboard:DebugMode` and are visually marked as debug-only when enabled. In debug mode, the
   timeline also includes the full outbound Codex request transcript, full inbound replies/events,
   and stderr/diagnostic lines for each session. A persistent left-side filter panel exposes one
@@ -337,9 +340,10 @@ surface only: if dashboard rendering fails, the orchestrator and JSON API contin
   `light-blue` palettes; the current browser choice is restored from `localStorage` on refresh.
 - The sidebar footer also exposes `Start` / `Stop` controls for orchestration. `Stop` pauses new
   polling, queue dispatch, and retry dispatch while allowing already running work to finish.
-- `GET /api/v1/state` for the current running/retrying snapshot, live token totals, runtime counts,
-  and operator health fields such as poll staleness, workflow reload status, and orchestration state
-- `GET /api/v1/{issueIdentifier}` for issue-specific runtime details with a `404` JSON error envelope when the issue is not tracked
+- `GET /api/v1/state` for the current running/retrying/blocked snapshot, live token totals, runtime counts,
+  follow-up-action summaries, and operator health fields such as poll staleness, workflow reload status, and orchestration state
+- `GET /api/v1/{issueIdentifier}` for issue-specific runtime details, including blocked-session and follow-up-action data, with a `404` JSON error envelope when the issue is not tracked
+- `POST /api/v1/{issueIdentifier}/follow-up-actions/{faiId}/resolve` to resolve a blocked follow-up action and requeue the issue when it is still dispatchable
 - `POST /api/v1/refresh` to queue an immediate poll-and-reconcile cycle; repeated requests coalesce while one is already pending
 - `GET /api/v1/orchestration` for the current started/stopped control state
 - `POST /api/v1/orchestration/start` to resume polling and new issue assignment

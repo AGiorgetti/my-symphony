@@ -15,7 +15,8 @@ public sealed class AttemptHistoryTracker
         DateTimeOffset startedAt,
         DateTimeOffset completedAt,
         string? error = null,
-        string? sessionId = null)
+        string? sessionId = null,
+        string? orchestratorSessionId = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(issueId);
         ArgumentException.ThrowIfNullOrWhiteSpace(issueIdentifier);
@@ -31,7 +32,8 @@ public sealed class AttemptHistoryTracker
             completedAt,
             durationSeconds,
             string.IsNullOrWhiteSpace(error) ? null : error.Trim(),
-            string.IsNullOrWhiteSpace(sessionId) ? null : sessionId.Trim());
+            string.IsNullOrWhiteSpace(sessionId) ? null : sessionId.Trim(),
+            string.IsNullOrWhiteSpace(orchestratorSessionId) ? null : orchestratorSessionId.Trim());
 
         lock (_stateLock)
         {
@@ -62,4 +64,5 @@ public sealed record RecentAttemptSnapshot(
     DateTimeOffset CompletedAt,
     double DurationSeconds,
     string? Error,
-    string? SessionId);
+    string? SessionId,
+    string? OrchestratorSessionId = null);

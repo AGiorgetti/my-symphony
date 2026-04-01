@@ -7,7 +7,9 @@ public sealed record OrchestratorStateSnapshot(
     IReadOnlyList<RunningIssueSnapshot> Running,
     IReadOnlyList<RetryDispatchSnapshot> Retrying,
     CodexTotalsSnapshot CodexTotals,
-    object? RateLimits);
+    object? RateLimits,
+    IReadOnlyList<BlockedDispatchSnapshot>? Blocked = null,
+    IReadOnlyList<FollowUpActionSnapshot>? FollowUpActions = null);
 
 public sealed record RunningIssueSnapshot(
     string IssueId,
@@ -21,7 +23,8 @@ public sealed record RunningIssueSnapshot(
     DateTimeOffset? LastEventAt,
     long InputTokens,
     long OutputTokens,
-    long TotalTokens);
+    long TotalTokens,
+    string? OrchestratorSessionId = null);
 
 public sealed record CodexTotalsSnapshot(
     long InputTokens,
@@ -38,7 +41,10 @@ public sealed record OrchestratorIssueSnapshot(
     RunningIssueSnapshot? Running,
     RetryDispatchSnapshot? Retry,
     string? LastError,
-    IReadOnlyList<RuntimeEventSnapshot> RecentEvents);
+    IReadOnlyList<RuntimeEventSnapshot> RecentEvents,
+    string? OrchestratorSessionId = null,
+    BlockedDispatchSnapshot? Blocked = null,
+    IReadOnlyList<FollowUpActionSnapshot>? FollowUpActions = null);
 
 public sealed record RuntimeEventSnapshot(
     DateTimeOffset At,

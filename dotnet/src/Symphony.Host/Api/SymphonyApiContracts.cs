@@ -10,12 +10,14 @@ public sealed record StateResponseDto(
     [property: JsonPropertyName("orchestration")] OrchestrationStatusDto Orchestration,
     [property: JsonPropertyName("running")] IReadOnlyList<RunningIssueDto> Running,
     [property: JsonPropertyName("retrying")] IReadOnlyList<RetryingIssueDto> Retrying,
+    [property: JsonPropertyName("blocked")] IReadOnlyList<BlockedIssueDto> Blocked,
     [property: JsonPropertyName("codex_totals")] CodexTotalsDto CodexTotals,
     [property: JsonPropertyName("rate_limits")] object? RateLimits);
 
 public sealed record StateCountsDto(
     [property: JsonPropertyName("running")] int Running,
-    [property: JsonPropertyName("retrying")] int Retrying);
+    [property: JsonPropertyName("retrying")] int Retrying,
+    [property: JsonPropertyName("blocked")] int Blocked);
 
 public sealed record HealthStatusDto(
     [property: JsonPropertyName("status")] string Status,
@@ -34,6 +36,7 @@ public sealed record HealthStatusDto(
 public sealed record RunningIssueDto(
     [property: JsonPropertyName("issue_id")] string IssueId,
     [property: JsonPropertyName("issue_identifier")] string IssueIdentifier,
+    [property: JsonPropertyName("orchestrator_session_id")] string? OrchestratorSessionId,
     [property: JsonPropertyName("state")] string State,
     [property: JsonPropertyName("session_id")] string? SessionId,
     [property: JsonPropertyName("turn_count")] int TurnCount,
@@ -50,6 +53,17 @@ public sealed record RetryingIssueDto(
     [property: JsonPropertyName("due_at")] DateTimeOffset DueAt,
     [property: JsonPropertyName("error")] string? Error);
 
+public sealed record BlockedIssueDto(
+    [property: JsonPropertyName("issue_id")] string IssueId,
+    [property: JsonPropertyName("issue_identifier")] string IssueIdentifier,
+    [property: JsonPropertyName("orchestrator_session_id")] string OrchestratorSessionId,
+    [property: JsonPropertyName("attempt")] int? Attempt,
+    [property: JsonPropertyName("blocked_at")] DateTimeOffset BlockedAt,
+    [property: JsonPropertyName("reason_code")] string ReasonCode,
+    [property: JsonPropertyName("error_message")] string ErrorMessage,
+    [property: JsonPropertyName("required_user_action")] string RequiredUserAction,
+    [property: JsonPropertyName("follow_up_action_id")] string FollowUpActionId);
+
 public sealed record TokenTotalsDto(
     [property: JsonPropertyName("input_tokens")] long InputTokens,
     [property: JsonPropertyName("output_tokens")] long OutputTokens,
@@ -64,11 +78,14 @@ public sealed record CodexTotalsDto(
 public sealed record IssueResponseDto(
     [property: JsonPropertyName("issue_identifier")] string IssueIdentifier,
     [property: JsonPropertyName("issue_id")] string IssueId,
+    [property: JsonPropertyName("orchestrator_session_id")] string? OrchestratorSessionId,
     [property: JsonPropertyName("status")] string Status,
     [property: JsonPropertyName("workspace")] WorkspaceDto Workspace,
     [property: JsonPropertyName("attempts")] IssueAttemptsDto Attempts,
     [property: JsonPropertyName("running")] RunningIssueDto? Running,
     [property: JsonPropertyName("retry")] RetryingIssueDto? Retry,
+    [property: JsonPropertyName("blocked")] BlockedIssueDto? Blocked,
+    [property: JsonPropertyName("follow_up_actions")] IReadOnlyList<FollowUpActionDto> FollowUpActions,
     [property: JsonPropertyName("logs")] IssueLogsDto Logs,
     [property: JsonPropertyName("recent_events")] IReadOnlyList<RuntimeEventDto> RecentEvents,
     [property: JsonPropertyName("last_error")] string? LastError,
@@ -93,6 +110,30 @@ public sealed record RuntimeEventDto(
     [property: JsonPropertyName("at")] DateTimeOffset At,
     [property: JsonPropertyName("event")] string? Event,
     [property: JsonPropertyName("message")] string? Message);
+
+public sealed record FollowUpActionDto(
+    [property: JsonPropertyName("fai_id")] string FollowUpActionId,
+    [property: JsonPropertyName("issue_identifier")] string IssueIdentifier,
+    [property: JsonPropertyName("session_id")] string SessionId,
+    [property: JsonPropertyName("created_at")] DateTimeOffset CreatedAt,
+    [property: JsonPropertyName("reason_code")] string ReasonCode,
+    [property: JsonPropertyName("error_message")] string ErrorMessage,
+    [property: JsonPropertyName("required_user_action")] string RequiredUserAction,
+    [property: JsonPropertyName("options")] IReadOnlyList<FollowUpActionOptionDto> Options,
+    [property: JsonPropertyName("status")] string Status,
+    [property: JsonPropertyName("resolved_by")] string? ResolvedBy,
+    [property: JsonPropertyName("resolved_at")] DateTimeOffset? ResolvedAt,
+    [property: JsonPropertyName("selected_option_id")] string? SelectedOptionId,
+    [property: JsonPropertyName("notes")] string? Notes);
+
+public sealed record FollowUpActionOptionDto(
+    [property: JsonPropertyName("option_id")] string OptionId,
+    [property: JsonPropertyName("label")] string Label,
+    [property: JsonPropertyName("description")] string? Description);
+
+public sealed record ResolveFollowUpActionRequestDto(
+    [property: JsonPropertyName("selected_option_id")] string? SelectedOptionId,
+    [property: JsonPropertyName("notes")] string? Notes);
 
 public sealed record RefreshResponseDto(
     [property: JsonPropertyName("queued")] bool Queued,

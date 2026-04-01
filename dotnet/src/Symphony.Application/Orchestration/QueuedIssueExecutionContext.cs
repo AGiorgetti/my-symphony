@@ -12,6 +12,7 @@ public sealed class QueuedIssueExecutionContext
 
     internal QueuedIssueExecutionContext(
         Issue issue,
+        string orchestratorSessionId,
         int? attempt,
         CancellationToken cancellationToken,
         Action<Issue> updateIssue,
@@ -19,6 +20,9 @@ public sealed class QueuedIssueExecutionContext
         Action<RunAttemptStatus, string?> updateStatus)
     {
         Issue = issue ?? throw new ArgumentNullException(nameof(issue));
+        OrchestratorSessionId = string.IsNullOrWhiteSpace(orchestratorSessionId)
+            ? throw new ArgumentException("Value cannot be null or whitespace.", nameof(orchestratorSessionId))
+            : orchestratorSessionId.Trim();
         Attempt = attempt;
         CancellationToken = cancellationToken;
         _updateIssue = updateIssue ?? throw new ArgumentNullException(nameof(updateIssue));
@@ -27,6 +31,8 @@ public sealed class QueuedIssueExecutionContext
     }
 
     public Issue Issue { get; private set; }
+
+    public string OrchestratorSessionId { get; }
 
     public int? Attempt { get; }
 
