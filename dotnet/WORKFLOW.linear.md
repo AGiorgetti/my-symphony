@@ -39,7 +39,7 @@ agent:
   require_exec_marker: false
   exec_marker: "exec:agent"
 codex:
-  command: codex --config shell_environment_policy.inherit=all --config model_reasoning_effort=xhigh --model gpt-5.3-codex app-server
+  command: codex --config shell_environment_policy.inherit=all --config shell_environment_policy.ignore_default_excludes=true --config model_reasoning_effort=xhigh --model gpt-5.3-codex app-server
   approval_policy: never
   thread_sandbox: workspace-write
   turn_sandbox_policy:
