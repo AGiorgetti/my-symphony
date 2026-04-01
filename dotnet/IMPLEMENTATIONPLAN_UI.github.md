@@ -26,7 +26,7 @@ This plan is the UI continuation of `IMPLEMENTATIONPLAN.github.md`. The foundati
 application stories from the base plan remain prerequisites for any UI work here.
 
 All issue lifecycle rules, completion tracking protocol, stop-and-resume protocol, co-authorship
-policy, and label semantics should remain aligned with `IMPLEMENTATIONPLAN.github.md`.
+policy, and label semantics should remain aligned with `AGENTS_INSTRUCTIONS.md`.
 
 ---
 

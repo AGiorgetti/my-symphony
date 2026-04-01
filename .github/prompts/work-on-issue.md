@@ -1,0 +1,1 @@
+Use the canonical agent rules in [dotnet/AGENT_INSTRUCTIONS.md](dotnet/AGENT_INSTRUCTIONS.md) to work on issue: {{issue_number}}.

@@ -1,0 +1,11 @@
+# Canonical agent identities for co-authorship trailers.
+# Agents should pick one entry from this list when appending Co-authored-by trailers.
+agents:
+  - name: Agent
+    email: agent@agent.com
+  - name: Codex
+    email: codex@openai.com
+  - name: Copilot
+    email: copilot@github.com
+  - name: Claude
+    email: claude@anthropic.com
