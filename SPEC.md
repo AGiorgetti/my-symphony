@@ -1543,7 +1543,8 @@ Minimum endpoints:
 
 - `GET /api/v1/state`
   - Returns a summary view of the current system state (running sessions, retry queue/delays,
-    aggregate token/runtime totals, latest rate limits, and any additional tracked summary fields).
+    blocked sessions that need operator resolution, aggregate token/runtime totals, latest rate
+    limits, and any additional tracked summary fields).
   - Suggested response shape:
 
     ```json
@@ -1551,7 +1552,8 @@ Minimum endpoints:
       "generated_at": "2026-02-24T20:15:30Z",
       "counts": {
         "running": 2,
-        "retrying": 1
+        "retrying": 1,
+        "blocked": 1
       },
       "running": [
         {
@@ -1580,6 +1582,19 @@ Minimum endpoints:
           "error": "no available orchestrator slots"
         }
       ],
+      "blocked": [
+        {
+          "issue_id": "ghi789",
+          "issue_identifier": "MT-651",
+          "orchestrator_session_id": "orch-42",
+          "attempt": 2,
+          "blocked_at": "2026-02-24T20:15:15Z",
+          "reason_code": "InputRequired",
+          "error_message": "Codex app-server requested human intervention.",
+          "required_user_action": "Provide the required input or choose an option, then resolve the follow-up action to resume the run.",
+          "follow_up_action_id": "fai-42"
+        }
+      ],
       "codex_totals": {
         "input_tokens": 5000,
         "output_tokens": 2400,
@@ -1592,13 +1607,15 @@ Minimum endpoints:
 
 - `GET /api/v1/<issue_identifier>`
   - Returns issue-specific runtime/debug details for the identified issue, including any information
-    the implementation tracks that is useful for debugging.
+    the implementation tracks that is useful for debugging, including blocked/follow-up-action
+    state when a run cannot continue unattended.
   - Suggested response shape:
 
     ```json
     {
       "issue_identifier": "MT-649",
       "issue_id": "abc123",
+      "orchestrator_session_id": "orch-42",
       "status": "running",
       "workspace": {
         "path": "/tmp/symphony_workspaces/MT-649"
@@ -1622,6 +1639,8 @@ Minimum endpoints:
         }
       },
       "retry": null,
+      "blocked": null,
+      "follow_up_actions": [],
       "logs": {
         "codex_session_logs": [
           {
@@ -1645,6 +1664,13 @@ Minimum endpoints:
 
   - If the issue is unknown to the current in-memory state, return `404` with an error response (for
     example `{\"error\":{\"code\":\"issue_not_found\",\"message\":\"...\"}}`).
+
+- `POST /api/v1/<issue_identifier>/follow-up-actions/<fai_id>/resolve`
+  - Resolves a pending follow-up action created for a blocked session.
+  - The implementation should record who resolved the action, any selected option or notes, clear
+    the blocked state, and immediately requeue the same issue when it is still dispatchable.
+  - If the follow-up action or blocked issue no longer exists, return an appropriate error envelope
+    (for example `blocked_issue_not_found`).
 
 - `POST /api/v1/refresh`
   - Queues an immediate tracker poll + reconciliation cycle (best-effort trigger; implementations

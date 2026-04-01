@@ -1,6 +1,9 @@
 @page "/sessions/{Identifier}"
 @implements IAsyncDisposable
 @using Microsoft.Extensions.Options
+@using MudBlazor
+@using Symphony.Abstractions.Orchestration
+@using Symphony.Application.Orchestration
 @using Symphony.Application.Runtime
 @using Symphony.Host.Components.SessionDetail
 @using Symphony.Host.Configuration
@@ -8,6 +11,8 @@
 @inject IOrchestratorRuntimeService OrchestratorRuntimeService
 @inject ISessionActivityStore SessionActivityStore
 @inject IOptions<DashboardUiOptions> DashboardUiOptions
+@inject FollowUpActionResolutionService FollowUpActionResolutionService
+@inject ISnackbar Snackbar
 
 <main class="page-shell page-stack">
     <div data-testid="session-detail-breadcrumb">
@@ -47,6 +52,14 @@
 
         <SessionHeaderCard Session="_header" />
 
+        @if (_blockedIssue is not null && _pendingFollowUpAction is not null)
+        {
+            <SessionFollowUpActionPanel BlockedIssue="_blockedIssue"
+                                       PendingAction="_pendingFollowUpAction"
+                                       IsResolving="_isResolvingFollowUpAction"
+                                       ResolveRequested="ResolveFollowUpActionAsync" />
+        }
+
         <div class="session-detail-flow">
             <div class="session-detail-metadata-row" data-testid="session-detail-metadata-panel">
                 <SessionMetadataPanel Metadata="_metadata" />
@@ -71,11 +84,14 @@
     private Task? _refreshLoopTask;
     private bool _isLoading = true;
     private bool _isSessionActive;
+    private bool _isResolvingFollowUpAction;
     private string _requestedIdentifier = string.Empty;
     private string? _refreshErrorMessage;
     private SessionHeaderDisplayModel? _header;
     private SessionActivityTimelineModel? _timeline;
     private SessionMetadataPanelModel? _metadata;
+    private BlockedDispatchSnapshot? _blockedIssue;
+    private FollowUpActionSnapshot? _pendingFollowUpAction;
 
     protected override async Task OnParametersSetAsync()
     {
@@ -182,8 +198,11 @@
         var activeSession = snapshot.ActiveSessions
             .FirstOrDefault(candidate => string.Equals(candidate.IssueIdentifier, session.IssueIdentifier, StringComparison.OrdinalIgnoreCase));
         var issueSnapshot = await OrchestratorRuntimeService.GetIssueSnapshotAsync(session.IssueIdentifier, cancellationToken);
+        _pendingFollowUpAction = (issueSnapshot?.FollowUpActions ?? Array.Empty<FollowUpActionSnapshot>())
+            .FirstOrDefault(action => action.Status == FollowUpActionStatus.Pending);
+        _blockedIssue = issueSnapshot?.Blocked;
 
-        _header = BuildHeader(session);
+        _header = BuildHeader(session, issueSnapshot, _pendingFollowUpAction);
         _timeline = BuildTimeline(session, SessionActivityStore.GetActivities(session.IssueIdentifier));
         _metadata = BuildMetadata(session, activeSession, issueSnapshot, snapshot);
         _isSessionActive = session.IsActive;
@@ -191,9 +210,14 @@
         _isLoading = false;
     }
 
-    private static SessionHeaderDisplayModel BuildHeader(SessionRecord session)
+    private static SessionHeaderDisplayModel BuildHeader(
+        SessionRecord session,
+        OrchestratorIssueSnapshot? issueSnapshot,
+        FollowUpActionSnapshot? pendingFollowUpAction)
     {
-        var statusText = session.IsActive ? "Active" : session.FinalOutcome ?? "Ended";
+        var statusText = pendingFollowUpAction is null
+            ? (session.IsActive ? "Active" : session.FinalOutcome ?? "Ended")
+            : "Needs attention";
         var parsedStatus = SessionDetailDisplay.TryParseStatus(statusText);
         var statusColor = parsedStatus is null
             ? SessionDetailDisplay.GetFallbackStatusColor(statusText, session.IsActive)
@@ -220,7 +244,7 @@
             .ToArray();
 
         var latestWarning = activities
-            .Where(activity => activity.Kind == SessionActivityKind.Warning)
+            .Where(activity => activity.Kind == SessionActivityKind.Warning || activity.Kind == SessionActivityKind.AttentionRequired)
             .OrderByDescending(activity => activity.Timestamp)
             .FirstOrDefault();
         var latestError = activities
@@ -267,6 +291,7 @@
             .FirstOrDefault();
         var runningSession = issueSnapshot?.Running;
         var sessionId = runningSession?.SessionId ?? activeSession?.SessionId ?? recentAttempt?.SessionId;
+        var orchestratorSessionId = issueSnapshot?.OrchestratorSessionId ?? recentAttempt?.OrchestratorSessionId;
         var turnCount = runningSession?.TurnCount ?? activeSession?.TurnCount ?? SessionDetailDisplay.TryParseTurnCount(sessionId);
         var attempt = issueSnapshot is null ? recentAttempt?.Attempt : issueSnapshot.CurrentRetryAttempt;
         var isAttemptKnown = issueSnapshot is not null || recentAttempt is not null;
@@ -277,6 +302,7 @@
             runningSession?.TotalTokens ?? activeSession?.TotalTokens,
             turnCount,
             sessionId,
+            orchestratorSessionId,
             attempt,
             isAttemptKnown,
             GetMetadataAvailabilityMessage(session, runningSession is not null));
@@ -299,5 +325,42 @@
         return string.IsNullOrWhiteSpace(entry.Detail)
             ? entry.Title
             : $"{entry.Title} - {entry.Detail}";
+    }
+
+    private async Task ResolveFollowUpActionAsync()
+    {
+        if (_pendingFollowUpAction is null || _isResolvingFollowUpAction)
+        {
+            return;
+        }
+
+        _isResolvingFollowUpAction = true;
+
+        try
+        {
+            var selectedOptionId = _pendingFollowUpAction.Options.FirstOrDefault()?.OptionId ?? "resume";
+            var result = await FollowUpActionResolutionService.ResolveAsync(
+                new FollowUpActionResolutionRequest(
+                    _requestedIdentifier,
+                    _pendingFollowUpAction.FollowUpActionId,
+                    "operator",
+                    selectedOptionId,
+                    Notes: null));
+
+            if (result.Status == FollowUpActionResolutionStatus.Resolved)
+            {
+                Snackbar.Add("Follow-up action resolved. The issue was queued to resume.", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add(result.Message ?? "Follow-up action could not be resolved.", Severity.Warning);
+            }
+
+            await LoadAsync();
+        }
+        finally
+        {
+            _isResolvingFollowUpAction = false;
+        }
     }
 }

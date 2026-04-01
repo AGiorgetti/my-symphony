@@ -27,6 +27,7 @@ public sealed class OrchestratorDispatchQueue(
     private readonly Dictionary<string, QueuedDispatchEntry> _queued = new(StringComparer.Ordinal);
     private readonly Dictionary<string, RunningDispatchEntry> _running = new(StringComparer.Ordinal);
     private readonly Dictionary<string, RetryDispatchEntry> _retrying = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, BlockedDispatchEntry> _blocked = new(StringComparer.Ordinal);
     private readonly HashSet<string> _claimed = new(StringComparer.Ordinal);
     private readonly SemaphoreSlim _retrySignal = new(0, int.MaxValue);
 
@@ -84,9 +85,116 @@ public sealed class OrchestratorDispatchQueue(
                             entry.DueAt,
                             entry.Error))
                     .ToArray(),
+                _blocked.Values
+                    .OrderByDescending(entry => entry.BlockedAt)
+                    .Select(
+                        entry => new BlockedDispatchSnapshot(
+                            entry.Issue.Id,
+                            entry.Issue.Identifier,
+                            entry.OrchestratorSessionId,
+                            entry.Attempt,
+                            entry.BlockedAt,
+                            entry.ReasonCode,
+                            entry.ErrorMessage,
+                            entry.RequiredUserAction,
+                            entry.FollowUpActionId))
+                    .ToArray(),
                 _configuredConcurrency,
                 Math.Max(_configuredConcurrency - _queued.Count - _running.Count, 0));
         }
+    }
+
+    internal BlockedIssueHandle BlockAsync(
+        Issue issue,
+        string orchestratorSessionId,
+        int? attempt,
+        BlockingReasonCode reasonCode,
+        string errorMessage,
+        string requiredUserAction,
+        string followUpActionId)
+    {
+        ArgumentNullException.ThrowIfNull(issue);
+        ArgumentException.ThrowIfNullOrWhiteSpace(orchestratorSessionId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(errorMessage);
+        ArgumentException.ThrowIfNullOrWhiteSpace(requiredUserAction);
+        ArgumentException.ThrowIfNullOrWhiteSpace(followUpActionId);
+
+        var blockedAt = timeProvider.GetUtcNow();
+
+        lock (_stateLock)
+        {
+            _running.Remove(issue.Id);
+            _blocked[issue.Id] = new BlockedDispatchEntry(
+                issue,
+                orchestratorSessionId.Trim(),
+                attempt,
+                blockedAt,
+                reasonCode,
+                errorMessage.Trim(),
+                requiredUserAction.Trim(),
+                followUpActionId.Trim());
+        }
+
+        ReleaseExecutionSlot();
+
+        logger.LogWarning(
+            "dispatch_blocked completed issue_id={issue_id} issue_identifier={issue_identifier} orchestrator_session_id={orchestrator_session_id} attempt={attempt} reason_code={reason_code} follow_up_action_id={follow_up_action_id} outcome=blocked",
+            issue.Id,
+            issue.Identifier,
+            orchestratorSessionId,
+            attempt,
+            reasonCode,
+            followUpActionId);
+
+        return new BlockedIssueHandle(issue, orchestratorSessionId.Trim(), attempt, blockedAt, reasonCode, errorMessage.Trim(), requiredUserAction.Trim(), followUpActionId.Trim());
+    }
+
+    internal BlockedIssueHandle? GetBlockedIssue(string issueIdentifier)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(issueIdentifier);
+
+        lock (_stateLock)
+        {
+            var entry = _blocked.Values.FirstOrDefault(candidate =>
+                string.Equals(candidate.Issue.Identifier, issueIdentifier.Trim(), StringComparison.OrdinalIgnoreCase));
+            return entry is null
+                ? null
+                : new BlockedIssueHandle(
+                    entry.Issue,
+                    entry.OrchestratorSessionId,
+                    entry.Attempt,
+                    entry.BlockedAt,
+                    entry.ReasonCode,
+                    entry.ErrorMessage,
+                    entry.RequiredUserAction,
+                    entry.FollowUpActionId);
+        }
+    }
+
+    internal void ReleaseBlockedClaim(string issueId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(issueId);
+
+        lock (_stateLock)
+        {
+            _blocked.Remove(issueId.Trim());
+            _claimed.Remove(issueId.Trim());
+        }
+    }
+
+    internal async Task<DispatchEnqueueResult> ResumeBlockedAsync(
+        Issue issue,
+        int? attempt,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(issue);
+
+        lock (_stateLock)
+        {
+            _blocked.Remove(issue.Id);
+        }
+
+        return await QueueInternalAsync(issue, attempt, claimRequired: false, cancellationToken).ConfigureAwait(false);
     }
 
     internal IAsyncEnumerable<DispatchQueueWorkItem> ReadAllAsync(CancellationToken cancellationToken)
@@ -168,6 +276,7 @@ public sealed class OrchestratorDispatchQueue(
         lock (_stateLock)
         {
             _retrying.Remove(issueId);
+            _blocked.Remove(issueId);
             _claimed.Remove(issueId);
         }
     }
@@ -299,7 +408,7 @@ public sealed class OrchestratorDispatchQueue(
                     return DispatchEnqueueResult.AlreadyClaimed;
                 }
             }
-            else if (_queued.ContainsKey(issue.Id) || _running.ContainsKey(issue.Id) || _retrying.ContainsKey(issue.Id))
+            else if (_queued.ContainsKey(issue.Id) || _running.ContainsKey(issue.Id) || _retrying.ContainsKey(issue.Id) || _blocked.ContainsKey(issue.Id))
             {
                 return DispatchEnqueueResult.AlreadyClaimed;
             }
@@ -512,14 +621,31 @@ public sealed class OrchestratorDispatchQueue(
 
     private sealed record RetryDispatchEntry(Issue Issue, int Attempt, DateTimeOffset DueAt, string? Error);
 
+    private sealed record BlockedDispatchEntry(
+        Issue Issue,
+        string OrchestratorSessionId,
+        int? Attempt,
+        DateTimeOffset BlockedAt,
+        BlockingReasonCode ReasonCode,
+        string ErrorMessage,
+        string RequiredUserAction,
+        string FollowUpActionId);
+
     internal sealed class ExecutionLease(OrchestratorDispatchQueue owner, Issue issue) : IDisposable
     {
         private int _disposed;
         private bool _releaseClaim = true;
+        private bool _queueAlreadyCompleted;
 
         public void PreserveClaimForRetry()
         {
             _releaseClaim = false;
+        }
+
+        public void MarkBlocked()
+        {
+            _releaseClaim = false;
+            _queueAlreadyCompleted = true;
         }
 
         public void Dispose()
@@ -529,7 +655,22 @@ public sealed class OrchestratorDispatchQueue(
                 return;
             }
 
+            if (_queueAlreadyCompleted)
+            {
+                return;
+            }
+
             owner.CompleteExecution(issue, _releaseClaim);
         }
     }
+
+    internal sealed record BlockedIssueHandle(
+        Issue Issue,
+        string OrchestratorSessionId,
+        int? Attempt,
+        DateTimeOffset BlockedAt,
+        BlockingReasonCode ReasonCode,
+        string ErrorMessage,
+        string RequiredUserAction,
+        string FollowUpActionId);
 }

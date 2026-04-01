@@ -23,7 +23,10 @@ public sealed record DashboardSnapshot(
     IReadOnlyList<DashboardRetrySnapshot> RetryQueue,
     IReadOnlyList<DashboardRecentAttemptSnapshot> RecentAttempts,
     string? LastError,
-    string? WorkflowLastError);
+    string? WorkflowLastError,
+    int BlockedCount = 0,
+    IReadOnlyList<DashboardBlockedSessionSnapshot>? BlockedSessions = null,
+    IReadOnlyList<FollowUpActionSnapshot>? FollowUpActions = null);
 
 public sealed record DashboardActiveSessionSnapshot(
     string IssueIdentifier,
@@ -42,6 +45,14 @@ public sealed record DashboardRetrySnapshot(
     DateTimeOffset DueAt,
     string? Error);
 
+public sealed record DashboardBlockedSessionSnapshot(
+    string IssueIdentifier,
+    string OrchestratorSessionId,
+    string FollowUpActionId,
+    DateTimeOffset BlockedAt,
+    string ErrorMessage,
+    string RequiredUserAction);
+
 public sealed record DashboardRecentAttemptSnapshot(
     string IssueIdentifier,
     int? Attempt,
@@ -49,4 +60,5 @@ public sealed record DashboardRecentAttemptSnapshot(
     DateTimeOffset CompletedAt,
     double DurationSeconds,
     string? Error,
-    string? SessionId);
+    string? SessionId,
+    string? OrchestratorSessionId = null);

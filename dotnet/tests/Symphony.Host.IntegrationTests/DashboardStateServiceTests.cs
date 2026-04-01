@@ -283,6 +283,86 @@ public sealed class DashboardStateServiceTests
             activity => activity.Kind == SessionActivityKind.Outcome && activity.Title == "Failed" && activity.Detail == "Tracker request failed");
     }
 
+    [Fact]
+    public async Task GetSnapshotAsync_includes_blocked_sessions_and_records_attention_activity_for_follow_up_actions()
+    {
+        var blockedAt = new DateTimeOffset(2026, 3, 16, 16, 0, 0, TimeSpan.Zero);
+        var runtimeService = new StubRuntimeService
+        {
+            StateSnapshot = new OrchestratorStateSnapshot(
+                blockedAt,
+                Array.Empty<RunningIssueSnapshot>(),
+                Array.Empty<Symphony.Abstractions.Orchestration.RetryDispatchSnapshot>(),
+                new CodexTotalsSnapshot(0, 0, 0, 0d),
+                RateLimits: null,
+                Blocked:
+                [
+                    new BlockedDispatchSnapshot(
+                        "1",
+                        "ABC-1",
+                        "orch-123",
+                        2,
+                        blockedAt,
+                        BlockingReasonCode.ManualDecisionRequired,
+                        "Need a human choice",
+                        "Review the requested manual decision, then resolve the follow-up action to resume the run.",
+                        "fai-1")
+                ],
+                FollowUpActions:
+                [
+                    new FollowUpActionSnapshot(
+                        "fai-1",
+                        "1",
+                        "ABC-1",
+                        "orch-123",
+                        blockedAt,
+                        BlockingReasonCode.ManualDecisionRequired,
+                        "Need a human choice",
+                        "Review the requested manual decision, then resolve the follow-up action to resume the run.",
+                        [new FollowUpActionOptionSnapshot("resume", "Resume", "Continue after review.")],
+                        FollowUpActionStatus.Pending,
+                        ResolvedBy: null,
+                        ResolvedAt: null,
+                        SelectedOptionId: null,
+                        Notes: null)
+                ])
+        };
+        var pollingStatusTracker = new PollingStatusTracker();
+        pollingStatusTracker.RecordCompleted(blockedAt);
+        var sessionActivityStore = new SessionActivityStore(NullLogger<SessionActivityStore>.Instance);
+        var service = new DashboardStateService(
+            runtimeService,
+            new AttemptHistoryTracker(),
+            new ServiceHealthSnapshotProvider(
+                pollingStatusTracker,
+                new StaticOrchestratorControlStatusReader(OrchestratorControlState.Started),
+                new StaticWorkflowLoadStatusReader(
+                    new WorkflowLoadStatusSnapshot(
+                        "Loaded",
+                        "C:\\repo\\WORKFLOW.md",
+                        blockedAt.AddMinutes(-5),
+                        null,
+                        null,
+                        null,
+                        30_000)),
+                new FakeTimeProvider(blockedAt.AddSeconds(5))),
+            sessionActivityStore);
+
+        var snapshot = await service.GetSnapshotAsync();
+
+        Assert.Equal(1, snapshot.BlockedCount);
+        var blockedSession = Assert.Single(snapshot.BlockedSessions ?? []);
+        Assert.Equal("ABC-1", blockedSession.IssueIdentifier);
+        Assert.Equal("fai-1", blockedSession.FollowUpActionId);
+
+        var activities = sessionActivityStore.GetActivities("ABC-1");
+        Assert.Contains(
+            activities,
+            activity => activity.Kind == SessionActivityKind.AttentionRequired
+                && activity.Title == "Follow-up action created"
+                && activity.Detail == "Need a human choice Action: Review the requested manual decision, then resolve the follow-up action to resume the run.");
+    }
+
     private sealed class StubRuntimeService : IOrchestratorRuntimeService
     {
         public OrchestratorStateSnapshot StateSnapshot { get; set; } = new(

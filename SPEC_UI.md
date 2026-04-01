@@ -108,6 +108,7 @@ The dashboard should make it easy to notice:
 - sessions that have ended successfully
 - sessions that have ended with failure
 - sessions that may require attention
+- sessions that are blocked pending explicit operator resolution
 
 The dashboard theme preference should persist for the current browser via local storage so the
 selected palette is restored after refresh.
@@ -123,6 +124,7 @@ The session detail page must allow the operator to:
 - browse the session activity in order
 - read messages and updates emitted by the agent
 - inspect warnings, errors, and terminal outcomes
+- inspect and resolve pending follow-up actions for blocked sessions
 
 The session detail page should answer these questions clearly:
 
@@ -131,6 +133,7 @@ The session detail page should answer these questions clearly:
 - What did the agent report during the run?
 - Did the session complete successfully?
 - If not, what went wrong?
+- If the run is blocked, what action is required to resume it?
 
 ### 6.3 Session activity timeline
 
@@ -188,6 +191,7 @@ At a minimum, the dashboard should provide an operational summary section that s
 - workflow configuration status
 - running session count
 - retry queue count
+- blocked session count
 - token totals
 - runtime totals
 
@@ -201,6 +205,7 @@ At a minimum, each visible session entry should help the operator identify:
 - when it ended, if applicable
 - the latest meaningful activity
 - whether the session ended with an error
+- whether the session currently needs attention because it is blocked
 
 The dashboard should prioritize clarity over density.
 
@@ -221,6 +226,7 @@ The detail view should include:
 - a separate details view for live session metadata such as tokens, turn count, session ID, and attempt number
 - visible messages and updates from the agent
 - warnings and errors when present
+- a dedicated follow-up-action panel when the session is blocked, including the reason, required operator action, and a clear resolve control
 
 The detail view should feel like an inspection page, not a raw protocol dump.
 

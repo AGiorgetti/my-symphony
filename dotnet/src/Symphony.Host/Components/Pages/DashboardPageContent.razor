@@ -17,7 +17,7 @@
         </section>
 
         <section class="operations-grid">
-            @for (var index = 0; index < 3; index++)
+            @for (var index = 0; index < 4; index++)
             {
                 <MudPaper Class="@SkeletonCardClass" Outlined="true" Elevation="0">
                     <MudSkeleton SkeletonType="SkeletonType.Text" Width="55%" />
@@ -76,6 +76,21 @@
                         <h2 class="section-title section-title--card">Panel failed</h2>
                         <p class="section-copy">
                             Retry details are temporarily unavailable.
+                        </p>
+                    </MudPaper>
+                </ErrorContent>
+            </ErrorBoundary>
+
+            <ErrorBoundary>
+                <ChildContent>
+                    <BlockedSessionsPanel Entries="@(_snapshot.BlockedSessions ?? [])" />
+                </ChildContent>
+                <ErrorContent>
+                    <MudPaper Class="@FallbackCardClass" Outlined="true" Elevation="0" data-testid="dashboard-blocked-sessions-fallback">
+                        <p class="section-kicker">Needs Attention</p>
+                        <h2 class="section-title section-title--card">Panel failed</h2>
+                        <p class="section-copy">
+                            Blocked session details are temporarily unavailable.
                         </p>
                     </MudPaper>
                 </ErrorContent>

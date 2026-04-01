@@ -27,10 +27,12 @@ internal static class SessionListDisplay
     {
         return session.Status.ToLowerInvariant() switch
         {
+            _ when session.NeedsAttention => Color.Warning,
             "in progress" => Color.Info,
             "streaming" => Color.Info,
             "finishing" => Color.Info,
             "retrying" => Color.Warning,
+            "blockederror" => Color.Warning,
             "succeeded" => Color.Success,
             "failed" => Color.Error,
             "timedout" => Color.Error,

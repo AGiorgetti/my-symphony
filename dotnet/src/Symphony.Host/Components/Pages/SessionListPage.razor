@@ -146,9 +146,11 @@
         var snapshot = await DashboardStateService.GetSnapshotAsync(cancellationToken);
         var activeSessionsByIssue = snapshot.ActiveSessions
             .ToDictionary(session => session.IssueIdentifier, StringComparer.OrdinalIgnoreCase);
+        var blockedSessionsByIssue = (snapshot.BlockedSessions ?? [])
+            .ToDictionary(session => session.IssueIdentifier, StringComparer.OrdinalIgnoreCase);
 
         var allSessions = SessionActivityStore.GetAllSessions()
-            .Select(session => BuildRow(session, activeSessionsByIssue, snapshot.GeneratedAt))
+            .Select(session => BuildRow(session, activeSessionsByIssue, blockedSessionsByIssue, snapshot.GeneratedAt))
             .ToArray();
 
         _generatedAt = snapshot.GeneratedAt;
@@ -162,6 +164,7 @@
     private static SessionListRowViewModel BuildRow(
         SessionRecord session,
         IReadOnlyDictionary<string, DashboardActiveSessionSnapshot> activeSessionsByIssue,
+        IReadOnlyDictionary<string, DashboardBlockedSessionSnapshot> blockedSessionsByIssue,
         DateTimeOffset generatedAt)
     {
         if (activeSessionsByIssue.TryGetValue(session.IssueIdentifier, out var activeSession))
@@ -170,6 +173,7 @@
                 session.IssueIdentifier,
                 session.IssueUrl,
                 true,
+                false,
                 activeSession.State,
                 session.StartedAt,
                 null,
@@ -182,10 +186,27 @@
                     : activeSession.LastMessage);
         }
 
+        if (blockedSessionsByIssue.TryGetValue(session.IssueIdentifier, out var blockedSession))
+        {
+            var blockedEndedAt = session.EndedAt ?? blockedSession.BlockedAt;
+            return new SessionListRowViewModel(
+                session.IssueIdentifier,
+                session.IssueUrl,
+                false,
+                true,
+                "Needs attention",
+                session.StartedAt,
+                blockedEndedAt,
+                Math.Max((blockedEndedAt - session.StartedAt).TotalSeconds, 0d),
+                blockedSession.ErrorMessage,
+                $"Action: {blockedSession.RequiredUserAction}");
+        }
+
         var endedAt = session.EndedAt ?? generatedAt;
         return new SessionListRowViewModel(
             session.IssueIdentifier,
             session.IssueUrl,
+            false,
             false,
             session.FinalOutcome ?? "Ended",
             session.StartedAt,

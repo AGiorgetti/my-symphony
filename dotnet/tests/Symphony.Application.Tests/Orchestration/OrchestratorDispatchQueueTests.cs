@@ -489,6 +489,110 @@ public sealed class OrchestratorDispatchQueueTests
         Assert.Equal("Session stalled after 360000 ms of Codex inactivity.", retry.Error);
     }
 
+    [Fact]
+    public async Task DispatchWorker_blocks_issue_and_creates_pending_follow_up_action_for_blocking_exception()
+    {
+        var timeProvider = TimeProvider.System;
+        var queue = CreateQueue(maxConcurrentAgents: 1);
+        var registry = CreateRegistry(timeProvider);
+        var attemptHistoryTracker = new AttemptHistoryTracker();
+        var followUpActionRegistry = new FollowUpActionRegistry(timeProvider);
+        var worker = new ThrowingQueuedIssueWorker(
+            new IssueBlockingException(
+                BlockingReasonCode.InputRequired,
+                "Need human confirmation",
+                "Review the prompt and resume the run.",
+                [new FollowUpActionOptionSnapshot("resume", "Resume", "Continue the run after review.")]));
+        var hostedService = CreateHostedService(
+            queue,
+            registry,
+            attemptHistoryTracker,
+            worker,
+            timeProvider,
+            followUpActionRegistry: followUpActionRegistry);
+
+        await hostedService.StartAsync(CancellationToken.None);
+        await queue.QueueAsync(CreateIssue("1", "ABC-1"));
+        await worker.ExecutionAttempted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        await WaitForConditionAsync(() => queue.GetSnapshot().Blocked.Count == 1, TimeSpan.FromSeconds(2));
+        await WaitForConditionAsync(() => followUpActionRegistry.GetAll().Count == 1, TimeSpan.FromSeconds(2));
+        await hostedService.StopAsync(CancellationToken.None);
+
+        var blocked = Assert.Single(queue.GetSnapshot().Blocked);
+        var followUpAction = Assert.Single(followUpActionRegistry.GetAll());
+        var attempt = Assert.Single(attemptHistoryTracker.GetRecentAttempts());
+
+        Assert.Equal("ABC-1", blocked.IssueIdentifier);
+        Assert.Equal(BlockingReasonCode.InputRequired, blocked.ReasonCode);
+        Assert.Equal("Need human confirmation", blocked.ErrorMessage);
+        Assert.Equal(followUpAction.FollowUpActionId, blocked.FollowUpActionId);
+        Assert.False(string.IsNullOrWhiteSpace(blocked.OrchestratorSessionId));
+        Assert.Equal(FollowUpActionStatus.Pending, followUpAction.Status);
+        Assert.Equal("ABC-1", followUpAction.IssueIdentifier);
+        Assert.Equal(blocked.OrchestratorSessionId, followUpAction.SessionId);
+        Assert.Single(followUpAction.Options);
+        Assert.Equal("BlockedError", attempt.Outcome);
+        Assert.Equal("Need human confirmation", attempt.Error);
+        Assert.Equal(blocked.OrchestratorSessionId, attempt.OrchestratorSessionId);
+        Assert.Empty(queue.GetSnapshot().Retrying);
+    }
+
+    [Fact]
+    public async Task FollowUpActionResolutionService_requeues_blocked_issue_when_resolution_succeeds()
+    {
+        var timeProvider = TimeProvider.System;
+        var workflowOptions = CreateWorkflowOptions(maxConcurrentAgents: 1);
+        var workflowOptionsProvider = new StaticWorkflowOptionsProvider(workflowOptions);
+        var queue = CreateQueue(workflowOptionsProvider, timeProvider: timeProvider);
+        var issue = CreateIssue("1", "ABC-1");
+        var trackerClient = CreateTracker(issue);
+        var followUpActionRegistry = new FollowUpActionRegistry(timeProvider);
+        var followUpAction = followUpActionRegistry.CreatePending(
+            issue.Id,
+            issue.Identifier,
+            "orch-123",
+            BlockingReasonCode.InputRequired,
+            "Need human confirmation",
+            "Review the prompt and resume the run.",
+            [new FollowUpActionOptionSnapshot("resume", "Resume", "Continue the run after review.")]);
+
+        queue.BlockAsync(
+            issue,
+            "orch-123",
+            attempt: 2,
+            BlockingReasonCode.InputRequired,
+            "Need human confirmation",
+            "Review the prompt and resume the run.",
+            followUpAction.FollowUpActionId);
+
+        var service = new FollowUpActionResolutionService(
+            followUpActionRegistry,
+            queue,
+            trackerClient,
+            workflowOptionsProvider);
+
+        var result = await service.ResolveAsync(
+            new FollowUpActionResolutionRequest(
+                issue.Identifier,
+                followUpAction.FollowUpActionId,
+                "operator",
+                "resume",
+                "Reviewed and resumed."),
+            CancellationToken.None);
+
+        Assert.Equal(FollowUpActionResolutionStatus.Resolved, result.Status);
+        Assert.True(result.Requeued);
+        Assert.NotNull(result.Action);
+        var resolvedAction = result.Action!;
+        Assert.Equal(FollowUpActionStatus.Resolved, resolvedAction.Status);
+        Assert.Equal("operator", resolvedAction.ResolvedBy);
+        Assert.Equal("resume", resolvedAction.SelectedOptionId);
+        Assert.Equal("Reviewed and resumed.", resolvedAction.Notes);
+        Assert.Null(queue.GetBlockedIssue(issue.Identifier));
+        Assert.Single(queue.GetSnapshot().Queued);
+        Assert.Equal("ABC-1", queue.GetSnapshot().Queued[0].IssueIdentifier);
+    }
+
     private static OrchestratorDispatchQueue CreateQueue(int maxConcurrentAgents)
     {
         return CreateQueue(new StaticWorkflowOptionsProvider(CreateWorkflowOptions(maxConcurrentAgents)));
@@ -543,7 +647,8 @@ public sealed class OrchestratorDispatchQueueTests
         TimeProvider? timeProvider = null,
         IOrchestratorExecutionGate? executionGate = null,
         IIssueTrackerClient? trackerClient = null,
-        IWorkflowOptionsProvider? workflowOptionsProvider = null)
+        IWorkflowOptionsProvider? workflowOptionsProvider = null,
+        FollowUpActionRegistry? followUpActionRegistry = null)
     {
         return new DispatchWorkerBackgroundService(
             queue,
@@ -554,7 +659,8 @@ public sealed class OrchestratorDispatchQueueTests
             workflowOptionsProvider ?? new StaticWorkflowOptionsProvider(CreateWorkflowOptions(maxConcurrentAgents: 1)),
             timeProvider ?? TimeProvider.System,
             queuedIssueWorker,
-            NullLogger<DispatchWorkerBackgroundService>.Instance);
+            NullLogger<DispatchWorkerBackgroundService>.Instance,
+            followUpActionRegistry);
     }
 
     private static RetryDispatchBackgroundService CreateRetryHostedService(

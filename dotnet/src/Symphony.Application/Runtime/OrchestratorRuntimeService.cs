@@ -1,5 +1,6 @@
 using Symphony.Abstractions.Orchestration;
 using Symphony.Application.Polling;
+using Symphony.Application.Orchestration;
 
 namespace Symphony.Application.Runtime;
 
@@ -7,11 +8,13 @@ public sealed class OrchestratorRuntimeService(
     IActiveSessionRegistry activeSessionRegistry,
     IOrchestratorDispatchStatusReader dispatchStatusReader,
     PollingRefreshTrigger pollingRefreshTrigger,
-    TimeProvider timeProvider) : IOrchestratorRuntimeService
+    TimeProvider timeProvider,
+    FollowUpActionRegistry? followUpActionRegistry = null) : IOrchestratorRuntimeService
 {
     public Task<OrchestratorStateSnapshot> GetStateSnapshotAsync(CancellationToken cancellationToken = default)
     {
         var generatedAt = timeProvider.GetUtcNow();
+        var dispatchSnapshot = dispatchStatusReader.GetSnapshot();
         var running = activeSessionRegistry.GetActiveSessions()
             .Select(CreateRunningIssueSnapshot)
             .ToArray();
@@ -20,13 +23,15 @@ public sealed class OrchestratorRuntimeService(
             new OrchestratorStateSnapshot(
                 generatedAt,
                 running,
-                dispatchStatusReader.GetSnapshot().Retrying,
+                dispatchSnapshot.Retrying,
                 new CodexTotalsSnapshot(
                     running.Sum(session => session.InputTokens),
                     running.Sum(session => session.OutputTokens),
                     running.Sum(session => session.TotalTokens),
                     running.Sum(session => Math.Max((generatedAt - session.StartedAt).TotalSeconds, 0d))),
-                RateLimits: null));
+                RateLimits: null,
+                Blocked: dispatchSnapshot.Blocked,
+                FollowUpActions: followUpActionRegistry?.GetAll() ?? Array.Empty<FollowUpActionSnapshot>()));
     }
 
     public Task<OrchestratorIssueSnapshot?> GetIssueSnapshotAsync(
@@ -49,7 +54,10 @@ public sealed class OrchestratorRuntimeService(
                     CreateRunningIssueSnapshot(activeSession),
                     retry: null,
                     activeSession.Error,
-                    CreateRecentEvents(activeSession)));
+                    CreateRecentEvents(activeSession),
+                    orchestratorSessionId: activeSession.OrchestratorSessionId,
+                    blocked: null,
+                    followUpActions: followUpActionRegistry?.GetByIssueIdentifier(activeSession.IssueIdentifier) ?? Array.Empty<FollowUpActionSnapshot>()));
         }
 
         var dispatchSnapshot = dispatchStatusReader.GetSnapshot();
@@ -67,7 +75,29 @@ public sealed class OrchestratorRuntimeService(
                     running: null,
                     retryingIssue,
                     retryingIssue.Error,
-                    []));
+                    [],
+                    orchestratorSessionId: null,
+                    blocked: null,
+                    followUpActions: followUpActionRegistry?.GetByIssueIdentifier(retryingIssue.IssueIdentifier) ?? Array.Empty<FollowUpActionSnapshot>()));
+        }
+
+        var blockedIssue = dispatchSnapshot.Blocked
+            .FirstOrDefault(issue => string.Equals(issue.IssueIdentifier, normalizedIssueIdentifier, StringComparison.OrdinalIgnoreCase));
+        if (blockedIssue is not null)
+        {
+            return Task.FromResult<OrchestratorIssueSnapshot?>(
+                CreateIssueSnapshot(
+                    blockedIssue.IssueIdentifier,
+                    blockedIssue.IssueId,
+                    "blocked_error",
+                    blockedIssue.Attempt,
+                    running: null,
+                    retry: null,
+                    blockedIssue.ErrorMessage,
+                    [],
+                    orchestratorSessionId: blockedIssue.OrchestratorSessionId,
+                    blocked: blockedIssue,
+                    followUpActions: followUpActionRegistry?.GetByIssueIdentifier(blockedIssue.IssueIdentifier) ?? Array.Empty<FollowUpActionSnapshot>()));
         }
 
         var queuedIssue = dispatchSnapshot.Queued
@@ -83,7 +113,10 @@ public sealed class OrchestratorRuntimeService(
                     running: null,
                     retry: null,
                     lastError: null,
-                    []));
+                    [],
+                    orchestratorSessionId: null,
+                    blocked: null,
+                    followUpActions: followUpActionRegistry?.GetByIssueIdentifier(queuedIssue.IssueIdentifier) ?? Array.Empty<FollowUpActionSnapshot>()));
         }
 
         return Task.FromResult<OrchestratorIssueSnapshot?>(null);
@@ -102,7 +135,10 @@ public sealed class OrchestratorRuntimeService(
         RunningIssueSnapshot? running,
         RetryDispatchSnapshot? retry,
         string? lastError,
-        IReadOnlyList<RuntimeEventSnapshot> recentEvents)
+        IReadOnlyList<RuntimeEventSnapshot> recentEvents,
+        string? orchestratorSessionId = null,
+        BlockedDispatchSnapshot? blocked = null,
+        IReadOnlyList<FollowUpActionSnapshot>? followUpActions = null)
     {
         var normalizedAttempt = attempt.GetValueOrDefault();
 
@@ -115,7 +151,10 @@ public sealed class OrchestratorRuntimeService(
             running,
             retry,
             lastError,
-            recentEvents);
+            recentEvents,
+            orchestratorSessionId,
+            blocked,
+            followUpActions ?? Array.Empty<FollowUpActionSnapshot>());
     }
 
     private static RunningIssueSnapshot CreateRunningIssueSnapshot(ActiveSessionSnapshot activeSession)
@@ -132,7 +171,8 @@ public sealed class OrchestratorRuntimeService(
             activeSession.Session?.LastCodexTimestamp,
             activeSession.Session?.CodexInputTokens ?? 0,
             activeSession.Session?.CodexOutputTokens ?? 0,
-            activeSession.Session?.CodexTotalTokens ?? 0);
+            activeSession.Session?.CodexTotalTokens ?? 0,
+            activeSession.OrchestratorSessionId);
     }
 
     private static IReadOnlyList<RuntimeEventSnapshot> CreateRecentEvents(ActiveSessionSnapshot activeSession)

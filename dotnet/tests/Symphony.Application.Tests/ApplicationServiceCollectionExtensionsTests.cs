@@ -71,6 +71,8 @@ public class ApplicationServiceCollectionExtensionsTests
         Assert.NotNull(serviceProvider.GetService<PollingStatusTracker>());
         Assert.NotNull(serviceProvider.GetService<AttemptHistoryTracker>());
         Assert.NotNull(serviceProvider.GetService<RetryDelayPlanner>());
+        Assert.NotNull(serviceProvider.GetService<FollowUpActionRegistry>());
+        Assert.NotNull(serviceProvider.GetService<FollowUpActionResolutionService>());
         Assert.IsType<ActiveSessionRegistry>(serviceProvider.GetRequiredService<IActiveSessionRegistry>());
         Assert.IsType<OrchestratorControlService>(serviceProvider.GetRequiredService<IOrchestratorControl>());
         Assert.IsType<OrchestratorControlService>(serviceProvider.GetRequiredService<IOrchestratorControlStatusReader>());

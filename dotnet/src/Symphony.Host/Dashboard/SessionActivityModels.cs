@@ -6,6 +6,7 @@ public enum SessionActivityKind
     AgentMessage,
     DebugMessage,
     ProgressUpdate,
+    AttentionRequired,
     Warning,
     Error,
     Outcome

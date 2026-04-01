@@ -8,7 +8,9 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using MudBlazor.Services;
 using Symphony.Abstractions.Orchestration;
+using Symphony.Abstractions.Trackers;
 using Symphony.Application.Configuration;
+using Symphony.Application.Orchestration;
 using Symphony.Application.Polling;
 using Symphony.Application.Runtime;
 using Symphony.Host.Api;
@@ -16,6 +18,7 @@ using Symphony.Host.Components;
 using Symphony.Host.Configuration;
 using Symphony.Host.Dashboard;
 using Symphony.Host.Theming;
+using Symphony.Domain.Issues;
 
 namespace Symphony.Host.IntegrationTests;
 
@@ -183,6 +186,36 @@ public sealed class SessionDetailPageIntegrationTests
 
         Assert.Equal(HttpStatusCode.OK, pageResponse.StatusCode);
         Assert.Equal(HttpStatusCode.Accepted, apiResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task Session_detail_page_renders_follow_up_action_panel_for_blocked_issue()
+    {
+        var store = new SessionActivityStore(NullLogger<SessionActivityStore>.Instance);
+        var startedAt = new DateTimeOffset(2026, 3, 20, 9, 0, 0, TimeSpan.Zero);
+        store.RecordSessionStart("ABC-9", startedAt, "https://github.com/AGiorgetti/my-symphony/issues/ABC-9");
+        store.RecordActivity(
+            "ABC-9",
+            new SessionActivityEntry(
+                SessionActivityKind.AttentionRequired,
+                startedAt.AddMinutes(2),
+                "Follow-up action created",
+                "Need a human choice Action: Review the requested manual decision, then resolve the follow-up action to resume the run."));
+        using var app = await StartSessionDetailApplicationAsync(
+            store,
+            new StaticDashboardStateService(CreateSnapshot(activeSessions: [])),
+            CreateBlockedRuntimeService());
+        var client = CreateHttpClient(app);
+
+        var response = await client.GetAsync("/sessions/ABC-9");
+        var html = await response.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains("data-testid=\"session-detail-follow-up-action-panel\"", html, StringComparison.Ordinal);
+        Assert.Contains("Needs attention", html, StringComparison.Ordinal);
+        Assert.Contains("Need a human choice", html, StringComparison.Ordinal);
+        Assert.Contains("Review the requested manual decision, then resolve the follow-up action to resume the run.", html, StringComparison.Ordinal);
+        Assert.Contains("orch-999", html, StringComparison.Ordinal);
     }
 
     private static SessionActivityStore CreateStoreWithActiveSession()
@@ -356,41 +389,8 @@ public sealed class SessionDetailPageIntegrationTests
         builder.Services.AddScoped<IThemeService, ThemeService>();
         builder.Services.AddScoped<ThemeService>();
         builder.Services.AddSingleton<IWorkflowOptionsProvider>(
-            new StaticWorkflowOptionsProvider(
-                new WorkflowServiceOptions(
-                    new WorkflowTrackerOptions(
-                        "github",
-                        "https://api.github.com",
-                        "token",
-                        null,
-                        "owner/repo",
-                        null,
-                        null,
-                        ["Todo"],
-                        ["Done"]),
-                    new WorkflowPollingOptions(1_000),
-                    new WorkflowWorkspaceOptions(Path.Combine(Path.GetTempPath(), "symphony-tests")),
-                    new WorkflowHookOptions(
-                        null,
-                        null,
-                        null,
-                        null,
-                        60_000),
-                    new WorkflowAgentOptions(
-                        1,
-                        20,
-                        300_000,
-                        new Dictionary<string, int>(StringComparer.Ordinal),
-                        false,
-                        "exec:agent"),
-                    new WorkflowCodexOptions(
-                        "codex app-server",
-                        null,
-                        null,
-                        null,
-                        3_600_000,
-                        5_000,
-                        300_000))));
+            CreateWorkflowOptionsProvider());
+        builder.Services.AddSingleton(CreateFollowUpActionResolutionService());
 
         var app = builder.Build();
         app.UseStaticFiles();
@@ -430,6 +430,52 @@ public sealed class SessionDetailPageIntegrationTests
                 RecentEvents: []));
     }
 
+    private static StaticRuntimeService CreateBlockedRuntimeService()
+    {
+        var blockedAt = new DateTimeOffset(2026, 3, 20, 9, 2, 0, TimeSpan.Zero);
+
+        return new StaticRuntimeService(
+            new OrchestratorIssueSnapshot(
+                "ABC-9",
+                "9",
+                "blocked_error",
+                RestartCount: 1,
+                CurrentRetryAttempt: 2,
+                Running: null,
+                Retry: null,
+                LastError: "Need a human choice",
+                RecentEvents: [],
+                OrchestratorSessionId: "orch-999",
+                Blocked: new BlockedDispatchSnapshot(
+                    "9",
+                    "ABC-9",
+                    "orch-999",
+                    2,
+                    blockedAt,
+                    BlockingReasonCode.ManualDecisionRequired,
+                    "Need a human choice",
+                    "Review the requested manual decision, then resolve the follow-up action to resume the run.",
+                    "fai-9"),
+                FollowUpActions:
+                [
+                    new FollowUpActionSnapshot(
+                        "fai-9",
+                        "9",
+                        "ABC-9",
+                        "orch-999",
+                        blockedAt,
+                        BlockingReasonCode.ManualDecisionRequired,
+                        "Need a human choice",
+                        "Review the requested manual decision, then resolve the follow-up action to resume the run.",
+                        [new FollowUpActionOptionSnapshot("resume", "Resume", "Continue after review.")],
+                        FollowUpActionStatus.Pending,
+                        ResolvedBy: null,
+                        ResolvedAt: null,
+                        SelectedOptionId: null,
+                        Notes: null)
+                ]));
+    }
+
     private sealed class StaticDashboardStateService(DashboardSnapshot snapshot) : IDashboardStateService
     {
         public Task<DashboardSnapshot> GetSnapshotAsync(CancellationToken cancellationToken = default)
@@ -438,11 +484,88 @@ public sealed class SessionDetailPageIntegrationTests
         }
     }
 
+    private static StaticWorkflowOptionsProvider CreateWorkflowOptionsProvider()
+    {
+        return new StaticWorkflowOptionsProvider(
+            new WorkflowServiceOptions(
+                new WorkflowTrackerOptions(
+                    "github",
+                    "https://api.github.com",
+                    "token",
+                    null,
+                    "owner/repo",
+                    null,
+                    null,
+                    ["Todo"],
+                    ["Done"]),
+                new WorkflowPollingOptions(1_000),
+                new WorkflowWorkspaceOptions(Path.Combine(Path.GetTempPath(), "symphony-tests")),
+                new WorkflowHookOptions(
+                    null,
+                    null,
+                    null,
+                    null,
+                    60_000),
+                new WorkflowAgentOptions(
+                    1,
+                    20,
+                    300_000,
+                    new Dictionary<string, int>(StringComparer.Ordinal),
+                    false,
+                    "exec:agent"),
+                new WorkflowCodexOptions(
+                    "codex app-server",
+                    null,
+                    null,
+                    null,
+                    3_600_000,
+                    5_000,
+                    300_000)));
+    }
+
+    private static FollowUpActionResolutionService CreateFollowUpActionResolutionService()
+    {
+        var workflowOptionsProvider = CreateWorkflowOptionsProvider();
+        var queue = new OrchestratorDispatchQueue(
+            workflowOptionsProvider,
+            new RetryDelayPlanner(() => 1d),
+            TimeProvider.System,
+            NullLogger<OrchestratorDispatchQueue>.Instance);
+
+        return new FollowUpActionResolutionService(
+            new FollowUpActionRegistry(TimeProvider.System),
+            queue,
+            new StubIssueTrackerClient(),
+            workflowOptionsProvider);
+    }
+
     private sealed class StaticWorkflowOptionsProvider(WorkflowServiceOptions workflowOptions) : IWorkflowOptionsProvider
     {
         public Task<WorkflowServiceOptions> GetCurrentAsync(CancellationToken cancellationToken = default)
         {
             return Task.FromResult(workflowOptions);
+        }
+    }
+
+    private sealed class StubIssueTrackerClient : IIssueTrackerClient
+    {
+        public Task<IReadOnlyList<Issue>> FetchCandidateIssuesAsync(CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<IReadOnlyList<Issue>>(Array.Empty<Issue>());
+        }
+
+        public Task<IReadOnlyList<Issue>> FetchIssuesByStatesAsync(
+            IReadOnlyCollection<string> stateNames,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<IReadOnlyList<Issue>>(Array.Empty<Issue>());
+        }
+
+        public Task<IReadOnlyList<Issue>> FetchIssueStatesByIdsAsync(
+            IReadOnlyCollection<string> issueIds,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<IReadOnlyList<Issue>>(Array.Empty<Issue>());
         }
     }
 

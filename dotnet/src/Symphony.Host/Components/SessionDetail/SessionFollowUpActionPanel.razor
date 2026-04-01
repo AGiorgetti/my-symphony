@@ -1,0 +1,63 @@
+@using Symphony.Abstractions.Orchestration
+
+<div data-testid="session-detail-follow-up-action-panel">
+    <MudPaper Class="@PanelClass" Outlined="true" Elevation="0">
+        <div class="panel-header">
+            <div class="panel-header__content">
+                <p class="section-kicker">Needs Attention</p>
+                <h2 class="section-title section-title--panel">Follow-up action</h2>
+                <p class="section-copy">
+                    This session is blocked until the pending follow-up action is resolved.
+                </p>
+            </div>
+            <StatusPill Text="@PendingAction.Status.ToString()" Color="Color.Warning" />
+        </div>
+
+        <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true">
+            <strong>@PendingAction.ReasonCode</strong> @PendingAction.ErrorMessage
+        </MudAlert>
+
+        <div class="detail-metrics-grid detail-metrics-grid--metadata">
+            <div class="detail-metric-card">
+                <p class="detail-metric-label">Required action</p>
+                <p class="detail-metric-value">@PendingAction.RequiredUserAction</p>
+            </div>
+            <div class="detail-metric-card">
+                <p class="detail-metric-label">Session linkage</p>
+                <p class="detail-metric-value detail-metric-value--break">@BlockedIssue.OrchestratorSessionId</p>
+            </div>
+        </div>
+
+        @if (PendingAction.Options.Count > 0)
+        {
+            <div class="detail-note">
+                Options: @string.Join(", ", PendingAction.Options.Select(option => option.Label))
+            </div>
+        }
+
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Warning"
+                   Disabled="@IsResolving"
+                   OnClick="@(() => ResolveRequested.InvokeAsync())">
+            Resolve and resume
+        </MudButton>
+    </MudPaper>
+</div>
+
+@code {
+    private const string PanelClass = "page-card page-card--tight";
+
+    [Parameter]
+    [EditorRequired]
+    public required BlockedDispatchSnapshot BlockedIssue { get; set; }
+
+    [Parameter]
+    [EditorRequired]
+    public required FollowUpActionSnapshot PendingAction { get; set; }
+
+    [Parameter]
+    public bool IsResolving { get; set; }
+
+    [Parameter]
+    public EventCallback ResolveRequested { get; set; }
+}

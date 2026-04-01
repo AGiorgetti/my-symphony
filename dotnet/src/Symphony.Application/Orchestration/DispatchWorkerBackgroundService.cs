@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Symphony.Abstractions.Orchestration;
 using Symphony.Abstractions.Trackers;
 using Symphony.Application.Configuration;
 using Symphony.Application.Runtime;
@@ -17,7 +18,8 @@ public sealed class DispatchWorkerBackgroundService(
     IWorkflowOptionsProvider workflowOptionsProvider,
     TimeProvider timeProvider,
     IQueuedIssueWorker queuedIssueWorker,
-    ILogger<DispatchWorkerBackgroundService> logger) : BackgroundService
+    ILogger<DispatchWorkerBackgroundService> logger,
+    FollowUpActionRegistry? followUpActionRegistry = null) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -88,7 +90,8 @@ public sealed class DispatchWorkerBackgroundService(
                 "Succeeded",
                 attemptStartedAt,
                 timeProvider.GetUtcNow(),
-                sessionId: executionContext.SessionId);
+                sessionId: executionContext.SessionId,
+                orchestratorSessionId: executionContext.OrchestratorSessionId);
             var continuationIssue = await TryResolveContinuationIssueAsync(workItem.Issue, cancellationToken).ConfigureAwait(false);
             if (continuationIssue is not null)
             {
@@ -111,7 +114,8 @@ public sealed class DispatchWorkerBackgroundService(
                 attemptStartedAt,
                 timeProvider.GetUtcNow(),
                 stallError,
-                executionContext.SessionId);
+                executionContext.SessionId,
+                executionContext.OrchestratorSessionId);
             logger.LogWarning(
                 stallException,
                 "dispatch_execution stalled issue_id={issue_id} issue_identifier={issue_identifier} session_id={session_id} reason=stall outcome=stalled",
@@ -135,7 +139,8 @@ public sealed class DispatchWorkerBackgroundService(
                 attemptStartedAt,
                 timeProvider.GetUtcNow(),
                 cancellationError,
-                executionContext.SessionId);
+                executionContext.SessionId,
+                executionContext.OrchestratorSessionId);
             logger.LogInformation(
                 "dispatch_execution canceled issue_id={issue_id} issue_identifier={issue_identifier} session_id={session_id} reason=reconciliation outcome=canceled",
                 workItem.Issue.Id,
@@ -161,7 +166,8 @@ public sealed class DispatchWorkerBackgroundService(
                 attemptStartedAt,
                 timeProvider.GetUtcNow(),
                 exception.Message,
-                executionContext.SessionId);
+                executionContext.SessionId,
+                executionContext.OrchestratorSessionId);
             logger.LogWarning(
                 exception,
                 "dispatch_execution failed issue_id={issue_id} issue_identifier={issue_identifier} session_id={session_id} reason=non_transient outcome=failed_no_retry",
@@ -180,7 +186,8 @@ public sealed class DispatchWorkerBackgroundService(
                 attemptStartedAt,
                 timeProvider.GetUtcNow(),
                 exception.Message,
-                executionContext.SessionId);
+                executionContext.SessionId,
+                executionContext.OrchestratorSessionId);
             logger.LogWarning(
                 exception,
                 "dispatch_execution timed_out issue_id={issue_id} issue_identifier={issue_identifier} session_id={session_id} reason=timeout outcome=timed_out",
@@ -189,6 +196,31 @@ public sealed class DispatchWorkerBackgroundService(
                 executionContext.SessionId);
             await dispatchQueue.ScheduleFailureRetryAsync(workItem, exception, cancellationToken).ConfigureAwait(false);
             executionLease.PreserveClaimForRetry();
+        }
+        catch (IssueBlockingException exception)
+        {
+            await HandleBlockedIssueAsync(
+                    executionContext,
+                    workItem,
+                    executionLease,
+                    exception,
+                    attemptStartedAt,
+                    followUpActionRegistry ?? new FollowUpActionRegistry(timeProvider))
+                .ConfigureAwait(false);
+        }
+        catch (InvalidOperationException exception) when (TryCreateProcessStartBlockingException(exception, out _))
+        {
+            var blockingException = TryCreateProcessStartBlockingException(exception, out var resolvedException)
+                ? resolvedException
+                : throw new InvalidOperationException("Expected blocking exception to be available.");
+            await HandleBlockedIssueAsync(
+                    executionContext,
+                    workItem,
+                    executionLease,
+                    blockingException,
+                    attemptStartedAt,
+                    followUpActionRegistry ?? new FollowUpActionRegistry(timeProvider))
+                .ConfigureAwait(false);
         }
         catch (Exception exception)
         {
@@ -201,7 +233,8 @@ public sealed class DispatchWorkerBackgroundService(
                 attemptStartedAt,
                 timeProvider.GetUtcNow(),
                 exception.Message,
-                executionContext.SessionId);
+                executionContext.SessionId,
+                executionContext.OrchestratorSessionId);
             logger.LogError(
                 exception,
                 "dispatch_execution failed issue_id={issue_id} issue_identifier={issue_identifier} session_id={session_id} reason=worker_exception outcome=failed",
@@ -211,6 +244,76 @@ public sealed class DispatchWorkerBackgroundService(
             await dispatchQueue.ScheduleFailureRetryAsync(workItem, exception, cancellationToken).ConfigureAwait(false);
             executionLease.PreserveClaimForRetry();
         }
+    }
+
+    private async Task HandleBlockedIssueAsync(
+        QueuedIssueExecutionContext executionContext,
+        OrchestratorDispatchQueue.DispatchQueueWorkItem workItem,
+        OrchestratorDispatchQueue.ExecutionLease executionLease,
+        IssueBlockingException exception,
+        DateTimeOffset attemptStartedAt,
+        FollowUpActionRegistry followUpActionRegistry)
+    {
+        executionContext.UpdateStatus(RunAttemptStatus.BlockedError, exception.Message);
+        attemptHistoryTracker.Record(
+            workItem.Issue.Id,
+            workItem.Issue.Identifier,
+            workItem.Attempt,
+            "BlockedError",
+            attemptStartedAt,
+            timeProvider.GetUtcNow(),
+            exception.Message,
+            executionContext.SessionId,
+            executionContext.OrchestratorSessionId);
+
+        var followUpAction = followUpActionRegistry.CreatePending(
+            executionContext.Issue.Id,
+            executionContext.Issue.Identifier,
+            executionContext.OrchestratorSessionId,
+            exception.ReasonCode,
+            exception.Message,
+            exception.RequiredUserAction,
+            exception.Options);
+
+        dispatchQueue.BlockAsync(
+            executionContext.Issue,
+            executionContext.OrchestratorSessionId,
+            workItem.Attempt,
+            exception.ReasonCode,
+            exception.Message,
+            exception.RequiredUserAction,
+            followUpAction.FollowUpActionId);
+        executionLease.MarkBlocked();
+
+        logger.LogWarning(
+            exception,
+            "dispatch_execution blocked issue_id={issue_id} issue_identifier={issue_identifier} orchestrator_session_id={orchestrator_session_id} session_id={session_id} reason_code={reason_code} follow_up_action_id={follow_up_action_id} outcome=blocked_error",
+            workItem.Issue.Id,
+            workItem.Issue.Identifier,
+            executionContext.OrchestratorSessionId,
+            executionContext.SessionId,
+            exception.ReasonCode,
+            followUpAction.FollowUpActionId);
+
+        await Task.CompletedTask;
+    }
+
+    private static bool TryCreateProcessStartBlockingException(
+        InvalidOperationException exception,
+        out IssueBlockingException blockingException)
+    {
+        if (exception.Message.StartsWith("Failed to start process", StringComparison.Ordinal))
+        {
+            blockingException = new IssueBlockingException(
+                BlockingReasonCode.ToolUnavailable,
+                exception.Message,
+                "Install or expose the required process on PATH, then resolve the follow-up action to resume the run.",
+                innerException: exception);
+            return true;
+        }
+
+        blockingException = null!;
+        return false;
     }
 
     private async Task<Issue?> TryResolveContinuationIssueAsync(Issue issue, CancellationToken cancellationToken)

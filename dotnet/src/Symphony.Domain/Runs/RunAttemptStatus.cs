@@ -9,6 +9,7 @@ public enum RunAttemptStatus
     StreamingTurn,
     Finishing,
     Succeeded,
+    BlockedError,
     Failed,
     TimedOut,
     Stalled,

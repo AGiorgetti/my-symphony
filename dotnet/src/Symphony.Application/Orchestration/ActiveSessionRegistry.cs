@@ -99,6 +99,7 @@ public sealed class ActiveSessionRegistry(
         var cancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(hostCancellationToken);
         var entry = new ActiveSessionEntry(issue, attempt, startedAt, cancellationTokenSource)
         {
+            OrchestratorSessionId = CreateOrchestratorSessionId(issue.Identifier),
             Status = RunAttemptStatus.InitializingSession
         };
 
@@ -289,6 +290,7 @@ public sealed class ActiveSessionRegistry(
         return new ActiveSessionSnapshot(
             entry.Issue.Id,
             entry.Issue.Identifier,
+            entry.OrchestratorSessionId,
             entry.Issue.State,
             entry.Attempt,
             entry.StartedAt,
@@ -300,6 +302,17 @@ public sealed class ActiveSessionRegistry(
     private static string NormalizeIssueId(string issueId)
     {
         return issueId.Trim().ToUpperInvariant();
+    }
+
+    private static string CreateOrchestratorSessionId(string issueIdentifier)
+    {
+        var normalizedIdentifier = new string(
+            issueIdentifier
+                .Trim()
+                .Select(character => char.IsLetterOrDigit(character) ? char.ToLowerInvariant(character) : '-')
+                .ToArray())
+            .Trim('-');
+        return $"{normalizedIdentifier}-{Guid.NewGuid():N}";
     }
 
     public sealed class TrackedActiveSession : IDisposable
@@ -331,6 +344,7 @@ public sealed class ActiveSessionRegistry(
         {
             return new QueuedIssueExecutionContext(
                 _entry.Issue,
+                _entry.OrchestratorSessionId,
                 _entry.Attempt,
                 CancellationToken,
                 issue => _owner.UpdateIssue(_entry, issue),
@@ -358,6 +372,8 @@ public sealed class ActiveSessionRegistry(
         public Issue Issue { get; set; } = issue;
 
         public int? Attempt { get; } = attempt;
+
+        public required string OrchestratorSessionId { get; init; }
 
         public DateTimeOffset StartedAt { get; } = startedAt;
 
