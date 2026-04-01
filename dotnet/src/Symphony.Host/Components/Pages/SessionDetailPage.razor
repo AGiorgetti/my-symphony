@@ -7,19 +7,16 @@
 @using Symphony.Application.Runtime
 @using Symphony.Host.Components.SessionDetail
 @using Symphony.Host.Configuration
-@inject IDashboardStateService DashboardStateService
-@inject IOrchestratorRuntimeService OrchestratorRuntimeService
-@inject ISessionActivityStore SessionActivityStore
+@inject IDashboardPageDataService DashboardPageDataService
 @inject IOptions<DashboardUiOptions> DashboardUiOptions
-@inject FollowUpActionResolutionService FollowUpActionResolutionService
 @inject ISnackbar Snackbar
 
 <main class="page-shell page-stack">
     <div data-testid="session-detail-breadcrumb">
         <nav class="page-breadcrumb">
-            <a href="/" class="page-breadcrumb__link">Home</a>
+            <a href="@DashboardPageDataService.BuildLink("/", _mode)" class="page-breadcrumb__link">Home</a>
             <span>/</span>
-            <a href="/sessions" class="page-breadcrumb__link">Sessions</a>
+            <a href="@DashboardPageDataService.BuildLink("/sessions", _mode)" class="page-breadcrumb__link">Sessions</a>
             <span>/</span>
             <span class="page-breadcrumb__current">@_requestedIdentifier</span>
         </nav>
@@ -79,6 +76,9 @@
     [Parameter]
     public string Identifier { get; set; } = string.Empty;
 
+    [SupplyParameterFromQuery(Name = "mode")]
+    public string? Mode { get; set; }
+
     private PeriodicTimer? _refreshTimer;
     private CancellationTokenSource? _refreshCancellationTokenSource;
     private Task? _refreshLoopTask;
@@ -87,6 +87,7 @@
     private bool _isResolvingFollowUpAction;
     private string _requestedIdentifier = string.Empty;
     private string? _refreshErrorMessage;
+    private DashboardPageMode _mode = new(DashboardDataMode.Live);
     private SessionHeaderDisplayModel? _header;
     private SessionActivityTimelineModel? _timeline;
     private SessionMetadataPanelModel? _metadata;
@@ -98,6 +99,7 @@
         await StopRefreshLoopAsync();
 
         _requestedIdentifier = Identifier?.Trim() ?? string.Empty;
+        _mode = DashboardPageDataService.ResolveMode(Mode);
         _isLoading = true;
         _refreshErrorMessage = null;
 
@@ -182,7 +184,7 @@
     {
         var session = string.IsNullOrWhiteSpace(_requestedIdentifier)
             ? null
-            : SessionActivityStore.GetSession(_requestedIdentifier);
+            : DashboardPageDataService.GetSession(_mode, _requestedIdentifier);
 
         if (session is null)
         {
@@ -194,16 +196,16 @@
             return;
         }
 
-        var snapshot = await DashboardStateService.GetSnapshotAsync(cancellationToken);
+        var snapshot = await DashboardPageDataService.GetDashboardSnapshotAsync(_mode, cancellationToken);
         var activeSession = snapshot.ActiveSessions
             .FirstOrDefault(candidate => string.Equals(candidate.IssueIdentifier, session.IssueIdentifier, StringComparison.OrdinalIgnoreCase));
-        var issueSnapshot = await OrchestratorRuntimeService.GetIssueSnapshotAsync(session.IssueIdentifier, cancellationToken);
+        var issueSnapshot = await DashboardPageDataService.GetIssueSnapshotAsync(_mode, session.IssueIdentifier, cancellationToken);
         _pendingFollowUpAction = (issueSnapshot?.FollowUpActions ?? Array.Empty<FollowUpActionSnapshot>())
             .FirstOrDefault(action => action.Status == FollowUpActionStatus.Pending);
         _blockedIssue = issueSnapshot?.Blocked;
 
         _header = BuildHeader(session, issueSnapshot, _pendingFollowUpAction);
-        _timeline = BuildTimeline(session, SessionActivityStore.GetActivities(session.IssueIdentifier));
+        _timeline = BuildTimeline(session, DashboardPageDataService.GetActivities(_mode, session.IssueIdentifier));
         _metadata = BuildMetadata(session, activeSession, issueSnapshot, snapshot);
         _isSessionActive = session.IsActive;
         _refreshErrorMessage = null;
@@ -339,7 +341,8 @@
         try
         {
             var selectedOptionId = _pendingFollowUpAction.Options.FirstOrDefault()?.OptionId ?? "resume";
-            var result = await FollowUpActionResolutionService.ResolveAsync(
+            var result = await DashboardPageDataService.ResolveFollowUpActionAsync(
+                _mode,
                 new FollowUpActionResolutionRequest(
                     _requestedIdentifier,
                     _pendingFollowUpAction.FollowUpActionId,

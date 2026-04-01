@@ -2,8 +2,7 @@
 @implements IAsyncDisposable
 @using System.Globalization
 @using Symphony.Host.Components.Sessions
-@inject IDashboardStateService DashboardStateService
-@inject ISessionActivityStore SessionActivityStore
+@inject IDashboardPageDataService DashboardPageDataService
 
 <main class="page-shell page-stack">
     @if (_isLoading)
@@ -43,13 +42,13 @@
                      Rounded="true"
                      ApplyEffectsToContainer="true">
                 <MudTabPanel Text="@($"All ({_allSessions.Count})")">
-                    <SessionListTable Sessions="_allSessions" />
+                    <SessionListTable Sessions="_allSessions" Mode="_mode" />
                 </MudTabPanel>
                 <MudTabPanel Text="@($"Active ({_activeSessions.Count})")">
-                    <SessionListTable Sessions="_activeSessions" />
+                    <SessionListTable Sessions="_activeSessions" Mode="_mode" />
                 </MudTabPanel>
                 <MudTabPanel Text="@($"Ended ({_endedSessions.Count})")">
-                    <SessionListTable Sessions="_endedSessions" />
+                    <SessionListTable Sessions="_endedSessions" Mode="_mode" />
                 </MudTabPanel>
             </MudTabs>
         </MudPaper>
@@ -64,19 +63,36 @@
     private Task? _refreshLoopTask;
     private bool _isLoading = true;
     private int _activeTabIndex;
+    private DashboardPageMode _mode = new(DashboardDataMode.Live);
     private DateTimeOffset? _generatedAt;
     private string? _refreshErrorMessage;
     private IReadOnlyList<SessionListRowViewModel> _allSessions = [];
     private IReadOnlyList<SessionListRowViewModel> _activeSessions = [];
     private IReadOnlyList<SessionListRowViewModel> _endedSessions = [];
 
+    [SupplyParameterFromQuery(Name = "mode")]
+    public string? Mode { get; set; }
+
     protected override async Task OnInitializedAsync()
     {
+        _mode = DashboardPageDataService.ResolveMode(Mode);
         await RefreshAsync();
 
         _refreshCancellationTokenSource = new CancellationTokenSource();
         _refreshTimer = new PeriodicTimer(TimeSpan.FromSeconds(5));
         _refreshLoopTask = RunRefreshLoopAsync(_refreshCancellationTokenSource.Token);
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var resolvedMode = DashboardPageDataService.ResolveMode(Mode);
+        if (resolvedMode == _mode)
+        {
+            return;
+        }
+
+        _mode = resolvedMode;
+        await RefreshAsync();
     }
 
     public async ValueTask DisposeAsync()
@@ -143,13 +159,13 @@
 
     private async Task RefreshAsync(CancellationToken cancellationToken = default)
     {
-        var snapshot = await DashboardStateService.GetSnapshotAsync(cancellationToken);
+        var snapshot = await DashboardPageDataService.GetDashboardSnapshotAsync(_mode, cancellationToken);
         var activeSessionsByIssue = snapshot.ActiveSessions
             .ToDictionary(session => session.IssueIdentifier, StringComparer.OrdinalIgnoreCase);
         var blockedSessionsByIssue = (snapshot.BlockedSessions ?? [])
             .ToDictionary(session => session.IssueIdentifier, StringComparer.OrdinalIgnoreCase);
 
-        var allSessions = SessionActivityStore.GetAllSessions()
+        var allSessions = DashboardPageDataService.GetAllSessions(_mode)
             .Select(session => BuildRow(session, activeSessionsByIssue, blockedSessionsByIssue, snapshot.GeneratedAt))
             .ToArray();
 

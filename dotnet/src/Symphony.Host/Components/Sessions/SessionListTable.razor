@@ -29,7 +29,7 @@ else
                     <MudTd DataLabel="Issue">
                                 <div class="session-table-link-group">
                                     <a class="session-table-link"
-                                       href="/sessions/@Uri.EscapeDataString(context.IssueIdentifier)">
+                                       href="@DashboardPageLinks.WithMode($"/sessions/{Uri.EscapeDataString(context.IssueIdentifier)}", Mode)">
                                         @context.IssueIdentifier
                                     </a>
                                     @if (!string.IsNullOrWhiteSpace(context.IssueUrl))
@@ -72,4 +72,8 @@ else
     [Parameter]
     [EditorRequired]
     public required IReadOnlyList<SessionListRowViewModel> Sessions { get; set; }
+
+    [Parameter]
+    [EditorRequired]
+    public required DashboardPageMode Mode { get; set; }
 }

@@ -184,6 +184,7 @@ In `AddSymphonyHost`:
 
 - call `builder.Services.AddMudServices()`
 - register `ISessionActivityStore` / `SessionActivityStore`
+- register the page-facing dashboard/session data facade and fake-data mode resolver
 - register theme services used by the shell
 
 `MudThemeProvider` and `MudSnackbarProvider` are hosted by `MainLayout.razor`.
@@ -224,7 +225,7 @@ The shell is responsible for:
 - orchestrator start/stop controls
 - theme switcher
 - `ErrorBoundary` around `@Body`
-- periodic polling of `IDashboardStateService` so shell indicators remain current
+- periodic polling of the page-facing dashboard/session data facade so shell indicators remain current for both live and fake page modes
 
 ### 6.3 Sidebar Rules
 
@@ -296,6 +297,10 @@ Reader API:
 
 All pages render inside `MainLayout`.
 
+When `Dashboard:EnableFakeDataMode` is enabled, these routes may also be opened with `?mode=fake`
+for host-only UI validation. Internal navigation preserves the `mode` query while moving between
+dashboard, session list, and session detail pages.
+
 ### 8.2 Dashboard Page (`/`)
 
 Sections:
@@ -325,8 +330,7 @@ Sections:
 
 Data sources:
 
-- `ISessionActivityStore` for active and ended session inventory
-- `IDashboardStateService` for current live enrichment
+- the page-facing dashboard/session data facade for both live and fake inventory/enrichment
 
 Auto-refresh: 5 seconds.
 
@@ -443,22 +447,35 @@ Components/
 ## 12. Data Flow Summary
 
 ```
-Orchestrator runtime + attempt history
-        |
-        v
-DashboardStateService.GetSnapshotAsync()
-        |   +--- snapshot diff
-        |               |
-        |               v
-        |       SessionActivityStore
-        |               |
-        |    +----------+------------------+
-        v    v                             v
-DashboardPage      SessionListPage     SessionDetailPage
-(snapshot dto)   (session inventory)   (timeline + metadata)
+          +--------------------------- live ---------------------------+
+          |                                                            |
+Orchestrator runtime + attempt history                                 |
+        |                                                              |
+        v                                                              |
+DashboardStateService.GetSnapshotAsync()                               |
+        |   +--- snapshot diff                                         |
+        |               |                                              |
+        |               v                                              |
+        |       SessionActivityStore                                   |
+        |                                                              |
+        +---------------------------+----------------------------------+
+                                    |
+                                    v
+                       Dashboard/session page data facade
+                                    ^
+                                    |
+          +--------------------------- fake ---------------------------+
+          |                                                            |
+          |    FakeDashboardPageDataSource (in-memory canned dataset)   |
+          +------------------------------------------------------------+
+                                    |
+                    +---------------+------------------+
+                    v               v                  v
+               DashboardPage   SessionListPage   SessionDetailPage
 ```
 
-`DashboardStateService` remains the single write path into `SessionActivityStore`.
+`DashboardStateService` remains the single write path into the live `SessionActivityStore`. Fake
+mode uses its own host-only in-memory dataset and never mutates the live runtime or API state.
 
 ---
 

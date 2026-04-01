@@ -2,7 +2,7 @@
 
 <ErrorBoundary>
     <ChildContent>
-        <DashboardPageContent />
+        <DashboardPageContent RequestedMode="@Mode" />
     </ChildContent>
     <ErrorContent>
         <main class="page-shell">
@@ -16,3 +16,8 @@
         </main>
     </ErrorContent>
 </ErrorBoundary>
+
+@code {
+    [SupplyParameterFromQuery(Name = "mode")]
+    public string? Mode { get; set; }
+}

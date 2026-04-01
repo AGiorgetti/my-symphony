@@ -74,7 +74,7 @@ public sealed class ThemeSwitcherTests : BunitContext
         };
 
         Services.AddSingleton<IThemeService>(themeService);
-        Services.AddSingleton<IDashboardStateService>(new StaticDashboardStateService());
+        Services.AddDashboardPageDataServices(new StaticDashboardStateService());
         Services.AddSingleton<IOrchestratorControl>(new TestOrchestratorControl());
 
         var cut = Render<MainLayout>(
@@ -94,7 +94,7 @@ public sealed class ThemeSwitcherTests : BunitContext
         var dashboardStateService = new MutableDashboardStateService(() => orchestratorControl.State);
 
         Services.AddSingleton<IThemeService>(themeService);
-        Services.AddSingleton<IDashboardStateService>(dashboardStateService);
+        Services.AddDashboardPageDataServices(dashboardStateService);
         Services.AddSingleton<IOrchestratorControl>(orchestratorControl);
 
         var cut = Render<MainLayout>(

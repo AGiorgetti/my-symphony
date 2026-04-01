@@ -51,6 +51,7 @@ This version covers:
 - session detail pages
 - browsing session messages, updates, and outcomes
 - switching between the built-in dashboard themes for the current browser session
+- an opt-in local fake-data view mode for validating the dashboard and session pages without live sessions
 
 This version does not require:
 
@@ -112,6 +113,10 @@ The dashboard should make it easy to notice:
 
 The dashboard theme preference should persist for the current browser via local storage so the
 selected palette is restored after refresh.
+
+When a local fake-data validation mode is enabled by the host configuration, the dashboard may also
+render a built-in representative fake dataset from a route-level toggle such as `?mode=fake`. This
+mode is for local UI validation only and must not change the live orchestrator or API state.
 
 ### 6.2 Session detail page
 
@@ -228,6 +233,10 @@ The detail view should include:
 - warnings and errors when present
 - a dedicated follow-up-action panel when the session is blocked, including the reason, required operator action, and a clear resolve control
 
+When the host provides a local fake-data validation mode, the session detail route should also be
+deep-linkable in that mode so an operator or developer can inspect representative fake sessions
+without needing a real run history.
+
 The detail view should feel like an inspection page, not a raw protocol dump.
 
 ## 9. Session Lifetime Scope
@@ -283,6 +292,8 @@ The following are out of scope for this version:
 - The operator can identify the status of each session at a glance.
 - The operator can open a detail view for any visible session.
 - The dashboard shows an operational summary including service health, orchestrator mode, last poll tick, workflow configuration status, running session count, retry queue count, token totals, and runtime totals.
+- When local fake-data mode is enabled by configuration, opening the dashboard with the fake-data
+  route toggle shows representative canned sessions without affecting the live API or orchestrator.
 
 ### 12.2 Session detail
 
@@ -291,6 +302,8 @@ The following are out of scope for this version:
 - The operator can understand whether the session succeeded or failed.
 - The operator can identify the last known useful activity for the session.
 - The operator can see warnings and errors when they exist.
+- When local fake-data mode is enabled by configuration, the operator can open a fake session detail
+  route directly and inspect representative timeline, metadata, blocked-session, and debug-payload content.
 
 ### 12.3 Session scope
 
