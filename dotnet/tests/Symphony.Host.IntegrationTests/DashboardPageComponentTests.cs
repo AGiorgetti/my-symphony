@@ -22,7 +22,7 @@ public sealed class DashboardPageComponentTests : BunitContext
     public void DashboardPage_shows_skeleton_while_initial_snapshot_is_loading()
     {
         var taskSource = new TaskCompletionSource<DashboardSnapshot>(TaskCreationOptions.RunContinuationsAsynchronously);
-        Services.AddSingleton<IDashboardStateService>(new DeferredDashboardStateService(taskSource.Task));
+        Services.AddDashboardPageDataServices(new DeferredDashboardStateService(taskSource.Task));
 
         var cut = Render<DashboardPage>();
 
@@ -56,7 +56,8 @@ public sealed class DashboardPageComponentTests : BunitContext
     {
         var cut = Render<ActiveSessionsPanel>(parameters => parameters
             .Add(component => component.Sessions, Array.Empty<DashboardActiveSessionSnapshot>())
-            .Add(component => component.GeneratedAt, new DateTimeOffset(2026, 3, 20, 9, 0, 0, TimeSpan.Zero)));
+            .Add(component => component.GeneratedAt, new DateTimeOffset(2026, 3, 20, 9, 0, 0, TimeSpan.Zero))
+            .Add(component => component.Mode, new DashboardPageMode(DashboardDataMode.Live)));
 
         Assert.Contains("No active sessions", cut.Markup, StringComparison.Ordinal);
         Assert.Contains("New in-flight work will appear here", cut.Markup, StringComparison.Ordinal);

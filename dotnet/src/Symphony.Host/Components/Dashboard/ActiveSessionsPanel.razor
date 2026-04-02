@@ -29,7 +29,7 @@
                 <li class="panel-item">
                     <div class="panel-item__header">
                         <a class="accent-link"
-                           href="/sessions/@Uri.EscapeDataString(session.IssueIdentifier)">
+                           href="@DashboardPageLinks.WithMode($"/sessions/{Uri.EscapeDataString(session.IssueIdentifier)}", Mode)">
                             @session.IssueIdentifier
                         </a>
                         <StatusPill Text="@session.State" Color="@DashboardDisplay.GetSessionStateBadgeColor(session.State)" />
@@ -64,4 +64,8 @@
     [Parameter]
     [EditorRequired]
     public DateTimeOffset GeneratedAt { get; set; }
+
+    [Parameter]
+    [EditorRequired]
+    public required DashboardPageMode Mode { get; set; }
 }

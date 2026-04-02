@@ -29,7 +29,7 @@
                 <li class="panel-item">
                     <div class="panel-item__header">
                         <a class="accent-link"
-                           href="/sessions/@Uri.EscapeDataString(entry.IssueIdentifier)">
+                           href="@DashboardPageLinks.WithMode($"/sessions/{Uri.EscapeDataString(entry.IssueIdentifier)}", Mode)">
                             @entry.IssueIdentifier
                         </a>
                         <StatusPill Text="Needs attention" Color="Color.Warning" />
@@ -51,4 +51,8 @@
     [Parameter]
     [EditorRequired]
     public required IReadOnlyList<DashboardBlockedSessionSnapshot> Entries { get; set; }
+
+    [Parameter]
+    [EditorRequired]
+    public required DashboardPageMode Mode { get; set; }
 }

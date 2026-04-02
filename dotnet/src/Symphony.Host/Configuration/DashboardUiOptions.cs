@@ -7,4 +7,6 @@ public sealed class DashboardUiOptions
     public bool DebugMode { get; set; }
 
     public bool TrackAgentMessageDeltas { get; set; }
+
+    public bool EnableFakeDataMode { get; set; }
 }

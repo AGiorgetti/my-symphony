@@ -258,6 +258,11 @@ Notes:
   `item/agentMessage/delta` transcript entries are recorded for the session detail debug view at
   all. The default should stay `false`; when enabled, those delta events appear in the same
   per-method filter panel as other debug transcript methods.
+- `Dashboard:EnableFakeDataMode` controls a host-only fake-data view mode for local UI validation.
+  The default is `false`. When enabled, operators can open `/?mode=fake`, `/sessions?mode=fake`,
+  or `/sessions/{identifier}?mode=fake` to inspect a built-in comprehensive fake dataset without
+  changing the live orchestrator or `/api/v1/*` responses. `?mode=live` or no query continues to
+  use live in-memory runtime data.
 - Each poll tick reconciles currently running issues before fetching new candidates. Terminal
   tracker transitions cancel the active worker and trigger workspace cleanup; non-active,
   non-terminal transitions cancel the worker without deleting the workspace.
@@ -334,6 +339,10 @@ surface only: if dashboard rendering fails, the orchestrator and JSON API contin
   and stderr/diagnostic lines for each session. A persistent left-side filter panel exposes one
   checkbox per observed debug transcript `method`, including `item/agentMessage/delta` when
   `Dashboard:TrackAgentMessageDeltas` is on.
+- When `Dashboard:EnableFakeDataMode` is on, the same dashboard, session list, and session detail
+  routes can be opened with `?mode=fake` to validate the host UI against a built-in dataset that
+  includes active, retrying, blocked, failed, succeeded, and large debug-payload scenarios. The
+  fake mode is local to the page route and preserves the `mode` query across internal navigation.
 - The dashboard health cards now expose last poll tick, last successful poll age, and workflow load
   status so degraded polling or workflow-reload fallback is visible without reading logs.
 - The sidebar footer includes a theme switcher for the built-in `dark-yellow`, `dark-blue`, and

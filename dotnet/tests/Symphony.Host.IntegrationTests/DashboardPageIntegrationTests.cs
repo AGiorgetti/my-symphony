@@ -106,6 +106,43 @@ public sealed class DashboardPageIntegrationTests
     }
 
     [Fact]
+    public async Task Root_page_renders_fake_dashboard_when_fake_mode_is_enabled()
+    {
+        using var app = await StartDashboardApplicationAsync(
+            new StubRuntimeService(),
+            new StaticDashboardStateService(CreateDashboardSnapshot()),
+            enableFakeDataMode: true);
+        var client = CreateHttpClient(app);
+
+        var response = await client.GetAsync("/?mode=fake");
+        var html = await response.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains("ABC-101", html, StringComparison.Ordinal);
+        Assert.Contains("ABC-202", html, StringComparison.Ordinal);
+        Assert.Contains("ABC-303", html, StringComparison.Ordinal);
+        Assert.Contains("ABC-404", html, StringComparison.Ordinal);
+        Assert.Contains("href=\"/sessions/ABC-101?mode=fake\"", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Root_page_ignores_fake_mode_query_when_fake_mode_is_disabled()
+    {
+        using var app = await StartDashboardApplicationAsync(
+            new StubRuntimeService(),
+            new StaticDashboardStateService(CreateDashboardSnapshot()));
+        var client = CreateHttpClient(app);
+
+        var response = await client.GetAsync("/?mode=fake");
+        var html = await response.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains("ABC-1", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("ABC-101", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("?mode=fake", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Root_page_uses_error_boundary_without_blocking_api_routes()
     {
         using var app = await StartDashboardApplicationAsync(
@@ -137,15 +174,18 @@ public sealed class DashboardPageIntegrationTests
 
     private static async Task<WebApplication> StartDashboardApplicationAsync(
         IOrchestratorRuntimeService runtimeService,
-        IDashboardStateService dashboardStateService)
+        IDashboardStateService dashboardStateService,
+        bool enableFakeDataMode = false)
     {
         var builder = WebApplication.CreateBuilder();
         builder.WebHost.UseUrls("http://127.0.0.1:0");
         builder.Services.AddRazorComponents().AddInteractiveServerComponents();
         builder.Services.AddMudServices();
-        builder.Services.AddSingleton<IOrchestratorRuntimeService>(runtimeService);
         builder.Services.AddSingleton<IOrchestratorControl>(new StubOrchestratorControl());
-        builder.Services.AddSingleton<IDashboardStateService>(dashboardStateService);
+        builder.Services.AddDashboardPageDataServices(
+            dashboardStateService,
+            runtimeService,
+            configureOptions: options => options.EnableFakeDataMode = enableFakeDataMode);
         builder.Services.AddScoped<IThemeService, ThemeService>();
         builder.Services.AddScoped<ThemeService>();
         builder.Services.AddSingleton<IWorkflowOptionsProvider>(

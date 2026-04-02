@@ -21,7 +21,9 @@ public sealed class SessionListTableTests : BunitContext
     [Fact]
     public void SessionListTable_renders_empty_state_for_empty_results()
     {
-        var cut = Render<SessionListTable>(parameters => parameters.Add(component => component.Sessions, Array.Empty<SessionListRowViewModel>()));
+        var cut = Render<SessionListTable>(parameters => parameters
+            .Add(component => component.Sessions, Array.Empty<SessionListRowViewModel>())
+            .Add(component => component.Mode, new DashboardPageMode(DashboardDataMode.Live)));
 
         Assert.Contains("data-testid=\"session-list-empty-state\"", cut.Markup, StringComparison.Ordinal);
         Assert.Contains("No sessions in this view", cut.Markup, StringComparison.Ordinal);
@@ -35,8 +37,7 @@ public sealed class SessionListTableTests : BunitContext
         store.RecordSessionStart("ABC-2", new DateTimeOffset(2026, 3, 20, 7, 10, 0, TimeSpan.Zero));
         store.RecordSessionEnd("ABC-2", new DateTimeOffset(2026, 3, 20, 7, 30, 0, TimeSpan.Zero), "Succeeded");
 
-        Services.AddSingleton<ISessionActivityStore>(store);
-        Services.AddSingleton<IDashboardStateService>(
+        Services.AddDashboardPageDataServices(
             new StaticDashboardStateService(
                 new DashboardSnapshot(
                     new DateTimeOffset(2026, 3, 20, 8, 0, 0, TimeSpan.Zero),
@@ -71,7 +72,8 @@ public sealed class SessionListTableTests : BunitContext
                     RetryQueue: [],
                     RecentAttempts: [],
                     LastError: null,
-                    WorkflowLastError: null)));
+                    WorkflowLastError: null)),
+            sessionActivityStore: store);
 
         var cut = Render<SessionListPage>();
 

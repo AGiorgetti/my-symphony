@@ -105,6 +105,26 @@ public sealed class SessionListPageIntegrationTests
         Assert.Equal(HttpStatusCode.Accepted, apiResponse.StatusCode);
     }
 
+    [Fact]
+    public async Task Sessions_page_renders_fake_sessions_and_preserves_mode_in_links()
+    {
+        using var app = await StartSessionListApplicationAsync(
+            new SessionActivityStore(NullLogger<SessionActivityStore>.Instance),
+            new StaticDashboardStateService(CreateSnapshot()),
+            enableFakeDataMode: true);
+        var client = CreateHttpClient(app);
+
+        var response = await client.GetAsync("/sessions?mode=fake");
+        var html = await response.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains("ABC-101", html, StringComparison.Ordinal);
+        Assert.Contains("ABC-303", html, StringComparison.Ordinal);
+        Assert.Contains("ABC-404", html, StringComparison.Ordinal);
+        Assert.Contains("href=\"/sessions/ABC-101?mode=fake\"", html, StringComparison.Ordinal);
+        Assert.Contains("href=\"/sessions/ABC-303?mode=fake\"", html, StringComparison.Ordinal);
+    }
+
     private static SessionActivityStore CreateStore(DashboardSnapshot snapshot, bool includeEndedSession = true)
     {
         var store = new SessionActivityStore(NullLogger<SessionActivityStore>.Instance);
@@ -176,17 +196,18 @@ public sealed class SessionListPageIntegrationTests
 
     private static async Task<WebApplication> StartSessionListApplicationAsync(
         ISessionActivityStore sessionActivityStore,
-        IDashboardStateService dashboardStateService)
+        IDashboardStateService dashboardStateService,
+        bool enableFakeDataMode = false)
     {
         var builder = WebApplication.CreateBuilder();
         builder.WebHost.UseUrls("http://127.0.0.1:0");
         builder.Services.AddRazorComponents().AddInteractiveServerComponents();
         builder.Services.AddMudServices();
-        builder.Services.AddSingleton<IOrchestratorRuntimeService>(new StubRuntimeService());
         builder.Services.AddSingleton<IOrchestratorControl>(new StubOrchestratorControl());
-        builder.Services.AddSingleton(sessionActivityStore);
-        builder.Services.AddSingleton<ISessionActivityStore>(sessionActivityStore);
-        builder.Services.AddSingleton<IDashboardStateService>(dashboardStateService);
+        builder.Services.AddDashboardPageDataServices(
+            dashboardStateService,
+            sessionActivityStore: sessionActivityStore,
+            configureOptions: options => options.EnableFakeDataMode = enableFakeDataMode);
         builder.Services.AddScoped<IThemeService, ThemeService>();
         builder.Services.AddScoped<ThemeService>();
         builder.Services.AddSingleton<IWorkflowOptionsProvider>(

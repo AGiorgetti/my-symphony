@@ -189,6 +189,33 @@ public sealed class SessionDetailPageIntegrationTests
     }
 
     [Fact]
+    public async Task Session_detail_page_renders_fake_dataset_from_direct_fake_mode_url()
+    {
+        using var app = await StartSessionDetailApplicationAsync(
+            new SessionActivityStore(NullLogger<SessionActivityStore>.Instance),
+            new StaticDashboardStateService(CreateSnapshot()),
+            new StaticRuntimeService(issueSnapshot: null),
+            debugModeEnabled: true,
+            trackAgentMessageDeltasEnabled: true,
+            enableFakeDataMode: true);
+        var client = CreateHttpClient(app);
+
+        var response = await client.GetAsync("/sessions/ABC-404?mode=fake");
+        var html = await response.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains("Prompt build failed", html, StringComparison.Ordinal);
+        Assert.Contains("fake-thread-404-turn-3", html, StringComparison.Ordinal);
+        Assert.Contains("Sent initialize", html, StringComparison.Ordinal);
+        Assert.Contains("Received response 1", html, StringComparison.Ordinal);
+        Assert.Contains("item/agentMessage/delta", html, StringComparison.Ordinal);
+        Assert.Contains("Trace sample 36", html, StringComparison.Ordinal);
+        Assert.Contains("Sent turn/start", html, StringComparison.Ordinal);
+        Assert.Contains("href=\"/?mode=fake\"", html, StringComparison.Ordinal);
+        Assert.Contains("href=\"/sessions?mode=fake\"", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Session_detail_page_renders_follow_up_action_panel_for_blocked_issue()
     {
         var store = new SessionActivityStore(NullLogger<SessionActivityStore>.Instance);
@@ -368,7 +395,8 @@ public sealed class SessionDetailPageIntegrationTests
         IDashboardStateService dashboardStateService,
         IOrchestratorRuntimeService runtimeService,
         bool debugModeEnabled = false,
-        bool trackAgentMessageDeltasEnabled = false)
+        bool trackAgentMessageDeltasEnabled = false,
+        bool enableFakeDataMode = false)
     {
         var builder = WebApplication.CreateBuilder();
         builder.WebHost.UseUrls("http://127.0.0.1:0");
@@ -380,17 +408,22 @@ public sealed class SessionDetailPageIntegrationTests
                 options.DebugMode = debugModeEnabled;
                 options.TrackAgentMessageDeltas = trackAgentMessageDeltasEnabled;
             });
-        builder.Services.AddSingleton(runtimeService);
-        builder.Services.AddSingleton<IOrchestratorRuntimeService>(runtimeService);
         builder.Services.AddSingleton<IOrchestratorControl>(new StubOrchestratorControl());
-        builder.Services.AddSingleton(sessionActivityStore);
-        builder.Services.AddSingleton<ISessionActivityStore>(sessionActivityStore);
-        builder.Services.AddSingleton<IDashboardStateService>(dashboardStateService);
+        builder.Services.AddDashboardPageDataServices(
+            dashboardStateService,
+            runtimeService,
+            sessionActivityStore,
+            CreateFollowUpActionResolutionService(),
+            options =>
+            {
+                options.DebugMode = debugModeEnabled;
+                options.TrackAgentMessageDeltas = trackAgentMessageDeltasEnabled;
+                options.EnableFakeDataMode = enableFakeDataMode;
+            });
         builder.Services.AddScoped<IThemeService, ThemeService>();
         builder.Services.AddScoped<ThemeService>();
         builder.Services.AddSingleton<IWorkflowOptionsProvider>(
             CreateWorkflowOptionsProvider());
-        builder.Services.AddSingleton(CreateFollowUpActionResolutionService());
 
         var app = builder.Build();
         app.UseStaticFiles();

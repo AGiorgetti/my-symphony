@@ -1,10 +1,13 @@
 @inherits LayoutComponentBase
 @implements IAsyncDisposable
 @using System.Globalization
+@using Microsoft.AspNetCore.Components.Routing
+@using Microsoft.AspNetCore.WebUtilities
 @using Symphony.Abstractions.Orchestration
-@inject IDashboardStateService DashboardStateService
+@inject IDashboardPageDataService DashboardPageDataService
 @inject IOrchestratorControl OrchestratorControl
 @inject IThemeService ThemeService
+@inject NavigationManager NavigationManager
 
 <MudThemeProvider Theme="@CurrentMudTheme" IsDarkMode="@CurrentThemeIsDark" />
 <MudSnackbarProvider />
@@ -81,6 +84,7 @@
     private CancellationTokenSource? _refreshCancellationTokenSource;
     private Task? _refreshLoopTask;
     private bool _isSidebarOpen;
+    private DashboardPageMode _mode = new(DashboardDataMode.Live);
     private string _runningSessionsLabel = "0";
     private OrchestratorControlState _orchestratorState = OrchestratorControlState.Started;
     private string _orchestratorStateLabel = "Started";
@@ -92,6 +96,8 @@
     protected override async Task OnInitializedAsync()
     {
         ThemeService.OnThemeChanged += HandleThemeChanged;
+        NavigationManager.LocationChanged += HandleLocationChanged;
+        _mode = ResolveCurrentMode();
         await RefreshRunningCountAsync();
 
         _refreshCancellationTokenSource = new CancellationTokenSource();
@@ -112,6 +118,7 @@
     public async ValueTask DisposeAsync()
     {
         ThemeService.OnThemeChanged -= HandleThemeChanged;
+        NavigationManager.LocationChanged -= HandleLocationChanged;
 
         if (_refreshCancellationTokenSource is not null)
         {
@@ -148,7 +155,7 @@
 
     private RenderFragment SidebarContent => @<text>
         <div class="sidebar-header">
-            <NavLink href="/"
+            <NavLink href="@DashboardPageDataService.BuildLink("/", _mode)"
                      Match="NavLinkMatch.All"
                      class="sidebar-title-link">
                 Symphony
@@ -159,12 +166,12 @@
         </div>
 
         <nav class="sidebar-nav">
-            <NavLink href="/"
+            <NavLink href="@DashboardPageDataService.BuildLink("/", _mode)"
                      Match="NavLinkMatch.All"
                      class="sidebar-nav-link">
                 Dashboard
             </NavLink>
-            <NavLink href="/sessions"
+            <NavLink href="@DashboardPageDataService.BuildLink("/sessions", _mode)"
                      class="sidebar-nav-link">
                 <span class="sidebar-nav-link__content">
                     <span>Sessions</span>
@@ -219,6 +226,12 @@
         _ = InvokeAsync(StateHasChanged);
     }
 
+    private void HandleLocationChanged(object? sender, LocationChangedEventArgs args)
+    {
+        _mode = ResolveCurrentMode();
+        _ = InvokeAsync(StateHasChanged);
+    }
+
     private async Task RunRefreshLoopAsync(CancellationToken cancellationToken)
     {
         if (_refreshTimer is null)
@@ -243,7 +256,7 @@
     {
         try
         {
-            var snapshot = await DashboardStateService.GetSnapshotAsync(cancellationToken);
+            var snapshot = await DashboardPageDataService.GetDashboardSnapshotAsync(_mode, cancellationToken);
             _runningSessionsLabel = snapshot.RunningCount.ToString(CultureInfo.InvariantCulture);
             _orchestratorState = snapshot.OrchestratorState;
             _orchestratorStateLabel = snapshot.OrchestratorState == OrchestratorControlState.Started
@@ -258,6 +271,14 @@
         {
             // Keep the shell responsive even if dashboard state refresh fails.
         }
+    }
+
+    private DashboardPageMode ResolveCurrentMode()
+    {
+        var uri = NavigationManager.ToAbsoluteUri(NavigationManager.Uri);
+        var query = QueryHelpers.ParseQuery(uri.Query);
+        query.TryGetValue("mode", out var values);
+        return DashboardPageDataService.ResolveMode(values.FirstOrDefault());
     }
 
     private async Task StartOrchestratorAsync()

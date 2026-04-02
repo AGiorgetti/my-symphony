@@ -291,9 +291,7 @@ public sealed class SessionDetailComponentTests : BunitContext
                 LastError: null,
                 RecentEvents: []));
 
-        Services.AddSingleton<ISessionActivityStore>(store);
-        Services.AddSingleton<IDashboardStateService>(dashboardStateService);
-        Services.AddSingleton<IOrchestratorRuntimeService>(runtimeService);
+        Services.AddDashboardPageDataServices(dashboardStateService, runtimeService, store, CreateFollowUpActionResolutionService());
 
         using var cut = Render<SessionDetailPage>(
             parameters => parameters.Add(component => component.Identifier, "ABC-1"));
@@ -345,9 +343,11 @@ public sealed class SessionDetailComponentTests : BunitContext
                 LastError: null,
                 WorkflowLastError: null));
 
-        Services.AddSingleton<ISessionActivityStore>(store);
-        Services.AddSingleton<IDashboardStateService>(dashboardStateService);
-        Services.AddSingleton<IOrchestratorRuntimeService>(new StaticRuntimeService(issueSnapshot: null));
+        Services.AddDashboardPageDataServices(
+            dashboardStateService,
+            new StaticRuntimeService(issueSnapshot: null),
+            store,
+            CreateFollowUpActionResolutionService());
 
         using var cut = Render<SessionDetailPage>(
             parameters => parameters.Add(component => component.Identifier, "ABC-2"));
@@ -356,6 +356,39 @@ public sealed class SessionDetailComponentTests : BunitContext
 
         Assert.Equal(1, dashboardStateService.CallCount);
         Assert.Contains("data-testid=\"session-detail-metadata\"", cut.Markup, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task SessionDetailPage_resolves_fake_follow_up_action_and_updates_fake_state()
+    {
+        Services.AddDashboardPageDataServices(
+            new CountingDashboardStateService(CreateLiveSnapshot()),
+            configureOptions: options =>
+            {
+                options.EnableFakeDataMode = true;
+                options.DebugMode = true;
+                options.TrackAgentMessageDeltas = true;
+            });
+        Services.GetRequiredService<Microsoft.AspNetCore.Components.NavigationManager>()
+            .NavigateTo("http://localhost/sessions/ABC-303?mode=fake");
+
+        using var cut = Render<SessionDetailPage>(
+            parameters => parameters.Add(component => component.Identifier, "ABC-303"));
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Contains("data-testid=\"session-detail-follow-up-action-panel\"", cut.Markup, StringComparison.Ordinal);
+            Assert.Contains("Deployment target requires a manual approval step.", cut.Markup, StringComparison.Ordinal);
+        });
+
+        await cut.InvokeAsync(() => cut.Find("button").Click());
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.DoesNotContain("data-testid=\"session-detail-follow-up-action-panel\"", cut.Markup, StringComparison.Ordinal);
+            Assert.Contains("Session resumed", cut.Markup, StringComparison.Ordinal);
+            Assert.Contains("fake-thread-303-turn-4", cut.Markup, StringComparison.Ordinal);
+        });
     }
 
     private sealed class CountingDashboardStateService(DashboardSnapshot snapshot) : IDashboardStateService
@@ -441,6 +474,34 @@ public sealed class SessionDetailComponentTests : BunitContext
             queue,
             new StubIssueTrackerClient(),
             workflowOptionsProvider);
+    }
+
+    private static DashboardSnapshot CreateLiveSnapshot()
+    {
+        var startedAt = new DateTimeOffset(2026, 3, 20, 9, 0, 0, TimeSpan.Zero);
+
+        return new DashboardSnapshot(
+            startedAt.AddMinutes(1),
+            "Healthy",
+            "Single-process in-memory",
+            OrchestratorControlState.Started,
+            startedAt.AddMinutes(1),
+            startedAt.AddMinutes(1),
+            startedAt.AddMinutes(1),
+            5d,
+            "Loaded",
+            startedAt,
+            RunningCount: 0,
+            RetryingCount: 0,
+            InputTokens: 0,
+            OutputTokens: 0,
+            TotalTokens: 0,
+            SecondsRunning: 0d,
+            ActiveSessions: [],
+            RetryQueue: [],
+            RecentAttempts: [],
+            LastError: null,
+            WorkflowLastError: null);
     }
 
     private sealed class StaticWorkflowOptionsProvider(WorkflowServiceOptions workflowOptions) : IWorkflowOptionsProvider

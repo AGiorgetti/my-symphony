@@ -1,6 +1,6 @@
 @implements IAsyncDisposable
 @using Symphony.Host.Components.Dashboard
-@inject IDashboardStateService DashboardStateService
+@inject IDashboardPageDataService DashboardPageDataService
 
 <main class="page-shell page-stack">
     @if (_isLoading)
@@ -53,7 +53,9 @@
         <section class="operations-grid" aria-label="Operational panels">
             <ErrorBoundary>
                 <ChildContent>
-                    <ActiveSessionsPanel Sessions="_snapshot.ActiveSessions" GeneratedAt="_snapshot.GeneratedAt" />
+                    <ActiveSessionsPanel Sessions="_snapshot.ActiveSessions"
+                                         GeneratedAt="_snapshot.GeneratedAt"
+                                         Mode="_mode" />
                 </ChildContent>
                 <ErrorContent>
                     <MudPaper Class="@FallbackCardClass" Outlined="true" Elevation="0" data-testid="dashboard-active-sessions-fallback">
@@ -83,7 +85,8 @@
 
             <ErrorBoundary>
                 <ChildContent>
-                    <BlockedSessionsPanel Entries="@(_snapshot.BlockedSessions ?? [])" />
+                    <BlockedSessionsPanel Entries="@(_snapshot.BlockedSessions ?? [])"
+                                          Mode="_mode" />
                 </ChildContent>
                 <ErrorContent>
                     <MudPaper Class="@FallbackCardClass" Outlined="true" Elevation="0" data-testid="dashboard-blocked-sessions-fallback">
@@ -122,16 +125,33 @@
     private CancellationTokenSource? _refreshCancellationTokenSource;
     private Task? _refreshLoopTask;
     private DashboardSnapshot? _snapshot;
+    private DashboardPageMode _mode = new(DashboardDataMode.Live);
     private bool _isLoading = true;
     private string? _refreshErrorMessage;
 
+    [Parameter]
+    public string? RequestedMode { get; set; }
+
     protected override async Task OnInitializedAsync()
     {
+        _mode = DashboardPageDataService.ResolveMode(RequestedMode);
         await LoadSnapshotAsync();
 
         _refreshCancellationTokenSource = new CancellationTokenSource();
         _refreshTimer = new PeriodicTimer(TimeSpan.FromSeconds(5));
         _refreshLoopTask = RunRefreshLoopAsync(_refreshCancellationTokenSource.Token);
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var resolvedMode = DashboardPageDataService.ResolveMode(RequestedMode);
+        if (resolvedMode == _mode)
+        {
+            return;
+        }
+
+        _mode = resolvedMode;
+        await LoadSnapshotAsync();
     }
 
     public async ValueTask DisposeAsync()
@@ -192,7 +212,7 @@
 
     private async Task LoadSnapshotAsync(CancellationToken cancellationToken = default)
     {
-        _snapshot = await DashboardStateService.GetSnapshotAsync(cancellationToken);
+        _snapshot = await DashboardPageDataService.GetDashboardSnapshotAsync(_mode, cancellationToken);
         _refreshErrorMessage = null;
         _isLoading = false;
     }
