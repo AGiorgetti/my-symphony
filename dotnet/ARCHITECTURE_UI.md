@@ -185,6 +185,7 @@ In `AddSymphonyHost`:
 - call `builder.Services.AddMudServices()`
 - register `ISessionActivityStore` / `SessionActivityStore`
 - register the page-facing dashboard/session data facade and fake-data mode resolver
+- register the JSON export service plus the fake-data loader used for configured files and uploads
 - register theme services used by the shell
 
 `MudThemeProvider` and `MudSnackbarProvider` are hosted by `MainLayout.razor`.
@@ -299,7 +300,9 @@ All pages render inside `MainLayout`.
 
 When `Dashboard:EnableFakeDataMode` is enabled, these routes may also be opened with `?mode=fake`
 for host-only UI validation. Internal navigation preserves the `mode` query while moving between
-dashboard, session list, and session detail pages.
+dashboard, session list, and session detail pages. Fake mode is backed by a mutable in-memory
+dataset store seeded from built-in fixtures, then optionally overlaid by a configured JSON file or
+an interactive dashboard upload.
 
 ### 8.2 Dashboard Page (`/`)
 
@@ -309,6 +312,7 @@ Sections:
 2. Active sessions panel
 3. Retry queue panel
 4. Recent attempts panel
+5. Export / fake-data controls
 
 Current component usage:
 
@@ -316,6 +320,7 @@ Current component usage:
 - `MudAlert` for warning/failure states
 - `MudSkeleton` on first paint
 - `StatusPill` for compact statuses
+- `InputFile` for fake-data JSON upload in fake mode
 
 Auto-refresh: 5 seconds.
 

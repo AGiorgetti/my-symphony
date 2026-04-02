@@ -9,6 +9,10 @@ public interface IDashboardPageDataService
 
     string BuildLink(string path, DashboardPageMode mode);
 
+    string BuildExportAllLink();
+
+    string BuildExportSessionLink(string issueIdentifier);
+
     Task<DashboardSnapshot> GetDashboardSnapshotAsync(DashboardPageMode mode, CancellationToken cancellationToken = default);
 
     IReadOnlyList<SessionRecord> GetAllSessions(DashboardPageMode mode);
@@ -25,5 +29,13 @@ public interface IDashboardPageDataService
     Task<FollowUpActionResolutionResult> ResolveFollowUpActionAsync(
         DashboardPageMode mode,
         FollowUpActionResolutionRequest request,
+        CancellationToken cancellationToken = default);
+
+    FakeDashboardDataStatus GetFakeDataStatus();
+
+    Task<FakeDashboardImportResult> ImportFakeDataAsync(
+        DashboardPageMode mode,
+        Stream jsonStream,
+        string? sourceName,
         CancellationToken cancellationToken = default);
 }

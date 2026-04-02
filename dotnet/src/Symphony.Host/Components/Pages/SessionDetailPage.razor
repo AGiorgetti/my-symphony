@@ -48,6 +48,12 @@
         }
 
         <SessionHeaderCard Session="_header" />
+        <MudButton Variant="Variant.Outlined"
+                   Href="@DashboardPageDataService.BuildExportSessionLink(_requestedIdentifier)"
+                   Class="detail-header__link"
+                   data-testid="session-detail-export-link">
+            Export JSON
+        </MudButton>
 
         @if (_blockedIssue is not null && _pendingFollowUpAction is not null)
         {

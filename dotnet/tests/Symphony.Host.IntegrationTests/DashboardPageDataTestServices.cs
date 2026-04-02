@@ -1,6 +1,9 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Hosting;
+using Symphony.Abstractions.Orchestration;
 using Symphony.Abstractions.Trackers;
 using Symphony.Application.Configuration;
 using Symphony.Application.Orchestration;
@@ -32,6 +35,7 @@ internal static class DashboardPageDataTestServices
         var effectiveRuntimeService = runtimeService ?? new StubRuntimeService();
         var effectiveSessionStore = sessionActivityStore ?? new SessionActivityStore(NullLogger<SessionActivityStore>.Instance);
         var effectiveResolutionService = followUpActionResolutionService ?? CreateFollowUpActionResolutionService();
+        var orchestratorControl = new StubOrchestratorControl();
 
         services.AddSingleton(dashboardStateService);
         services.AddSingleton<IDashboardStateService>(dashboardStateService);
@@ -40,7 +44,11 @@ internal static class DashboardPageDataTestServices
         services.AddSingleton(effectiveSessionStore);
         services.AddSingleton<ISessionActivityStore>(effectiveSessionStore);
         services.AddSingleton(effectiveResolutionService);
+        services.AddSingleton<IOrchestratorControlStatusReader>(orchestratorControl);
         services.AddSingleton<IDashboardPageModeResolver, DashboardPageModeResolver>();
+        services.AddSingleton<IHostEnvironment>(new StubHostEnvironment());
+        services.AddSingleton<IDashboardDataExportService, DashboardDataExportService>();
+        services.AddSingleton<IFakeDashboardDataLoader, FakeDashboardDataLoader>();
         services.AddSingleton<FakeDashboardPageDataSource>();
         services.AddSingleton<IDashboardPageDataService, DashboardPageDataService>();
 
@@ -148,6 +156,25 @@ internal static class DashboardPageDataTestServices
             CancellationToken cancellationToken = default)
         {
             return Task.FromResult<IReadOnlyList<Issue>>(Array.Empty<Issue>());
+        }
+    }
+
+    private sealed class StubHostEnvironment : IHostEnvironment
+    {
+        public string EnvironmentName { get; set; } = "Development";
+
+        public string ApplicationName { get; set; } = "Symphony.Host.Tests";
+
+        public string ContentRootPath { get; set; } = AppContext.BaseDirectory;
+
+        public IFileProvider ContentRootFileProvider { get; set; } = new PhysicalFileProvider(AppContext.BaseDirectory);
+    }
+
+    private sealed class StubOrchestratorControl : IOrchestratorControlStatusReader
+    {
+        public OrchestratorControlSnapshot GetSnapshot()
+        {
+            return new OrchestratorControlSnapshot(OrchestratorControlState.Started, DateTimeOffset.UtcNow);
         }
     }
 }

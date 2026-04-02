@@ -1,6 +1,7 @@
 @inherits LayoutComponentBase
 @implements IAsyncDisposable
 @using System.Globalization
+@using Microsoft.AspNetCore.Components.Forms
 @using Microsoft.AspNetCore.Components.Routing
 @using Microsoft.AspNetCore.WebUtilities
 @using Symphony.Abstractions.Orchestration
@@ -89,6 +90,7 @@
     private OrchestratorControlState _orchestratorState = OrchestratorControlState.Started;
     private string _orchestratorStateLabel = "Started";
     private bool _isUpdatingOrchestratorState;
+    private FakeDashboardDataStatus? _fakeDataStatus;
     private MudTheme CurrentMudTheme => MudThemeCatalog.GetTheme(ThemeService.CurrentTheme);
     private bool CurrentThemeIsDark => ThemeService.AvailableThemes.FirstOrDefault(theme =>
         string.Equals(theme.Key, ThemeService.CurrentTheme, StringComparison.OrdinalIgnoreCase))?.IsDark ?? true;
@@ -98,6 +100,7 @@
         ThemeService.OnThemeChanged += HandleThemeChanged;
         NavigationManager.LocationChanged += HandleLocationChanged;
         _mode = ResolveCurrentMode();
+        _fakeDataStatus = DashboardPageDataService.GetFakeDataStatus();
         await RefreshRunningCountAsync();
 
         _refreshCancellationTokenSource = new CancellationTokenSource();
@@ -218,6 +221,50 @@
             </section>
 
             <ThemeSwitcher ThemeService="ThemeService" />
+
+            <section class="sidebar-section" data-testid="sidebar-diagnostic-controls">
+                <MudPaper Class="sidebar-panel"
+                          Outlined="true"
+                          Elevation="0">
+                    <p class="section-kicker">Diagnostics</p>
+                    <div class="sidebar-panel__content">
+                        <p class="sidebar-panel__description">
+                            Export the live orchestration snapshot or load fake dashboard data from an exported JSON file.
+                        </p>
+                    </div>
+                    <div class="sidebar-actions">
+                        <MudButton Variant="Variant.Outlined"
+                                   Href="@DashboardPageDataService.BuildExportAllLink()"
+                                   Class="sidebar-action"
+                                   data-testid="dashboard-export-all-link">
+                            Export JSON
+                        </MudButton>
+                    </div>
+
+                    @if (_mode.IsFake)
+                    {
+                        <div class="sidebar-panel__content">
+                            <p class="sidebar-panel__description">
+                                Import a single-session or full-bundle JSON export into fake mode.
+                            </p>
+                            <InputFile id="sidebar-fake-data-upload-input"
+                                       OnChange="ImportFakeDataAsync"
+                                       accept=".json,application/json"
+                                       data-testid="dashboard-fake-data-upload" />
+
+                            @if (_fakeDataStatus is not null)
+                            {
+                                <MudAlert Severity="@(_fakeDataStatus.HasError ? Severity.Error : Severity.Info)"
+                                          Variant="Variant.Outlined"
+                                          Dense="true"
+                                          data-testid="dashboard-fake-data-status">
+                                    @_fakeDataStatus.Message
+                                </MudAlert>
+                            }
+                        </div>
+                    }
+                </MudPaper>
+            </section>
         </div>
     </text>;
 
@@ -229,6 +276,7 @@
     private void HandleLocationChanged(object? sender, LocationChangedEventArgs args)
     {
         _mode = ResolveCurrentMode();
+        _fakeDataStatus = DashboardPageDataService.GetFakeDataStatus();
         _ = InvokeAsync(StateHasChanged);
     }
 
@@ -257,6 +305,7 @@
         try
         {
             var snapshot = await DashboardPageDataService.GetDashboardSnapshotAsync(_mode, cancellationToken);
+            _fakeDataStatus = DashboardPageDataService.GetFakeDataStatus();
             _runningSessionsLabel = snapshot.RunningCount.ToString(CultureInfo.InvariantCulture);
             _orchestratorState = snapshot.OrchestratorState;
             _orchestratorStateLabel = snapshot.OrchestratorState == OrchestratorControlState.Started
@@ -333,5 +382,20 @@
         return _orchestratorState == OrchestratorControlState.Started
             ? "New issue assignment is enabled."
             : "New issue assignment is paused until the orchestrator is started.";
+    }
+
+    private async Task ImportFakeDataAsync(InputFileChangeEventArgs args)
+    {
+        var file = args.File;
+        if (file is null)
+        {
+            return;
+        }
+
+        await using var stream = file.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024);
+        var result = await DashboardPageDataService.ImportFakeDataAsync(_mode, stream, file.Name);
+        _fakeDataStatus = result.Status;
+        await RefreshRunningCountAsync();
+        await InvokeAsync(StateHasChanged);
     }
 }

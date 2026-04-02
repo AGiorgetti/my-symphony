@@ -1,10 +1,14 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.FileProviders;
+using Microsoft.Extensions.Hosting;
 using Symphony.Abstractions.Orchestration;
 using Symphony.Abstractions.Trackers;
 using Symphony.Application.Configuration;
@@ -12,6 +16,8 @@ using Symphony.Application.Orchestration;
 using Symphony.Application.Polling;
 using Symphony.Application.Runtime;
 using Symphony.Host.Api;
+using Symphony.Host.Configuration;
+using Symphony.Host.Dashboard;
 using Symphony.Host.Health;
 using Symphony.Domain.Issues;
 
@@ -243,6 +249,101 @@ public sealed class SymphonyApiEndpointRouteBuilderExtensionsTests
     }
 
     [Fact]
+    public async Task Export_session_endpoint_returns_downloadable_json_for_tracked_session()
+    {
+        var sessionStore = new SessionActivityStore(Microsoft.Extensions.Logging.Abstractions.NullLogger<SessionActivityStore>.Instance);
+        var startedAt = new DateTimeOffset(2026, 4, 2, 8, 0, 0, TimeSpan.Zero);
+        sessionStore.RecordSessionStart("ABC-1", startedAt, "https://example.invalid/issues/ABC-1");
+        sessionStore.RecordActivity("ABC-1", new SessionActivityEntry(SessionActivityKind.AgentMessage, startedAt.AddMinutes(1), "turn_completed", "Applied change"));
+        sessionStore.RecordActivity("ABC-1", new SessionActivityEntry(SessionActivityKind.DebugMessage, startedAt.AddMinutes(2), "Received item/agentMessage/delta", "{\"method\":\"item/agentMessage/delta\",\"params\":{\"turnId\":\"turn-1\"}}"));
+
+        using var app = await StartApiApplicationAsync(
+            new StubRuntimeService
+            {
+                IssueSnapshot = new OrchestratorIssueSnapshot(
+                    "ABC-1",
+                    "1",
+                    "running",
+                    RestartCount: 0,
+                    CurrentRetryAttempt: 1,
+                    Running: new RunningIssueSnapshot(
+                        "1",
+                        "ABC-1",
+                        "StreamingTurn",
+                        "session-1",
+                        1,
+                        "turn_completed",
+                        "Applied change",
+                        startedAt,
+                        startedAt.AddMinutes(1),
+                        10,
+                        5,
+                        15,
+                        "orch-1"),
+                    Retry: null,
+                    LastError: null,
+                    RecentEvents: [],
+                    OrchestratorSessionId: "orch-1")
+            },
+            sessionActivityStore: sessionStore,
+            dashboardStateService: new StaticDashboardStateService(CreateDashboardSnapshotForApi()));
+        var client = CreateHttpClient(app);
+
+        var response = await client.GetAsync("/api/v1/export/sessions/ABC-1");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("application/json", response.Content.Headers.ContentType?.MediaType);
+        var payload = JsonSerializer.Deserialize<DashboardDataExportEnvelope>(
+            await response.Content.ReadAsStringAsync(),
+            CreateExportJsonOptions());
+        Assert.NotNull(payload);
+        Assert.Equal(DashboardDataExportSchema.SingleSessionKind, payload!.ExportKind);
+        Assert.Equal("ABC-1", payload.SingleSession!.Session.IssueIdentifier);
+        Assert.NotNull(payload.SingleSession.History);
+        Assert.Contains(payload.SingleSession.History!.Activities, activity => activity.Kind == SessionActivityKind.DebugMessage);
+        Assert.NotNull(payload.SingleSession.Metadata);
+        Assert.Equal(10, payload.SingleSession.Metadata!.InputTokens);
+        Assert.Equal(5, payload.SingleSession.Metadata.OutputTokens);
+        Assert.Equal(15, payload.SingleSession.Metadata.TotalTokens);
+    }
+
+    [Fact]
+    public async Task Export_orchestration_endpoint_returns_full_bundle_json()
+    {
+        var sessionStore = new SessionActivityStore(Microsoft.Extensions.Logging.Abstractions.NullLogger<SessionActivityStore>.Instance);
+        var startedAt = new DateTimeOffset(2026, 4, 2, 8, 0, 0, TimeSpan.Zero);
+        sessionStore.RecordSessionStart("ABC-1", startedAt, "https://example.invalid/issues/ABC-1");
+        sessionStore.RecordActivity("ABC-1", new SessionActivityEntry(SessionActivityKind.DebugMessage, startedAt.AddMinutes(1), "Sent turn/start", "{\"method\":\"turn/start\",\"params\":{\"threadId\":\"thread-1\",\"turnId\":\"turn-1\"}}"));
+
+        using var app = await StartApiApplicationAsync(
+            new StubRuntimeService
+            {
+                StateSnapshot = new OrchestratorStateSnapshot(
+                    DateTimeOffset.UtcNow,
+                    [],
+                    [],
+                    new CodexTotalsSnapshot(0, 0, 0, 0d),
+                    RateLimits: null)
+            },
+            sessionActivityStore: sessionStore,
+            dashboardStateService: new StaticDashboardStateService(CreateDashboardSnapshotForApi()));
+        var client = CreateHttpClient(app);
+
+        var response = await client.GetAsync("/api/v1/export/orchestration");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var payload = JsonSerializer.Deserialize<DashboardDataExportEnvelope>(
+            await response.Content.ReadAsStringAsync(),
+            CreateExportJsonOptions());
+        Assert.NotNull(payload);
+        Assert.Equal(DashboardDataExportSchema.FullBundleKind, payload!.ExportKind);
+        Assert.NotNull(payload.Bundle);
+        Assert.Single(payload.Bundle!.Sessions);
+        Assert.Contains(payload.Bundle.Sessions[0].Activities, activity => activity.Kind == SessionActivityKind.DebugMessage);
+        Assert.NotNull(payload.Bundle.Sessions[0].Metadata);
+    }
+
+    [Fact]
     public async Task Orchestration_endpoint_returns_control_snapshot()
     {
         var control = new StubOrchestratorControl
@@ -317,7 +418,9 @@ public sealed class SymphonyApiEndpointRouteBuilderExtensionsTests
         PollingStatusTracker? pollingStatusTracker = null,
         IWorkflowLoadStatusReader? workflowLoadStatusReader = null,
         TimeProvider? timeProvider = null,
-        StubOrchestratorControl? orchestratorControl = null)
+        StubOrchestratorControl? orchestratorControl = null,
+        IDashboardStateService? dashboardStateService = null,
+        ISessionActivityStore? sessionActivityStore = null)
     {
         var builder = WebApplication.CreateBuilder();
         builder.WebHost.UseUrls("http://127.0.0.1:0");
@@ -336,6 +439,11 @@ public sealed class SymphonyApiEndpointRouteBuilderExtensionsTests
         builder.Services.AddSingleton<ServiceHealthSnapshotProvider>();
         builder.Services.AddSingleton<IWorkflowOptionsProvider>(workflowOptionsProvider);
         builder.Services.AddSingleton(CreateFollowUpActionResolutionService(workflowOptionsProvider, resolvedTimeProvider));
+        builder.Services.AddSingleton<IHostEnvironment>(new StubHostEnvironment());
+        builder.Services.AddSingleton<ISessionActivityStore>(sessionActivityStore ?? new SessionActivityStore(Microsoft.Extensions.Logging.Abstractions.NullLogger<SessionActivityStore>.Instance));
+        builder.Services.AddSingleton<IDashboardStateService>(dashboardStateService ?? new StaticDashboardStateService(CreateDashboardSnapshotForApi()));
+        builder.Services.Configure<DashboardUiOptions>(_ => { });
+        builder.Services.AddSingleton<IDashboardDataExportService, DashboardDataExportService>();
 
         var app = builder.Build();
         app.MapSymphonyApi();
@@ -470,6 +578,58 @@ public sealed class SymphonyApiEndpointRouteBuilderExtensionsTests
         {
             return snapshot;
         }
+    }
+
+    private sealed class StaticDashboardStateService(DashboardSnapshot snapshot) : IDashboardStateService
+    {
+        public Task<DashboardSnapshot> GetSnapshotAsync(CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(snapshot);
+        }
+    }
+
+    private static DashboardSnapshot CreateDashboardSnapshotForApi()
+    {
+        return new DashboardSnapshot(
+            DateTimeOffset.UtcNow,
+            "Healthy",
+            "Single-process in-memory",
+            OrchestratorControlState.Started,
+            DateTimeOffset.UtcNow,
+            DateTimeOffset.UtcNow,
+            DateTimeOffset.UtcNow,
+            0d,
+            "Loaded",
+            DateTimeOffset.UtcNow,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0d,
+            [],
+            [],
+            [],
+            null,
+            null);
+    }
+
+    private static JsonSerializerOptions CreateExportJsonOptions()
+    {
+        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        options.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase));
+        return options;
+    }
+
+    private sealed class StubHostEnvironment : IHostEnvironment
+    {
+        public string EnvironmentName { get; set; } = "Development";
+
+        public string ApplicationName { get; set; } = "Symphony.Host.Tests";
+
+        public string ContentRootPath { get; set; } = AppContext.BaseDirectory;
+
+        public IFileProvider ContentRootFileProvider { get; set; } = new PhysicalFileProvider(AppContext.BaseDirectory);
     }
 
     private sealed class StubOrchestratorControl : IOrchestratorControl, IOrchestratorControlStatusReader

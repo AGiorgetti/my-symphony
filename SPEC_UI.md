@@ -102,6 +102,7 @@ The dashboard must allow the operator to:
 - identify the most recent activity for each session
 - open a detail view for any visible session
 - switch between the built-in themes without leaving the shell
+- export the current orchestration bundle as JSON for diagnostics or later fake-mode replay
 
 The dashboard should make it easy to notice:
 
@@ -116,7 +117,9 @@ selected palette is restored after refresh.
 
 When a local fake-data validation mode is enabled by the host configuration, the dashboard may also
 render a built-in representative fake dataset from a route-level toggle such as `?mode=fake`. This
-mode is for local UI validation only and must not change the live orchestrator or API state.
+mode is for local UI validation only and must not change the live orchestrator or API state. Fake
+mode may additionally load a previously exported JSON session/bundle from configuration or a
+dashboard upload flow.
 
 ### 6.2 Session detail page
 
@@ -130,6 +133,7 @@ The session detail page must allow the operator to:
 - read messages and updates emitted by the agent
 - inspect warnings, errors, and terminal outcomes
 - inspect and resolve pending follow-up actions for blocked sessions
+- export the currently viewed session as JSON
 
 The session detail page should answer these questions clearly:
 

@@ -42,6 +42,8 @@ public sealed class SessionDetailPageIntegrationTests
         Assert.Contains("href=\"/sessions\"", html, StringComparison.Ordinal);
         Assert.Contains("data-testid=\"session-detail-header\"", html, StringComparison.Ordinal);
         Assert.Contains("Open tracker issue", html, StringComparison.Ordinal);
+        Assert.Contains("data-testid=\"session-detail-export-link\"", html, StringComparison.Ordinal);
+        Assert.Contains("href=\"/api/v1/export/sessions/ABC-1\"", html, StringComparison.Ordinal);
         Assert.Contains("data-testid=\"session-header-active-indicator\"", html, StringComparison.Ordinal);
         Assert.Contains("data-testid=\"session-detail-metadata-panel\"", html, StringComparison.Ordinal);
         Assert.Contains("data-testid=\"session-detail-metadata-summary\"", html, StringComparison.Ordinal);

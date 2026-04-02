@@ -9,22 +9,36 @@ namespace Symphony.Host.Dashboard;
 public sealed class FakeDashboardPageDataSource
 {
     private readonly object _sync = new();
-    private readonly SessionActivityStore _sessionActivityStore;
-    private FakeDashboardFixtureState _state;
+    private readonly IFakeDashboardDataLoader _dataLoader;
+    private readonly FakeDashboardDataSet _builtInDataSet;
+    private FakeDashboardDataSet _dataSet;
+    private FakeDashboardDataStatus _status;
 
-    public FakeDashboardPageDataSource(ILoggerFactory loggerFactory)
+    public FakeDashboardPageDataSource(ILoggerFactory loggerFactory, IFakeDashboardDataLoader dataLoader)
     {
         ArgumentNullException.ThrowIfNull(loggerFactory);
+        ArgumentNullException.ThrowIfNull(dataLoader);
 
-        _sessionActivityStore = new SessionActivityStore(loggerFactory.CreateLogger<SessionActivityStore>());
-        _state = CreateFixtureState(_sessionActivityStore);
+        _dataLoader = dataLoader;
+        _builtInDataSet = CreateFixtureDataSet(loggerFactory);
+        var loaded = _dataLoader.LoadConfigured(_builtInDataSet);
+        _dataSet = loaded.DataSet;
+        _status = loaded.Status;
+    }
+
+    public FakeDashboardDataStatus GetStatus()
+    {
+        lock (_sync)
+        {
+            return _status;
+        }
     }
 
     public Task<DashboardSnapshot> GetDashboardSnapshotAsync(CancellationToken cancellationToken = default)
     {
         lock (_sync)
         {
-            return Task.FromResult(_state.DashboardSnapshot);
+            return Task.FromResult(_dataSet.DashboardSnapshot);
         }
     }
 
@@ -32,7 +46,7 @@ public sealed class FakeDashboardPageDataSource
     {
         lock (_sync)
         {
-            return _sessionActivityStore.GetAllSessions();
+            return _dataSet.Sessions.Select(history => history.Session).OrderByDescending(record => record.StartedAt).ToArray();
         }
     }
 
@@ -40,7 +54,9 @@ public sealed class FakeDashboardPageDataSource
     {
         lock (_sync)
         {
-            return _sessionActivityStore.GetSession(issueIdentifier);
+            return _dataSet.Sessions
+                .Select(history => history.Session)
+                .FirstOrDefault(session => string.Equals(session.IssueIdentifier, issueIdentifier, StringComparison.OrdinalIgnoreCase));
         }
     }
 
@@ -48,7 +64,10 @@ public sealed class FakeDashboardPageDataSource
     {
         lock (_sync)
         {
-            return _sessionActivityStore.GetActivities(issueIdentifier);
+            return _dataSet.Sessions
+                .FirstOrDefault(history => string.Equals(history.Session.IssueIdentifier, issueIdentifier, StringComparison.OrdinalIgnoreCase))
+                ?.Activities
+                ?? [];
         }
     }
 
@@ -59,9 +78,23 @@ public sealed class FakeDashboardPageDataSource
         lock (_sync)
         {
             return Task.FromResult(
-                _state.IssueSnapshots.TryGetValue(issueIdentifier, out var snapshot)
+                _dataSet.IssueSnapshots.TryGetValue(issueIdentifier, out var snapshot)
                     ? snapshot
                     : null);
+        }
+    }
+
+    public async Task<FakeDashboardImportResult> ImportAsync(
+        Stream jsonStream,
+        string? sourceName,
+        CancellationToken cancellationToken = default)
+    {
+        var loaded = await _dataLoader.LoadFromStreamAsync(jsonStream, sourceName, _builtInDataSet, cancellationToken).ConfigureAwait(false);
+        lock (_sync)
+        {
+            _dataSet = loaded.DataSet;
+            _status = loaded.Status;
+            return new FakeDashboardImportResult(!loaded.Status.HasError, loaded.Status.Message, _status);
         }
     }
 
@@ -71,7 +104,7 @@ public sealed class FakeDashboardPageDataSource
     {
         lock (_sync)
         {
-            if (!_state.IssueSnapshots.TryGetValue(request.IssueIdentifier, out var issueSnapshot))
+            if (!_dataSet.IssueSnapshots.TryGetValue(request.IssueIdentifier, out var issueSnapshot))
             {
                 return Task.FromResult(
                     new FollowUpActionResolutionResult(
@@ -131,75 +164,80 @@ public sealed class FakeDashboardPageDataSource
                     new RuntimeEventSnapshot(resolvedAt.AddSeconds(-10), "blocked_error", "Waiting for manual review."),
                     new RuntimeEventSnapshot(resolvedAt, "follow_up_resolved", "Fake mode resumed the session after operator review.")
                 ],
-                FollowUpActions = [resolvedAction]
+                FollowUpActions =
+                [
+                    resolvedAction,
+                    .. (issueSnapshot.FollowUpActions ?? [])
+                        .Where(action => !string.Equals(action.FollowUpActionId, resolvedAction.FollowUpActionId, StringComparison.OrdinalIgnoreCase))
+                ]
             };
 
-            _state = _state with
+            var histories = _dataSet.Sessions
+                .Where(history => !string.Equals(history.Session.IssueIdentifier, issueSnapshot.IssueIdentifier, StringComparison.OrdinalIgnoreCase))
+                .Append(
+                    UpdateSessionHistory(
+                        issueSnapshot.IssueIdentifier,
+                        resumedRunningSnapshot.StartedAt,
+                        issueSnapshot.IssueIdentifier,
+                        selectedOptionId,
+                        resolvedAt))
+                .OrderByDescending(history => history.Session.StartedAt)
+                .ToArray();
+
+            var issueSnapshots = new Dictionary<string, OrchestratorIssueSnapshot>(_dataSet.IssueSnapshots, StringComparer.OrdinalIgnoreCase)
             {
-                DashboardSnapshot = _state.DashboardSnapshot with
+                [issueSnapshot.IssueIdentifier] = resumedIssue
+            };
+
+            var existingActiveSessions = _dataSet.DashboardSnapshot.ActiveSessions
+                .Where(candidate => !string.Equals(candidate.IssueIdentifier, issueSnapshot.IssueIdentifier, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            existingActiveSessions.Add(
+                new DashboardActiveSessionSnapshot(
+                    issueSnapshot.IssueIdentifier,
+                    "StreamingTurn",
+                    resumedRunningSnapshot.SessionId,
+                    resumedRunningSnapshot.TurnCount,
+                    resumedRunningSnapshot.LastEvent,
+                    resumedRunningSnapshot.LastMessage,
+                    resumedRunningSnapshot.StartedAt,
+                    resumedRunningSnapshot.LastEventAt,
+                    resumedRunningSnapshot.TotalTokens));
+
+            var blockedSessions = (_dataSet.DashboardSnapshot.BlockedSessions ?? [])
+                .Where(candidate => !string.Equals(candidate.IssueIdentifier, issueSnapshot.IssueIdentifier, StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+            var followUpActions = (_dataSet.DashboardSnapshot.FollowUpActions ?? [])
+                .Where(action => !string.Equals(action.FollowUpActionId, resolvedAction.FollowUpActionId, StringComparison.OrdinalIgnoreCase))
+                .Prepend(resolvedAction)
+                .ToArray();
+            var recentAttempts = _dataSet.DashboardSnapshot.RecentAttempts
+                .Prepend(
+                    new DashboardRecentAttemptSnapshot(
+                        issueSnapshot.IssueIdentifier,
+                        resumedIssue.CurrentRetryAttempt,
+                        "Resumed",
+                        resolvedAt,
+                        18d,
+                        null,
+                        resumedRunningSnapshot.SessionId,
+                        resumedIssue.OrchestratorSessionId))
+                .ToArray();
+
+            _dataSet = new FakeDashboardDataSet(
+                _dataSet.DashboardSnapshot with
                 {
                     GeneratedAt = resolvedAt,
-                    RunningCount = 2,
-                    BlockedCount = 0,
-                    ActiveSessions =
-                    [
-                        _state.DashboardSnapshot.ActiveSessions[0],
-                        new DashboardActiveSessionSnapshot(
-                            issueSnapshot.IssueIdentifier,
-                            "StreamingTurn",
-                            resumedRunningSnapshot.SessionId,
-                            resumedRunningSnapshot.TurnCount,
-                            resumedRunningSnapshot.LastEvent,
-                            resumedRunningSnapshot.LastMessage,
-                            resumedRunningSnapshot.StartedAt,
-                            resumedRunningSnapshot.LastEventAt,
-                            resumedRunningSnapshot.TotalTokens)
-                    ],
-                    BlockedSessions = [],
-                    FollowUpActions =
-                    [
-                        resolvedAction,
-                        .. (_state.DashboardSnapshot.FollowUpActions ?? Array.Empty<FollowUpActionSnapshot>())
-                            .Where(action => !string.Equals(action.FollowUpActionId, resolvedAction.FollowUpActionId, StringComparison.OrdinalIgnoreCase))
-                    ],
-                    RecentAttempts =
-                    [
-                        new DashboardRecentAttemptSnapshot(
-                            issueSnapshot.IssueIdentifier,
-                            resumedIssue.CurrentRetryAttempt,
-                            "Resumed",
-                            resolvedAt,
-                            18d,
-                            null,
-                            resumedRunningSnapshot.SessionId,
-                            resumedIssue.OrchestratorSessionId),
-                        .. _state.DashboardSnapshot.RecentAttempts
-                    ]
+                    RunningCount = existingActiveSessions.Count,
+                    BlockedCount = blockedSessions.Length,
+                    ActiveSessions = existingActiveSessions.OrderByDescending(session => session.StartedAt).ToArray(),
+                    BlockedSessions = blockedSessions,
+                    FollowUpActions = followUpActions,
+                    RecentAttempts = recentAttempts
                 },
-                IssueSnapshots = new Dictionary<string, OrchestratorIssueSnapshot>(_state.IssueSnapshots, StringComparer.OrdinalIgnoreCase)
-                {
-                    [issueSnapshot.IssueIdentifier] = resumedIssue
-                }
-            };
-
-            _sessionActivityStore.RecordSessionStart(
-                issueSnapshot.IssueIdentifier,
-                resumedRunningSnapshot.StartedAt,
-                $"https://example.invalid/issues/{issueSnapshot.IssueIdentifier}");
-            _sessionActivityStore.RecordActivity(
-                issueSnapshot.IssueIdentifier,
-                new SessionActivityEntry(
-                    SessionActivityKind.LifecycleMilestone,
-                    resolvedAt,
-                    "Follow-up action resolved",
-                    $"Operator selected '{selectedOptionId}' in fake mode."));
-            _sessionActivityStore.RecordActivity(
-                issueSnapshot.IssueIdentifier,
-                new SessionActivityEntry(
-                    SessionActivityKind.AgentMessage,
-                    resolvedAt.AddSeconds(5),
-                    "Session resumed",
-                    "Fake mode resumed the blocked session for UI validation."));
+                histories,
+                issueSnapshots);
+            _status = _status with { Message = "Fake mode data updated after follow-up resolution." };
 
             return Task.FromResult(
                 new FollowUpActionResolutionResult(
@@ -210,10 +248,41 @@ public sealed class FakeDashboardPageDataSource
         }
     }
 
-    private static FakeDashboardFixtureState CreateFixtureState(SessionActivityStore sessionActivityStore)
+    private static DashboardSessionHistorySnapshot UpdateSessionHistory(
+        string issueIdentifier,
+        DateTimeOffset startedAt,
+        string displayIdentifier,
+        string selectedOptionId,
+        DateTimeOffset resolvedAt)
     {
-        var generatedAt = new DateTimeOffset(2026, 4, 1, 9, 0, 0, TimeSpan.Zero);
+        var session = new SessionRecord(
+            issueIdentifier,
+            $"https://example.invalid/issues/{displayIdentifier}",
+            startedAt,
+            EndedAt: null,
+            FinalOutcome: null,
+            FinalError: null,
+            IsActive: true);
+        return new DashboardSessionHistorySnapshot(
+            session,
+            [
+                new SessionActivityEntry(
+                    SessionActivityKind.LifecycleMilestone,
+                    resolvedAt,
+                    "Follow-up action resolved",
+                    $"Operator selected '{selectedOptionId}' in fake mode."),
+                new SessionActivityEntry(
+                    SessionActivityKind.AgentMessage,
+                    resolvedAt.AddSeconds(5),
+                    "Session resumed",
+                    "Fake mode resumed the blocked session for UI validation.")
+            ]);
+    }
 
+    private static FakeDashboardDataSet CreateFixtureDataSet(ILoggerFactory loggerFactory)
+    {
+        var sessionActivityStore = new SessionActivityStore(loggerFactory.CreateLogger<SessionActivityStore>());
+        var generatedAt = new DateTimeOffset(2026, 4, 1, 9, 0, 0, TimeSpan.Zero);
         SeedActiveSession(sessionActivityStore);
         SeedRetryingSession(sessionActivityStore);
         SeedBlockedSession(sessionActivityStore);
@@ -416,7 +485,12 @@ public sealed class FakeDashboardPageDataSource
                 OrchestratorSessionId: "orch-fake-505")
         };
 
-        return new FakeDashboardFixtureState(dashboardSnapshot, issueSnapshots);
+        return new FakeDashboardDataSet(
+            dashboardSnapshot,
+            sessionActivityStore.GetAllSessions()
+                .Select(session => new DashboardSessionHistorySnapshot(session, sessionActivityStore.GetActivities(session.IssueIdentifier)))
+                .ToArray(),
+            issueSnapshots);
     }
 
     private static void SeedActiveSession(SessionActivityStore store)
@@ -460,13 +534,7 @@ public sealed class FakeDashboardPageDataSource
 
         store.RecordSessionStart("ABC-404", startedAt, "https://example.invalid/issues/ABC-404");
         store.RecordActivity("ABC-404", new SessionActivityEntry(SessionActivityKind.LifecycleMilestone, startedAt, "Session started", "Codex-like large payload scenario seeded for debug mode validation."));
-        store.RecordActivity(
-            "ABC-404",
-            new SessionActivityEntry(
-                SessionActivityKind.DebugMessage,
-                startedAt.AddSeconds(2),
-                "Sent initialize",
-                """
+        store.RecordActivity("ABC-404", new SessionActivityEntry(SessionActivityKind.DebugMessage, startedAt.AddSeconds(2), "Sent initialize", """
                 {
                   "id": 1,
                   "method": "initialize",
@@ -479,13 +547,7 @@ public sealed class FakeDashboardPageDataSource
                   }
                 }
                 """));
-        store.RecordActivity(
-            "ABC-404",
-            new SessionActivityEntry(
-                SessionActivityKind.DebugMessage,
-                startedAt.AddSeconds(3),
-                "Received response 1",
-                """
+        store.RecordActivity("ABC-404", new SessionActivityEntry(SessionActivityKind.DebugMessage, startedAt.AddSeconds(3), "Received response 1", """
                 {
                   "id": 1,
                   "result": {
@@ -493,25 +555,13 @@ public sealed class FakeDashboardPageDataSource
                   }
                 }
                 """));
-        store.RecordActivity(
-            "ABC-404",
-            new SessionActivityEntry(
-                SessionActivityKind.DebugMessage,
-                startedAt.AddSeconds(4),
-                "Sent initialized",
-                """
+        store.RecordActivity("ABC-404", new SessionActivityEntry(SessionActivityKind.DebugMessage, startedAt.AddSeconds(4), "Sent initialized", """
                 {
                   "method": "initialized",
                   "params": {}
                 }
                 """));
-        store.RecordActivity(
-            "ABC-404",
-            new SessionActivityEntry(
-                SessionActivityKind.DebugMessage,
-                startedAt.AddSeconds(5),
-                "Sent thread/start",
-                """
+        store.RecordActivity("ABC-404", new SessionActivityEntry(SessionActivityKind.DebugMessage, startedAt.AddSeconds(5), "Sent thread/start", """
                 {
                   "id": 2,
                   "method": "thread/start",
@@ -525,128 +575,13 @@ public sealed class FakeDashboardPageDataSource
                   }
                 }
                 """));
-        store.RecordActivity(
-            "ABC-404",
-            new SessionActivityEntry(
-                SessionActivityKind.DebugMessage,
-                startedAt.AddSeconds(6),
-                "Received response 2",
-                SerializeDebugPayload(
-                    new
-                    {
-                        id = 2,
-                        result = new
-                        {
-                            thread = new
-                            {
-                                id = threadId
-                            }
-                        }
-                    })));
-        store.RecordActivity(
-            "ABC-404",
-            new SessionActivityEntry(
-                SessionActivityKind.DebugMessage,
-                startedAt.AddSeconds(8),
-                "Sent turn/start",
-                SerializeDebugPayload(
-                    new
-                    {
-                        id = 3,
-                        method = "turn/start",
-                        @params = new
-                        {
-                            threadId,
-                            cwd = "/workspace/fake-abc-404",
-                            title = "ABC-404: Investigate failing diagnostics import",
-                            approvalPolicy = "never",
-                            sandboxPolicy = new
-                            {
-                                type = "workspaceWrite",
-                                networkAccess = false
-                            },
-                            input = new object[]
-                            {
-                                new
-                                {
-                                    type = "text",
-                                    text = largePrompt
-                                }
-                            }
-                        }
-                    })));
-        store.RecordActivity(
-            "ABC-404",
-            new SessionActivityEntry(
-                SessionActivityKind.DebugMessage,
-                startedAt.AddSeconds(9),
-                "Received response 3",
-                SerializeDebugPayload(
-                    new
-                    {
-                        id = 3,
-                        result = new
-                        {
-                            turn = new
-                            {
-                                id = turnId
-                            }
-                        }
-                    })));
-        store.RecordActivity(
-            "ABC-404",
-            new SessionActivityEntry(
-                SessionActivityKind.DebugMessage,
-                startedAt.AddSeconds(10),
-                "Received thread/started",
-                SerializeDebugPayload(
-                    new
-                    {
-                        method = "thread/started",
-                        @params = new
-                        {
-                            threadId
-                        }
-                    })));
-        store.RecordActivity(
-            "ABC-404",
-            new SessionActivityEntry(
-                SessionActivityKind.DebugMessage,
-                startedAt.AddSeconds(11),
-                "Received turn/started",
-                SerializeDebugPayload(
-                    new
-                    {
-                        method = "turn/started",
-                        @params = new
-                        {
-                            threadId,
-                            turnId
-                        }
-                    })));
-        store.RecordActivity(
-            "ABC-404",
-            new SessionActivityEntry(
-                SessionActivityKind.DebugMessage,
-                startedAt.AddSeconds(12),
-                "Received item/started",
-                SerializeDebugPayload(
-                    new
-                    {
-                        method = "item/started",
-                        @params = new
-                        {
-                            threadId,
-                            turnId,
-                            item = new
-                            {
-                                id = "item-user-message-1",
-                                type = "userMessage",
-                                role = "user",
-                                text = largePrompt
-                            }
-                        }
-                    })));
+        store.RecordActivity("ABC-404", new SessionActivityEntry(SessionActivityKind.DebugMessage, startedAt.AddSeconds(6), "Received response 2", SerializeDebugPayload(new { id = 2, result = new { thread = new { id = threadId } } })));
+        store.RecordActivity("ABC-404", new SessionActivityEntry(SessionActivityKind.DebugMessage, startedAt.AddSeconds(8), "Sent turn/start", SerializeDebugPayload(new { id = 3, method = "turn/start", @params = new { threadId, cwd = "/workspace/fake-abc-404", title = "ABC-404: Investigate failing diagnostics import", approvalPolicy = "never", sandboxPolicy = new { type = "workspaceWrite", networkAccess = false }, input = new object[] { new { type = "text", text = largePrompt } } } })));
+        store.RecordActivity("ABC-404", new SessionActivityEntry(SessionActivityKind.DebugMessage, startedAt.AddSeconds(9), "Received response 3", SerializeDebugPayload(new { id = 3, result = new { turn = new { id = turnId } } })));
+        store.RecordActivity("ABC-404", new SessionActivityEntry(SessionActivityKind.DebugMessage, startedAt.AddSeconds(10), "Received thread/started", SerializeDebugPayload(new { method = "thread/started", @params = new { threadId } })));
+        store.RecordActivity("ABC-404", new SessionActivityEntry(SessionActivityKind.DebugMessage, startedAt.AddSeconds(11), "Received turn/started", SerializeDebugPayload(new { method = "turn/started", @params = new { threadId, turnId } })));
+        store.RecordActivity("ABC-404", new SessionActivityEntry(SessionActivityKind.DebugMessage, startedAt.AddSeconds(12), "Received item/started", SerializeDebugPayload(new { method = "item/started", @params = new { threadId, turnId, item = new { id = "item-user-message-1", type = "userMessage", role = "user", text = largePrompt } } })));
+
         for (var index = 0; index < deltaChunks.Length; index++)
         {
             store.RecordActivity(
@@ -655,73 +590,11 @@ public sealed class FakeDashboardPageDataSource
                     SessionActivityKind.DebugMessage,
                     startedAt.AddSeconds(20 + index),
                     "Received item/agentMessage/delta",
-                    SerializeDebugPayload(
-                        new
-                        {
-                            method = "item/agentMessage/delta",
-                            @params = new
-                            {
-                                threadId,
-                                turnId,
-                                itemId = "item-agent-message-1",
-                                deltaIndex = index,
-                                delta = deltaChunks[index]
-                            }
-                        })));
+                    SerializeDebugPayload(new { method = "item/agentMessage/delta", @params = new { threadId, turnId, itemId = "item-agent-message-1", deltaIndex = index, delta = deltaChunks[index] } })));
         }
-        store.RecordActivity(
-            "ABC-404",
-            new SessionActivityEntry(
-                SessionActivityKind.DebugMessage,
-                startedAt.AddSeconds(30),
-                "Received item/completed",
-                SerializeDebugPayload(
-                    new
-                    {
-                        method = "item/completed",
-                        @params = new
-                        {
-                            threadId,
-                            turnId,
-                            item = new
-                            {
-                                id = "item-agent-message-1",
-                                type = "agentMessage",
-                                role = "assistant",
-                                content = new object[]
-                                {
-                                    new
-                                    {
-                                        type = "output_text",
-                                        text = completedMessage
-                                    }
-                                }
-                            }
-                        }
-                    })));
-        store.RecordActivity(
-            "ABC-404",
-            new SessionActivityEntry(
-                SessionActivityKind.DebugMessage,
-                startedAt.AddSeconds(31),
-                "Received turn/completed",
-                SerializeDebugPayload(
-                    new
-                    {
-                        method = "turn/completed",
-                        @params = new
-                        {
-                            threadId,
-                            turnId,
-                            usage = new
-                            {
-                                input_tokens = 2384,
-                                output_tokens = 912,
-                                total_tokens = 3296
-                            },
-                            message = "Diagnostics summary completed."
-                        }
-                    })));
+
+        store.RecordActivity("ABC-404", new SessionActivityEntry(SessionActivityKind.DebugMessage, startedAt.AddSeconds(30), "Received item/completed", SerializeDebugPayload(new { method = "item/completed", @params = new { threadId, turnId, item = new { id = "item-agent-message-1", type = "agentMessage", role = "assistant", content = new object[] { new { type = "output_text", text = completedMessage } } } } })));
+        store.RecordActivity("ABC-404", new SessionActivityEntry(SessionActivityKind.DebugMessage, startedAt.AddSeconds(31), "Received turn/completed", SerializeDebugPayload(new { method = "turn/completed", @params = new { threadId, turnId, usage = new { input_tokens = 2384, output_tokens = 912, total_tokens = 3296 }, message = "Diagnostics summary completed." } })));
         store.RecordActivity("ABC-404", new SessionActivityEntry(SessionActivityKind.Error, failedAt, "Prompt build failed", "Prompt build failed after loading a large diagnostics payload."));
         store.RecordSessionEnd("ABC-404", failedAt, "Failed", "Prompt build failed after loading a large diagnostics payload.");
     }
@@ -735,10 +608,6 @@ public sealed class FakeDashboardPageDataSource
         store.RecordActivity("ABC-505", new SessionActivityEntry(SessionActivityKind.Outcome, endedAt, "Run succeeded", "Published a clean success result."));
         store.RecordSessionEnd("ABC-505", endedAt, "Succeeded");
     }
-
-    private sealed record FakeDashboardFixtureState(
-        DashboardSnapshot DashboardSnapshot,
-        IReadOnlyDictionary<string, OrchestratorIssueSnapshot> IssueSnapshots);
 
     private static string BuildLargeUserPrompt()
     {
