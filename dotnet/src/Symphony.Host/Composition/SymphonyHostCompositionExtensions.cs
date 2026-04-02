@@ -39,6 +39,8 @@ public static class SymphonyHostCompositionExtensions
         builder.Services.AddSingleton<IAgentDebugTranscriptSink>(serviceProvider => serviceProvider.GetRequiredService<SessionActivityStore>());
         builder.Services.AddSingleton<IDashboardStateService, DashboardStateService>();
         builder.Services.AddSingleton<IDashboardPageModeResolver, DashboardPageModeResolver>();
+        builder.Services.AddSingleton<IDashboardDataExportService, DashboardDataExportService>();
+        builder.Services.AddSingleton<IFakeDashboardDataLoader, FakeDashboardDataLoader>();
         builder.Services.AddSingleton<FakeDashboardPageDataSource>();
         builder.Services.AddSingleton<IDashboardPageDataService, DashboardPageDataService>();
         builder.Services.AddScoped<IThemeService, ThemeService>();

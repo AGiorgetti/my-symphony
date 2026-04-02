@@ -9,4 +9,6 @@ public sealed class DashboardUiOptions
     public bool TrackAgentMessageDeltas { get; set; }
 
     public bool EnableFakeDataMode { get; set; }
+
+    public string? FakeDataJsonPath { get; set; }
 }

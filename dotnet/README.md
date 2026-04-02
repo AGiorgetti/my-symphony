@@ -263,6 +263,10 @@ Notes:
   or `/sessions/{identifier}?mode=fake` to inspect a built-in comprehensive fake dataset without
   changing the live orchestrator or `/api/v1/*` responses. `?mode=live` or no query continues to
   use live in-memory runtime data.
+- `Dashboard:FakeDataJsonPath` optionally points fake mode at a previously exported single-session
+  or full-bundle JSON file. When set and fake mode is enabled, the host loads that file into the
+  fake dataset on startup. Full bundles replace the built-in fixtures; single-session exports merge
+  into them.
 - Each poll tick reconciles currently running issues before fetching new candidates. Terminal
   tracker transitions cancel the active worker and trigger workspace cleanup; non-active,
   non-terminal transitions cancel the worker without deleting the workspace.
@@ -343,6 +347,8 @@ surface only: if dashboard rendering fails, the orchestrator and JSON API contin
   routes can be opened with `?mode=fake` to validate the host UI against a built-in dataset that
   includes active, retrying, blocked, failed, succeeded, and large debug-payload scenarios. The
   fake mode is local to the page route and preserves the `mode` query across internal navigation.
+  Fake mode can also ingest exported JSON through `Dashboard:FakeDataJsonPath` or the dashboard
+  upload control while still leaving the live runtime and `/api/v1/*` state untouched.
 - The dashboard health cards now expose last poll tick, last successful poll age, and workflow load
   status so degraded polling or workflow-reload fallback is visible without reading logs.
 - The sidebar footer includes a theme switcher for the built-in `dark-yellow`, `dark-blue`, and
@@ -352,6 +358,8 @@ surface only: if dashboard rendering fails, the orchestrator and JSON API contin
 - `GET /api/v1/state` for the current running/retrying/blocked snapshot, live token totals, runtime counts,
   follow-up-action summaries, and operator health fields such as poll staleness, workflow reload status, and orchestration state
 - `GET /api/v1/{issueIdentifier}` for issue-specific runtime details, including blocked-session and follow-up-action data, with a `404` JSON error envelope when the issue is not tracked
+- `GET /api/v1/export/sessions/{issueIdentifier}` to download the current in-memory session history and related runtime context as versioned JSON
+- `GET /api/v1/export/orchestration` to download the full current orchestration/dashboard/session bundle as versioned JSON
 - `POST /api/v1/{issueIdentifier}/follow-up-actions/{faiId}/resolve` to resolve a blocked follow-up action and requeue the issue when it is still dispatchable
 - `POST /api/v1/refresh` to queue an immediate poll-and-reconcile cycle; repeated requests coalesce while one is already pending
 - `GET /api/v1/orchestration` for the current started/stopped control state

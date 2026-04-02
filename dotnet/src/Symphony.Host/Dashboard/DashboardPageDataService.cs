@@ -21,6 +21,17 @@ public sealed class DashboardPageDataService(
         return DashboardPageLinks.WithMode(path, mode);
     }
 
+    public string BuildExportAllLink()
+    {
+        return "/api/v1/export/orchestration";
+    }
+
+    public string BuildExportSessionLink(string issueIdentifier)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(issueIdentifier);
+        return $"/api/v1/export/sessions/{Uri.EscapeDataString(issueIdentifier.Trim())}";
+    }
+
     public Task<DashboardSnapshot> GetDashboardSnapshotAsync(DashboardPageMode mode, CancellationToken cancellationToken = default)
     {
         return mode.IsFake
@@ -67,5 +78,30 @@ public sealed class DashboardPageDataService(
         return mode.IsFake
             ? fakeDashboardPageDataSource.ResolveFollowUpActionAsync(request, cancellationToken)
             : followUpActionResolutionService.ResolveAsync(request, cancellationToken);
+    }
+
+    public FakeDashboardDataStatus GetFakeDataStatus()
+    {
+        return fakeDashboardPageDataSource.GetStatus();
+    }
+
+    public Task<FakeDashboardImportResult> ImportFakeDataAsync(
+        DashboardPageMode mode,
+        Stream jsonStream,
+        string? sourceName,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(jsonStream);
+
+        if (!mode.IsFake)
+        {
+            return Task.FromResult(
+                new FakeDashboardImportResult(
+                    false,
+                    "Fake data import is only available while the dashboard is in fake mode.",
+                    fakeDashboardPageDataSource.GetStatus()));
+        }
+
+        return fakeDashboardPageDataSource.ImportAsync(jsonStream, sourceName, cancellationToken);
     }
 }

@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Hosting.Server;
@@ -55,6 +56,8 @@ public sealed class DashboardPageIntegrationTests
         Assert.Contains("data-testid=\"dashboard-active-sessions\"", html, StringComparison.Ordinal);
         Assert.Contains("data-testid=\"dashboard-retry-queue\"", html, StringComparison.Ordinal);
         Assert.Contains("data-testid=\"dashboard-recent-attempts\"", html, StringComparison.Ordinal);
+        Assert.Contains("data-testid=\"dashboard-export-all-link\"", html, StringComparison.Ordinal);
+        Assert.Contains("href=\"/api/v1/export/orchestration\"", html, StringComparison.Ordinal);
         Assert.Contains("ABC-1", html, StringComparison.Ordinal);
         Assert.Contains("ABC-2", html, StringComparison.Ordinal);
         Assert.Contains("ABC-3", html, StringComparison.Ordinal);
@@ -123,6 +126,38 @@ public sealed class DashboardPageIntegrationTests
         Assert.Contains("ABC-303", html, StringComparison.Ordinal);
         Assert.Contains("ABC-404", html, StringComparison.Ordinal);
         Assert.Contains("href=\"/sessions/ABC-101?mode=fake\"", html, StringComparison.Ordinal);
+        Assert.Contains("data-testid=\"dashboard-fake-data-upload\"", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Root_page_loads_fake_data_from_configured_json_file()
+    {
+        var importPath = Path.Combine(Path.GetTempPath(), $"symphony-fake-{Guid.NewGuid():N}.json");
+        await File.WriteAllTextAsync(
+            importPath,
+            JsonSerializer.Serialize(CreateImportedSingleSessionEnvelope(), new JsonSerializerOptions(JsonSerializerDefaults.Web)));
+
+        try
+        {
+            using var app = await StartDashboardApplicationAsync(
+                new StubRuntimeService(),
+                new StaticDashboardStateService(CreateDashboardSnapshot()),
+                enableFakeDataMode: true,
+                fakeDataJsonPath: importPath);
+            var client = CreateHttpClient(app);
+
+            var response = await client.GetAsync("/?mode=fake");
+            var html = await response.Content.ReadAsStringAsync();
+
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            Assert.Contains("ABC-101", html, StringComparison.Ordinal);
+            Assert.Contains("IMP-1", html, StringComparison.Ordinal);
+            Assert.Contains("Merged imported session &#x27;IMP-1&#x27;", html, StringComparison.Ordinal);
+        }
+        finally
+        {
+            File.Delete(importPath);
+        }
     }
 
     [Fact]
@@ -175,7 +210,8 @@ public sealed class DashboardPageIntegrationTests
     private static async Task<WebApplication> StartDashboardApplicationAsync(
         IOrchestratorRuntimeService runtimeService,
         IDashboardStateService dashboardStateService,
-        bool enableFakeDataMode = false)
+        bool enableFakeDataMode = false,
+        string? fakeDataJsonPath = null)
     {
         var builder = WebApplication.CreateBuilder();
         builder.WebHost.UseUrls("http://127.0.0.1:0");
@@ -185,7 +221,11 @@ public sealed class DashboardPageIntegrationTests
         builder.Services.AddDashboardPageDataServices(
             dashboardStateService,
             runtimeService,
-            configureOptions: options => options.EnableFakeDataMode = enableFakeDataMode);
+            configureOptions: options =>
+            {
+                options.EnableFakeDataMode = enableFakeDataMode;
+                options.FakeDataJsonPath = fakeDataJsonPath;
+            });
         builder.Services.AddScoped<IThemeService, ThemeService>();
         builder.Services.AddScoped<ThemeService>();
         builder.Services.AddSingleton<IWorkflowOptionsProvider>(
@@ -366,6 +406,36 @@ public sealed class DashboardPageIntegrationTests
             ],
             lastError,
             workflowLastError);
+    }
+
+    private static DashboardDataExportEnvelope CreateImportedSingleSessionEnvelope()
+    {
+        var session = new SessionRecord(
+            "IMP-1",
+            "https://example.invalid/issues/IMP-1",
+            new DateTimeOffset(2026, 4, 2, 8, 0, 0, TimeSpan.Zero),
+            new DateTimeOffset(2026, 4, 2, 8, 4, 0, TimeSpan.Zero),
+            "Succeeded",
+            null,
+            false);
+        return new DashboardDataExportEnvelope(
+            DashboardDataExportSchema.CurrentVersion,
+            new DateTimeOffset(2026, 4, 2, 9, 0, 0, TimeSpan.Zero),
+            DashboardDataExportSchema.SingleSessionKind,
+            new DashboardDataExportSource("Symphony.Host.Tests", "1.0.0", "Development"),
+            new DashboardDataSessionExport(
+                session,
+                [new SessionActivityEntry(SessionActivityKind.Outcome, session.EndedAt!.Value, "Run succeeded", "Imported from JSON.")],
+                new DashboardSessionHistorySnapshot(
+                    session,
+                    [new SessionActivityEntry(SessionActivityKind.Outcome, session.EndedAt!.Value, "Run succeeded", "Imported from JSON.")]),
+                IssueSnapshot: null,
+                ActiveSession: null,
+                RetryEntry: null,
+                RecentAttempt: new DashboardRecentAttemptSnapshot("IMP-1", 1, "Succeeded", session.EndedAt.Value, 240d, null, "imp-session-1", "orch-imp-1"),
+                BlockedSession: null,
+                FollowUpActions: []),
+            Bundle: null);
     }
 
     private sealed class StubOrchestratorControl : IOrchestratorControl

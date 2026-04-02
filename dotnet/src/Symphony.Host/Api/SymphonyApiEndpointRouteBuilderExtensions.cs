@@ -1,9 +1,11 @@
 using System.Text;
+using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using Symphony.Abstractions.Orchestration;
 using Symphony.Application.Configuration;
 using Symphony.Application.Orchestration;
 using Symphony.Application.Runtime;
+using Symphony.Host.Dashboard;
 using Symphony.Host.Health;
 
 namespace Symphony.Host.Api;
@@ -52,6 +54,38 @@ public static class SymphonyApiEndpointRouteBuilderExtensions
                         cancellationToken)
                     .ConfigureAwait(false);
                 return Results.Ok(ToIssueResponse(snapshot, workspacePath));
+            });
+
+        group.MapGet(
+            "/export/sessions/{issueIdentifier}",
+            async Task<IResult> (
+                string issueIdentifier,
+                [FromServices] IDashboardDataExportService exportService,
+                CancellationToken cancellationToken) =>
+            {
+                var envelope = await exportService.ExportSingleSessionAsync(issueIdentifier, cancellationToken).ConfigureAwait(false);
+                if (envelope is null)
+                {
+                    return Results.NotFound(
+                        new ErrorEnvelopeDto(
+                            new ErrorDetailsDto(
+                                "session_not_found",
+                                $"Session '{issueIdentifier}' is not available in the current in-memory history.")));
+                }
+
+                return CreateJsonDownloadResult(
+                    envelope,
+                    $"{SanitizeIssueIdentifier(issueIdentifier)}.session.json");
+            });
+
+        group.MapGet(
+            "/export/orchestration",
+            async Task<IResult> (
+                [FromServices] IDashboardDataExportService exportService,
+                CancellationToken cancellationToken) =>
+            {
+                var envelope = await exportService.ExportFullBundleAsync(cancellationToken).ConfigureAwait(false);
+                return CreateJsonDownloadResult(envelope, "orchestration-data.json");
             });
 
         group.MapPost(
@@ -339,5 +373,11 @@ public static class SymphonyApiEndpointRouteBuilderExtensions
         }
 
         return workspaceKey;
+    }
+
+    private static IResult CreateJsonDownloadResult<T>(T payload, string fileName)
+    {
+        var json = JsonSerializer.Serialize(payload, DashboardDataJsonSerializer.Options);
+        return Results.File(Encoding.UTF8.GetBytes(json), "application/json", fileName);
     }
 }
