@@ -439,6 +439,17 @@ internal static class SessionDetailDisplay
             }
         }
 
+        if (TryGetString(element, "source", out var source))
+        {
+            facts.Add(new SessionActivityFactModel("Source", source));
+        }
+
+        AddTokenUsageFacts(facts, element, "effective", "Current");
+        AddTokenUsageFacts(facts, element, "estimated", "Estimated");
+        AddTokenUsageFacts(facts, element, "reported", "Reported");
+        AddOperationFacts(facts, element);
+        AddComparisonFacts(facts, element);
+
         if (TryGetString(element, "error", out var error))
         {
             facts.Add(new SessionActivityFactModel("Error", TruncateText(error, 80)));
@@ -449,6 +460,79 @@ internal static class SessionDetailDisplay
         }
 
         return facts;
+    }
+
+    private static void AddTokenUsageFacts(
+        ICollection<SessionActivityFactModel> facts,
+        JsonElement element,
+        string propertyName,
+        string labelPrefix)
+    {
+        if (!element.TryGetProperty(propertyName, out var tokenGroup) || tokenGroup.ValueKind != JsonValueKind.Object)
+        {
+            return;
+        }
+
+        if (TryGetNumeric(tokenGroup, "inputTokens", out var input))
+        {
+            facts.Add(new SessionActivityFactModel($"{labelPrefix} input", input));
+        }
+
+        if (TryGetNumeric(tokenGroup, "cachedInputTokens", out var cachedInput))
+        {
+            facts.Add(new SessionActivityFactModel($"{labelPrefix} cached", cachedInput));
+        }
+
+        if (TryGetNumeric(tokenGroup, "outputTokens", out var output))
+        {
+            facts.Add(new SessionActivityFactModel($"{labelPrefix} output", output));
+        }
+
+        if (TryGetNumeric(tokenGroup, "reasoningTokens", out var reasoning))
+        {
+            facts.Add(new SessionActivityFactModel($"{labelPrefix} reasoning", reasoning));
+        }
+
+        if (TryGetNumeric(tokenGroup, "totalTokens", out var total))
+        {
+            facts.Add(new SessionActivityFactModel($"{labelPrefix} total", total));
+        }
+    }
+
+    private static void AddOperationFacts(ICollection<SessionActivityFactModel> facts, JsonElement element)
+    {
+        if (!element.TryGetProperty("operation", out var operation) || operation.ValueKind != JsonValueKind.Object)
+        {
+            return;
+        }
+
+        if (TryGetNumeric(operation, "turnNumber", out var turnNumber))
+        {
+            facts.Add(new SessionActivityFactModel("Turn", turnNumber));
+        }
+
+        if (TryGetString(operation, "kind", out var kind))
+        {
+            facts.Add(new SessionActivityFactModel("Kind", kind));
+        }
+    }
+
+    private static void AddComparisonFacts(ICollection<SessionActivityFactModel> facts, JsonElement element)
+    {
+        if (!element.TryGetProperty("comparison", out var comparison) || comparison.ValueKind != JsonValueKind.Object)
+        {
+            return;
+        }
+
+        if (TryGetScalar(comparison, "status", out var status))
+        {
+            facts.Add(new SessionActivityFactModel("Comparison", status));
+        }
+
+        if (TryGetScalar(comparison, "totalDelta", out var totalDelta))
+        {
+            facts.Add(new SessionActivityFactModel("Total delta", totalDelta));
+        }
     }
 
     private static bool TryGetScalar(JsonElement element, string propertyName, out string value)

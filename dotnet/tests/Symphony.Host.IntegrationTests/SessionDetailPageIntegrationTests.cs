@@ -108,6 +108,10 @@ public sealed class SessionDetailPageIntegrationTests
         Assert.Contains("Mismatch", html, StringComparison.Ordinal);
         Assert.Contains("6", html, StringComparison.Ordinal);
         Assert.Contains("Token usage recorded for turn 3", html, StringComparison.Ordinal);
+        Assert.Contains("Reported total", html, StringComparison.Ordinal);
+        Assert.Contains("Current total", html, StringComparison.Ordinal);
+        Assert.Contains("Estimated total", html, StringComparison.Ordinal);
+        Assert.Contains("Comparison", html, StringComparison.Ordinal);
     }
 
     [Fact]
