@@ -19,6 +19,7 @@ using Symphony.Host.Configuration;
 using Symphony.Host.Dashboard;
 using Symphony.Host.Theming;
 using Symphony.Domain.Issues;
+using Symphony.Domain.Sessions;
 
 namespace Symphony.Host.IntegrationTests;
 
@@ -94,7 +95,14 @@ public sealed class SessionDetailPageIntegrationTests
         Assert.Contains("Prompt build failed", html, StringComparison.Ordinal);
         Assert.Contains("thread-2-turn-3", html, StringComparison.Ordinal);
         Assert.Contains("Attempt 1", html, StringComparison.Ordinal);
-        Assert.Contains("Finished sessions keep the last known session ID and attempt when available.", html, StringComparison.Ordinal);
+        Assert.Contains("Finished sessions keep the last known session ID and token totals when available.", html, StringComparison.Ordinal);
+        Assert.Contains("data-testid=\"session-detail-metadata-estimated-total-tokens\"", html, StringComparison.Ordinal);
+        Assert.Contains("data-testid=\"session-detail-metadata-reported-total-tokens\"", html, StringComparison.Ordinal);
+        Assert.Contains("data-testid=\"session-detail-metadata-comparison-status\"", html, StringComparison.Ordinal);
+        Assert.Contains(">90<", html, StringComparison.Ordinal);
+        Assert.Contains(">96<", html, StringComparison.Ordinal);
+        Assert.Contains("Mismatch", html, StringComparison.Ordinal);
+        Assert.Contains("6", html, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -332,6 +340,33 @@ public sealed class SessionDetailPageIntegrationTests
         var endedAt = startedAt.AddMinutes(5);
 
         store.RecordSessionStart("ABC-2", startedAt, "https://github.com/AGiorgetti/my-symphony/issues/ABC-2");
+        store.RecordSessionMetadata(
+            "ABC-2",
+            endedAt,
+            new LiveSessionMetadata(
+                "thread-2",
+                "turn-3",
+                lastCodexEvent: "turn_failed",
+                lastCodexTimestamp: endedAt,
+                lastCodexMessage: "The workflow prompt could not be assembled.",
+                codexInputTokens: 64,
+                codexOutputTokens: 32,
+                codexTotalTokens: 96,
+                estimatedInputTokens: 60,
+                estimatedOutputTokens: 30,
+                estimatedTotalTokens: 90,
+                lastReportedInputTokens: 64,
+                lastReportedOutputTokens: 32,
+                lastReportedTotalTokens: 96,
+                tokenComparisonStatus: SessionTokenComparisonStatus.Mismatch,
+                tokenInputDelta: 4,
+                tokenOutputDelta: 2,
+                tokenTotalDelta: 6,
+                lastEstimatedTokenAt: endedAt.AddSeconds(-10),
+                lastReportedTokenAt: endedAt,
+                turnCount: 3),
+            attempt: 1,
+            orchestratorSessionId: "orch-2");
         store.RecordActivity("ABC-2", new SessionActivityEntry(SessionActivityKind.LifecycleMilestone, startedAt, "Session started", "Tracker moved to In Progress"));
         store.RecordActivity("ABC-2", new SessionActivityEntry(SessionActivityKind.Error, endedAt, "Prompt build failed", "The workflow prompt could not be assembled."));
         store.RecordSessionEnd("ABC-2", endedAt, "Failed", "Prompt build failed");

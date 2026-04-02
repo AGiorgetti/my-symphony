@@ -21,15 +21,15 @@ public sealed class DashboardDataExportService(
         ArgumentException.ThrowIfNullOrWhiteSpace(issueIdentifier);
 
         var normalizedIssueIdentifier = issueIdentifier.Trim();
-        var session = sessionActivityStore.GetSession(normalizedIssueIdentifier);
-        if (session is null)
+        var sessionHistory = sessionActivityStore.GetSessionHistory(normalizedIssueIdentifier);
+        if (sessionHistory is null)
         {
             return null;
         }
 
         var dashboardSnapshot = await dashboardStateService.GetSnapshotAsync(cancellationToken).ConfigureAwait(false);
         var issueSnapshot = await orchestratorRuntimeService.GetIssueSnapshotAsync(normalizedIssueIdentifier, cancellationToken).ConfigureAwait(false);
-        var sessionHistory = CreateSessionHistorySnapshot(session, dashboardSnapshot, issueSnapshot);
+        var session = sessionHistory.Session;
 
         var activeSession = dashboardSnapshot.ActiveSessions
             .FirstOrDefault(candidate => string.Equals(candidate.IssueIdentifier, normalizedIssueIdentifier, StringComparison.OrdinalIgnoreCase));
@@ -44,7 +44,7 @@ public sealed class DashboardDataExportService(
         var followUpActions = (issueSnapshot?.FollowUpActions ?? dashboardSnapshot.FollowUpActions ?? [])
             .Where(candidate => string.Equals(candidate.IssueIdentifier, normalizedIssueIdentifier, StringComparison.OrdinalIgnoreCase))
             .ToArray();
-        var sessionMetadata = CreateSessionMetadataSnapshot(session, activeSession, issueSnapshot, dashboardSnapshot);
+        var sessionMetadata = CreateSessionMetadataSnapshot(session, activeSession, issueSnapshot, dashboardSnapshot, sessionHistory.Metadata);
 
         return new DashboardDataExportEnvelope(
             DashboardDataExportSchema.CurrentVersion,
@@ -88,11 +88,11 @@ public sealed class DashboardDataExportService(
             }
         }
         var issueSnapshotMap = issueSnapshots.ToDictionary(snapshot => snapshot.IssueIdentifier, StringComparer.OrdinalIgnoreCase);
-        var allSessions = sessions
-            .Select(session => CreateSessionHistorySnapshot(
-                session,
+        var allSessions = sessionActivityStore.GetAllSessionHistories()
+            .Select(history => EnsureHistoryMetadata(
+                history,
                 dashboardSnapshot,
-                issueSnapshotMap.TryGetValue(session.IssueIdentifier, out var issueSnapshot) ? issueSnapshot : null))
+                issueSnapshotMap.TryGetValue(history.Session.IssueIdentifier, out var issueSnapshot) ? issueSnapshot : null))
             .ToArray();
 
         var options = dashboardUiOptions.Value;
@@ -123,26 +123,41 @@ public sealed class DashboardDataExportService(
             hostEnvironment.EnvironmentName);
     }
 
-    private DashboardSessionHistorySnapshot CreateSessionHistorySnapshot(
-        SessionRecord session,
+    private DashboardSessionHistorySnapshot EnsureHistoryMetadata(
+        DashboardSessionHistorySnapshot sessionHistory,
         DashboardSnapshot dashboardSnapshot,
         OrchestratorIssueSnapshot? issueSnapshot)
     {
+        if (sessionHistory.Metadata is not null)
+        {
+            return sessionHistory;
+        }
+
+        var session = sessionHistory.Session;
         var activeSession = dashboardSnapshot.ActiveSessions
             .FirstOrDefault(candidate => string.Equals(candidate.IssueIdentifier, session.IssueIdentifier, StringComparison.OrdinalIgnoreCase));
 
-        return new DashboardSessionHistorySnapshot(
-            session,
-            sessionActivityStore.GetActivities(session.IssueIdentifier),
-            CreateSessionMetadataSnapshot(session, activeSession, issueSnapshot, dashboardSnapshot));
+        return sessionHistory with
+        {
+            Metadata = CreateSessionMetadataSnapshot(session, activeSession, issueSnapshot, dashboardSnapshot, retainedMetadata: null)
+        };
     }
 
     private static DashboardSessionMetadataSnapshot CreateSessionMetadataSnapshot(
         SessionRecord session,
         DashboardActiveSessionSnapshot? activeSession,
         OrchestratorIssueSnapshot? issueSnapshot,
-        DashboardSnapshot dashboardSnapshot)
+        DashboardSnapshot dashboardSnapshot,
+        DashboardSessionMetadataSnapshot? retainedMetadata)
     {
+        if (retainedMetadata is not null)
+        {
+            var availabilityMessage = session.IsActive
+                ? retainedMetadata.AvailabilityMessage
+                : "Finished sessions keep the last known session ID and token totals when available.";
+            return retainedMetadata with { AvailabilityMessage = availabilityMessage };
+        }
+
         var recentAttempt = dashboardSnapshot.RecentAttempts
             .Where(attempt => string.Equals(attempt.IssueIdentifier, session.IssueIdentifier, StringComparison.OrdinalIgnoreCase))
             .OrderByDescending(attempt => attempt.CompletedAt)

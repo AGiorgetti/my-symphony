@@ -1,3 +1,5 @@
+using Symphony.Domain.Sessions;
+
 namespace Symphony.Application.Orchestration;
 
 internal sealed class NullAgentDebugTranscriptSink : IAgentDebugTranscriptSink
@@ -13,6 +15,15 @@ internal sealed class NullAgentDebugTranscriptSink : IAgentDebugTranscriptSink
     }
 
     public void RecordDiagnostic(string issueIdentifier, DateTimeOffset timestamp, string title, string detail)
+    {
+    }
+
+    public void RecordSessionMetadata(
+        string issueIdentifier,
+        DateTimeOffset timestamp,
+        LiveSessionMetadata session,
+        int? attempt,
+        string orchestratorSessionId)
     {
     }
 }

@@ -554,6 +554,103 @@ public sealed class CodexAppServerClientTests
             entry => entry.Title == "Received turn/completed");
     }
 
+    [Fact]
+    public async Task RunAsync_records_estimated_and_reported_token_usage_in_session_metadata()
+    {
+        var transcriptSink = new RecordingTranscriptSink();
+        var sessionFactory = new TestCodexProcessSessionFactory(
+            async (line, session) =>
+            {
+                using var document = JsonDocument.Parse(line);
+                var method = document.RootElement.TryGetProperty("method", out var methodElement)
+                    ? methodElement.GetString()
+                    : null;
+
+                if (method == "initialize")
+                {
+                    session.EnqueueStdout(new { id = 1, result = new { } });
+                    return;
+                }
+
+                if (method == "thread/start")
+                {
+                    session.EnqueueStdout(new { id = 2, result = new { thread = new { id = "thread-123" } } });
+                    return;
+                }
+
+                if (method == "turn/start")
+                {
+                    session.EnqueueStdout(new { id = 3, result = new { turn = new { id = "turn-456" } } });
+                    session.EnqueueStdout(new
+                    {
+                        method = "item/agentMessage/delta",
+                        @params = new
+                        {
+                            itemId = "agent-1",
+                            delta = "partial"
+                        }
+                    });
+                    session.EnqueueStdout(new
+                    {
+                        method = "item/completed",
+                        @params = new
+                        {
+                            item = new
+                            {
+                                id = "agent-1",
+                                type = "agentMessage",
+                                content = new object[]
+                                {
+                                    new
+                                    {
+                                        type = "output_text",
+                                        text = "Applied a detailed remediation plan."
+                                    }
+                                }
+                            }
+                        }
+                    });
+                    session.EnqueueStdout(new
+                    {
+                        method = "turn/completed",
+                        @params = new
+                        {
+                            message = "done",
+                            usage = new
+                            {
+                                input_tokens = 30,
+                                output_tokens = 12,
+                                total_tokens = 42
+                            }
+                        }
+                    });
+                }
+
+                await Task.CompletedTask;
+            });
+        var client = CreateClient(sessionFactory, transcriptSink);
+        using var testContext = CreateContext();
+
+        await client.RunAsync(testContext.Context, Path.GetTempPath(), "Prompt body", CreateCodexOptions());
+
+        var latestSession = Assert.IsType<LiveSessionMetadata>(testContext.Context.Session);
+        Assert.True(latestSession.EstimatedInputTokens > 0);
+        Assert.True(latestSession.EstimatedOutputTokens > 0);
+        Assert.Equal(30, latestSession.LastReportedInputTokens);
+        Assert.Equal(12, latestSession.LastReportedOutputTokens);
+        Assert.Equal(42, latestSession.LastReportedTotalTokens);
+        Assert.Equal(42, latestSession.CodexTotalTokens);
+        Assert.Equal(SessionTokenComparisonStatus.Mismatch, latestSession.TokenComparisonStatus);
+
+        Assert.NotEmpty(transcriptSink.SessionMetadata);
+        var lastMetadata = transcriptSink.SessionMetadata[^1];
+        Assert.Equal("#21", lastMetadata.IssueIdentifier);
+        Assert.Equal(latestSession.SessionId, lastMetadata.Session.SessionId);
+        Assert.Equal(42, lastMetadata.Session.CodexTotalTokens);
+        Assert.True(lastMetadata.Session.LastEstimatedTokenAt.HasValue);
+        Assert.True(lastMetadata.Session.LastReportedTokenAt.HasValue);
+    }
+
     private static WorkflowCodexOptions CreateCodexOptions()
     {
         return new WorkflowCodexOptions(
@@ -670,6 +767,8 @@ public sealed class CodexAppServerClientTests
 
         public List<TranscriptEntry> Diagnostics { get; } = [];
 
+        public List<SessionMetadataEntry> SessionMetadata { get; } = [];
+
         public void RecordOutbound(string issueIdentifier, DateTimeOffset timestamp, string title, string payload)
         {
             Outbound.Add(new TranscriptEntry(issueIdentifier, timestamp, title, payload));
@@ -684,9 +783,26 @@ public sealed class CodexAppServerClientTests
         {
             Diagnostics.Add(new TranscriptEntry(issueIdentifier, timestamp, title, detail));
         }
+
+        public void RecordSessionMetadata(
+            string issueIdentifier,
+            DateTimeOffset timestamp,
+            LiveSessionMetadata session,
+            int? attempt,
+            string orchestratorSessionId)
+        {
+            SessionMetadata.Add(new SessionMetadataEntry(issueIdentifier, timestamp, session, attempt, orchestratorSessionId));
+        }
     }
 
     private sealed record TranscriptEntry(string IssueIdentifier, DateTimeOffset Timestamp, string Title, string Payload);
+
+    private sealed record SessionMetadataEntry(
+        string IssueIdentifier,
+        DateTimeOffset Timestamp,
+        LiveSessionMetadata Session,
+        int? Attempt,
+        string OrchestratorSessionId);
 
     private sealed class NullScope : IDisposable
     {

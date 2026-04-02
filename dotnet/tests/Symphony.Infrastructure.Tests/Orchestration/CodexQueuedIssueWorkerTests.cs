@@ -596,6 +596,15 @@ public sealed class CodexQueuedIssueWorkerTests
         public void RecordDiagnostic(string issueIdentifier, DateTimeOffset timestamp, string title, string detail)
         {
         }
+
+        public void RecordSessionMetadata(
+            string issueIdentifier,
+            DateTimeOffset timestamp,
+            LiveSessionMetadata session,
+            int? attempt,
+            string orchestratorSessionId)
+        {
+        }
     }
 
     private sealed class NullScope : IDisposable

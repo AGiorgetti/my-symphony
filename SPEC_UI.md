@@ -233,6 +233,8 @@ The detail view should include:
 - timestamps relevant to the session lifecycle
 - a readable activity history
 - a separate details view for live session metadata such as tokens, turn count, session ID, and attempt number
+- retained token usage details for the full application-run lifetime of the session, including
+  estimated totals, reported totals, and the latest comparison status when both are available
 - visible messages and updates from the agent
 - warnings and errors when present
 - a dedicated follow-up-action panel when the session is blocked, including the reason, required operator action, and a clear resolve control
@@ -306,6 +308,8 @@ The following are out of scope for this version:
 - The operator can understand whether the session succeeded or failed.
 - The operator can identify the last known useful activity for the session.
 - The operator can see warnings and errors when they exist.
+- The operator can still inspect the last retained token totals for an ended session without
+  relying on a live runtime snapshot.
 - When local fake-data mode is enabled by configuration, the operator can open a fake session detail
   route directly and inspect representative timeline, metadata, blocked-session, and debug-payload content.
 

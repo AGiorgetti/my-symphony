@@ -1,3 +1,5 @@
+using Symphony.Host.Dashboard;
+
 namespace Symphony.Host.Components.SessionDetail;
 
 public sealed record SessionMetadataPanelModel(
@@ -9,4 +11,5 @@ public sealed record SessionMetadataPanelModel(
     string? OrchestratorSessionId,
     int? Attempt,
     bool IsAttemptKnown,
-    string? AvailabilityMessage);
+    string? AvailabilityMessage,
+    DashboardSessionTokenUsageSnapshot? TokenUsage = null);

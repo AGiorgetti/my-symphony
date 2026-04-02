@@ -191,6 +191,9 @@
         var session = string.IsNullOrWhiteSpace(_requestedIdentifier)
             ? null
             : DashboardPageDataService.GetSession(_mode, _requestedIdentifier);
+        var sessionHistory = string.IsNullOrWhiteSpace(_requestedIdentifier)
+            ? null
+            : DashboardPageDataService.GetSessionHistory(_mode, _requestedIdentifier);
 
         if (session is null)
         {
@@ -211,8 +214,8 @@
         _blockedIssue = issueSnapshot?.Blocked;
 
         _header = BuildHeader(session, issueSnapshot, _pendingFollowUpAction);
-        _timeline = BuildTimeline(session, DashboardPageDataService.GetActivities(_mode, session.IssueIdentifier));
-        _metadata = BuildMetadata(session, activeSession, issueSnapshot, snapshot);
+        _timeline = BuildTimeline(session, sessionHistory?.Activities ?? DashboardPageDataService.GetActivities(_mode, session.IssueIdentifier));
+        _metadata = BuildMetadata(session, sessionHistory?.Metadata, activeSession, issueSnapshot, snapshot);
         _isSessionActive = session.IsActive;
         _refreshErrorMessage = null;
         _isLoading = false;
@@ -289,10 +292,29 @@
 
     private static SessionMetadataPanelModel BuildMetadata(
         SessionRecord session,
+        DashboardSessionMetadataSnapshot? retainedMetadata,
         DashboardActiveSessionSnapshot? activeSession,
         OrchestratorIssueSnapshot? issueSnapshot,
         DashboardSnapshot snapshot)
     {
+        if (retainedMetadata is not null)
+        {
+            var availabilityMessage = session.IsActive
+                ? retainedMetadata.AvailabilityMessage
+                : "Finished sessions keep the last known session ID and token totals when available.";
+            return new SessionMetadataPanelModel(
+                retainedMetadata.InputTokens,
+                retainedMetadata.OutputTokens,
+                retainedMetadata.TotalTokens,
+                retainedMetadata.TurnCount,
+                retainedMetadata.SessionId,
+                retainedMetadata.OrchestratorSessionId,
+                retainedMetadata.Attempt,
+                retainedMetadata.IsAttemptKnown,
+                availabilityMessage,
+                retainedMetadata.TokenUsage);
+        }
+
         var recentAttempt = snapshot.RecentAttempts
             .Where(attempt => string.Equals(attempt.IssueIdentifier, session.IssueIdentifier, StringComparison.OrdinalIgnoreCase))
             .OrderByDescending(attempt => attempt.CompletedAt)
@@ -313,7 +335,8 @@
             orchestratorSessionId,
             attempt,
             isAttemptKnown,
-            GetMetadataAvailabilityMessage(session, runningSession is not null));
+            GetMetadataAvailabilityMessage(session, runningSession is not null),
+            TokenUsage: null);
     }
 
     private static string? GetMetadataAvailabilityMessage(SessionRecord session, bool hasRunningSnapshot)

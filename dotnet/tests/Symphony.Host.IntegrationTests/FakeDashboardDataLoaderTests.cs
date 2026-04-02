@@ -42,7 +42,33 @@ public sealed class FakeDashboardDataLoaderTests
                     [
                         new SessionActivityEntry(SessionActivityKind.Outcome, DateTimeOffset.UtcNow, "Run succeeded", null),
                         new SessionActivityEntry(SessionActivityKind.DebugMessage, DateTimeOffset.UtcNow, "Received item/agentMessage/delta", "{\"method\":\"item/agentMessage/delta\"}")
-                    ]),
+                    ],
+                    new DashboardSessionMetadataSnapshot(
+                        InputTokens: 30,
+                        OutputTokens: 12,
+                        TotalTokens: 42,
+                        TurnCount: 3,
+                        SessionId: "session-imp-2",
+                        OrchestratorSessionId: "orch-imp-2",
+                        Attempt: 1,
+                        IsAttemptKnown: true,
+                        AvailabilityMessage: "retained",
+                        TokenUsage: new DashboardSessionTokenUsageSnapshot(
+                            30,
+                            12,
+                            42,
+                            28,
+                            10,
+                            38,
+                            30,
+                            12,
+                            42,
+                            Symphony.Domain.Sessions.SessionTokenComparisonStatus.Mismatch,
+                            2,
+                            2,
+                            4,
+                            DateTimeOffset.UtcNow.AddMinutes(-1),
+                            DateTimeOffset.UtcNow))),
                 IssueSnapshot: null,
                 ActiveSession: null,
                 RetryEntry: null,
@@ -58,6 +84,8 @@ public sealed class FakeDashboardDataLoaderTests
         Assert.Contains(result.DataSet.Sessions, session => session.Session.IssueIdentifier == "BASE-1");
         var importedSession = Assert.Single(result.DataSet.Sessions, session => session.Session.IssueIdentifier == "IMP-2");
         Assert.Contains(importedSession.Activities, activity => activity.Kind == SessionActivityKind.DebugMessage);
+        Assert.NotNull(importedSession.Metadata);
+        Assert.Equal(42, importedSession.Metadata!.TokenUsage!.EffectiveTotalTokens);
     }
 
     [Fact]

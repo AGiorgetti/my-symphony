@@ -1,5 +1,6 @@
 using Symphony.Abstractions.Orchestration;
 using Symphony.Application.Runtime;
+using Symphony.Domain.Sessions;
 
 namespace Symphony.Host.Dashboard;
 
@@ -57,7 +58,25 @@ public sealed record DashboardSessionMetadataSnapshot(
     string? OrchestratorSessionId,
     int? Attempt,
     bool IsAttemptKnown,
-    string? AvailabilityMessage);
+    string? AvailabilityMessage,
+    DashboardSessionTokenUsageSnapshot? TokenUsage = null);
+
+public sealed record DashboardSessionTokenUsageSnapshot(
+    long EffectiveInputTokens,
+    long EffectiveOutputTokens,
+    long EffectiveTotalTokens,
+    long EstimatedInputTokens,
+    long EstimatedOutputTokens,
+    long EstimatedTotalTokens,
+    long ReportedInputTokens,
+    long ReportedOutputTokens,
+    long ReportedTotalTokens,
+    SessionTokenComparisonStatus ComparisonStatus,
+    long InputDelta,
+    long OutputDelta,
+    long TotalDelta,
+    DateTimeOffset? LastEstimatedAt,
+    DateTimeOffset? LastReportedAt);
 
 public sealed record DashboardUiOptionsSnapshot(
     bool DebugMode,
