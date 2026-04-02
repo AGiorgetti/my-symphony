@@ -255,14 +255,28 @@ public sealed class SessionActivityStore(
             session.EstimatedOutputTokens,
             session.EstimatedTotalTokens,
             session.LastReportedInputTokens,
+            session.LastReportedCachedInputTokens,
             session.LastReportedOutputTokens,
+            session.LastReportedReasoningTokens,
             session.LastReportedTotalTokens,
             session.TokenComparisonStatus,
             session.TokenInputDelta,
             session.TokenOutputDelta,
             session.TokenTotalDelta,
             session.LastEstimatedTokenAt,
-            session.LastReportedTokenAt);
+            session.LastReportedTokenAt,
+            session.LastUsageOperation is null
+                ? null
+                : new DashboardSessionTokenOperationSnapshot(
+                    session.LastUsageOperation.OperationId,
+                    session.LastUsageOperation.Kind,
+                    session.LastUsageOperation.Timestamp,
+                    session.LastUsageOperation.TurnNumber,
+                    session.LastUsageOperation.InputTokens,
+                    session.LastUsageOperation.CachedInputTokens,
+                    session.LastUsageOperation.OutputTokens,
+                    session.LastUsageOperation.ReasoningTokens,
+                    session.LastUsageOperation.TotalTokens));
 
         return new DashboardSessionMetadataSnapshot(
             session.CodexInputTokens,
@@ -318,6 +332,17 @@ public sealed class SessionActivityStore(
                     SerializeTokenUsagePayload(issueIdentifier, "reported", currentUsage)));
         }
 
+        if (currentUsage.LastOperation is not null
+            && previousUsage?.LastOperation?.OperationId != currentUsage.LastOperation.OperationId)
+        {
+            updatedActivities = updatedActivities.Add(
+                new SessionActivityEntry(
+                    SessionActivityKind.ProgressUpdate,
+                    currentUsage.LastOperation.Timestamp,
+                    $"Token usage recorded for turn {currentUsage.LastOperation.TurnNumber}",
+                    SerializeOperationUsagePayload(issueIdentifier, currentUsage)));
+        }
+
         if (currentUsage.ComparisonStatus == SessionTokenComparisonStatus.Mismatch
             && previousUsage?.ComparisonStatus != SessionTokenComparisonStatus.Mismatch)
         {
@@ -357,7 +382,9 @@ public sealed class SessionActivityStore(
                 reported = new
                 {
                     inputTokens = tokenUsage.ReportedInputTokens,
+                    cachedInputTokens = tokenUsage.ReportedCachedInputTokens,
                     outputTokens = tokenUsage.ReportedOutputTokens,
+                    reasoningTokens = tokenUsage.ReportedReasoningTokens,
                     totalTokens = tokenUsage.ReportedTotalTokens
                 },
                 comparison = new
@@ -366,6 +393,47 @@ public sealed class SessionActivityStore(
                     inputDelta = tokenUsage.InputDelta,
                     outputDelta = tokenUsage.OutputDelta,
                     totalDelta = tokenUsage.TotalDelta
+                }
+            },
+            TokenUsageJsonOptions);
+    }
+
+    private static string SerializeOperationUsagePayload(
+        string issueIdentifier,
+        DashboardSessionTokenUsageSnapshot tokenUsage)
+    {
+        var operation = tokenUsage.LastOperation!;
+        return JsonSerializer.Serialize(
+            new
+            {
+                issueIdentifier,
+                operation = new
+                {
+                    operationId = operation.OperationId,
+                    kind = operation.Kind,
+                    turnNumber = operation.TurnNumber,
+                    timestamp = operation.Timestamp,
+                    inputTokens = operation.InputTokens,
+                    cachedInputTokens = operation.CachedInputTokens,
+                    outputTokens = operation.OutputTokens,
+                    reasoningTokens = operation.ReasoningTokens,
+                    totalTokens = operation.TotalTokens
+                },
+                cumulative = new
+                {
+                    inputTokens = tokenUsage.ReportedInputTokens,
+                    cachedInputTokens = tokenUsage.ReportedCachedInputTokens,
+                    outputTokens = tokenUsage.ReportedOutputTokens,
+                    reasoningTokens = tokenUsage.ReportedReasoningTokens,
+                    totalTokens = tokenUsage.ReportedTotalTokens
+                },
+                stats = new
+                {
+                    input = operation.InputTokens,
+                    cachedInput = operation.CachedInputTokens,
+                    output = operation.OutputTokens,
+                    reasoning = operation.ReasoningTokens,
+                    total = operation.TotalTokens
                 }
             },
             TokenUsageJsonOptions);

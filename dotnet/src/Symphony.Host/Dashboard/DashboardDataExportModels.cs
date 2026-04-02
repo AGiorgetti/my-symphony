@@ -69,14 +69,28 @@ public sealed record DashboardSessionTokenUsageSnapshot(
     long EstimatedOutputTokens,
     long EstimatedTotalTokens,
     long ReportedInputTokens,
+    long ReportedCachedInputTokens,
     long ReportedOutputTokens,
+    long ReportedReasoningTokens,
     long ReportedTotalTokens,
     SessionTokenComparisonStatus ComparisonStatus,
     long InputDelta,
     long OutputDelta,
     long TotalDelta,
     DateTimeOffset? LastEstimatedAt,
-    DateTimeOffset? LastReportedAt);
+    DateTimeOffset? LastReportedAt,
+    DashboardSessionTokenOperationSnapshot? LastOperation = null);
+
+public sealed record DashboardSessionTokenOperationSnapshot(
+    string OperationId,
+    string Kind,
+    DateTimeOffset Timestamp,
+    int TurnNumber,
+    long InputTokens,
+    long CachedInputTokens,
+    long OutputTokens,
+    long ReasoningTokens,
+    long TotalTokens);
 
 public sealed record DashboardUiOptionsSnapshot(
     bool DebugMode,

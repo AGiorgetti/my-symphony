@@ -98,11 +98,16 @@ public sealed class SessionDetailPageIntegrationTests
         Assert.Contains("Finished sessions keep the last known session ID and token totals when available.", html, StringComparison.Ordinal);
         Assert.Contains("data-testid=\"session-detail-metadata-estimated-total-tokens\"", html, StringComparison.Ordinal);
         Assert.Contains("data-testid=\"session-detail-metadata-reported-total-tokens\"", html, StringComparison.Ordinal);
+        Assert.Contains("data-testid=\"session-detail-metadata-cached-input-tokens\"", html, StringComparison.Ordinal);
+        Assert.Contains("data-testid=\"session-detail-metadata-reasoning-tokens\"", html, StringComparison.Ordinal);
         Assert.Contains("data-testid=\"session-detail-metadata-comparison-status\"", html, StringComparison.Ordinal);
         Assert.Contains(">90<", html, StringComparison.Ordinal);
         Assert.Contains(">96<", html, StringComparison.Ordinal);
+        Assert.Contains(">12<", html, StringComparison.Ordinal);
+        Assert.Contains(">9<", html, StringComparison.Ordinal);
         Assert.Contains("Mismatch", html, StringComparison.Ordinal);
         Assert.Contains("6", html, StringComparison.Ordinal);
+        Assert.Contains("Token usage recorded for turn 3", html, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -356,7 +361,9 @@ public sealed class SessionDetailPageIntegrationTests
                 estimatedOutputTokens: 30,
                 estimatedTotalTokens: 90,
                 lastReportedInputTokens: 64,
+                lastReportedCachedInputTokens: 12,
                 lastReportedOutputTokens: 32,
+                lastReportedReasoningTokens: 9,
                 lastReportedTotalTokens: 96,
                 tokenComparisonStatus: SessionTokenComparisonStatus.Mismatch,
                 tokenInputDelta: 4,
@@ -364,6 +371,16 @@ public sealed class SessionDetailPageIntegrationTests
                 tokenTotalDelta: 6,
                 lastEstimatedTokenAt: endedAt.AddSeconds(-10),
                 lastReportedTokenAt: endedAt,
+                lastUsageOperation: new SessionTokenUsageOperation(
+                    "thread-2-turn-3:turn_failed",
+                    "turn_failed",
+                    endedAt,
+                    3,
+                    64,
+                    12,
+                    32,
+                    9,
+                    96),
                 turnCount: 3),
             attempt: 1,
             orchestratorSessionId: "orch-2");

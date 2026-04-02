@@ -62,6 +62,14 @@
                             <p class="detail-metric-label">Reported Total Tokens</p>
                             <p class="detail-metric-value">@FormatLong(Metadata.TokenUsage.ReportedTotalTokens)</p>
                         </div>
+                        <div class="detail-metric-card" data-testid="session-detail-metadata-cached-input-tokens">
+                            <p class="detail-metric-label">Cached Input Tokens</p>
+                            <p class="detail-metric-value">@FormatLong(Metadata.TokenUsage.ReportedCachedInputTokens)</p>
+                        </div>
+                        <div class="detail-metric-card" data-testid="session-detail-metadata-reasoning-tokens">
+                            <p class="detail-metric-label">Reasoning Tokens</p>
+                            <p class="detail-metric-value">@FormatLong(Metadata.TokenUsage.ReportedReasoningTokens)</p>
+                        </div>
                         <div class="detail-metric-card" data-testid="session-detail-metadata-comparison-status">
                             <p class="detail-metric-label">Token Comparison</p>
                             <p class="detail-metric-value">@FormatComparisonStatus(Metadata.TokenUsage)</p>

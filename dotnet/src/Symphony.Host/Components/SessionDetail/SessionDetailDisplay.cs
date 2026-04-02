@@ -418,9 +418,19 @@ internal static class SessionDetailDisplay
                 facts.Add(new SessionActivityFactModel("Input", input));
             }
 
+            if (TryGetNumeric(stats, "cachedInput", out var cachedInput))
+            {
+                facts.Add(new SessionActivityFactModel("Cached input", cachedInput));
+            }
+
             if (TryGetNumeric(stats, "output", out var output))
             {
                 facts.Add(new SessionActivityFactModel("Output", output));
+            }
+
+            if (TryGetNumeric(stats, "reasoning", out var reasoning))
+            {
+                facts.Add(new SessionActivityFactModel("Reasoning", reasoning));
             }
 
             if (TryGetNumeric(stats, "total", out var total))

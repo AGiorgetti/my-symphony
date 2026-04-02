@@ -271,7 +271,9 @@ public sealed class SymphonyApiEndpointRouteBuilderExtensionsTests
                 estimatedOutputTokens: 4,
                 estimatedTotalTokens: 12,
                 lastReportedInputTokens: 10,
+                lastReportedCachedInputTokens: 3,
                 lastReportedOutputTokens: 5,
+                lastReportedReasoningTokens: 2,
                 lastReportedTotalTokens: 15,
                 tokenComparisonStatus: SessionTokenComparisonStatus.Mismatch,
                 tokenInputDelta: 2,
@@ -279,6 +281,16 @@ public sealed class SymphonyApiEndpointRouteBuilderExtensionsTests
                 tokenTotalDelta: 3,
                 lastEstimatedTokenAt: startedAt.AddMinutes(1),
                 lastReportedTokenAt: startedAt.AddMinutes(2),
+                lastUsageOperation: new SessionTokenUsageOperation(
+                    "thread-1-turn-1:turn_completed",
+                    "turn_completed",
+                    startedAt.AddMinutes(2),
+                    1,
+                    10,
+                    3,
+                    5,
+                    2,
+                    15),
                 turnCount: 1),
             attempt: 1,
             orchestratorSessionId: "orch-1");
@@ -335,7 +347,11 @@ public sealed class SymphonyApiEndpointRouteBuilderExtensionsTests
         Assert.Equal(15, payload.SingleSession.Metadata.TotalTokens);
         Assert.NotNull(payload.SingleSession.Metadata.TokenUsage);
         Assert.Equal(12, payload.SingleSession.Metadata.TokenUsage!.EstimatedTotalTokens);
+        Assert.Equal(3, payload.SingleSession.Metadata.TokenUsage.ReportedCachedInputTokens);
+        Assert.Equal(2, payload.SingleSession.Metadata.TokenUsage.ReportedReasoningTokens);
         Assert.Equal(15, payload.SingleSession.Metadata.TokenUsage.ReportedTotalTokens);
+        Assert.NotNull(payload.SingleSession.Metadata.TokenUsage.LastOperation);
+        Assert.Equal("thread-1-turn-1:turn_completed", payload.SingleSession.Metadata.TokenUsage.LastOperation!.OperationId);
         Assert.NotNull(payload.SingleSession.History!.Metadata);
         Assert.Equal(15, payload.SingleSession.History.Metadata!.TokenUsage!.EffectiveTotalTokens);
     }

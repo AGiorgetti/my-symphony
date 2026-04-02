@@ -16,7 +16,9 @@ public sealed record LiveSessionMetadata
         int estimatedOutputTokens = 0,
         int estimatedTotalTokens = 0,
         int lastReportedInputTokens = 0,
+        int lastReportedCachedInputTokens = 0,
         int lastReportedOutputTokens = 0,
+        int lastReportedReasoningTokens = 0,
         int lastReportedTotalTokens = 0,
         SessionTokenComparisonStatus tokenComparisonStatus = SessionTokenComparisonStatus.None,
         int tokenInputDelta = 0,
@@ -24,6 +26,7 @@ public sealed record LiveSessionMetadata
         int tokenTotalDelta = 0,
         DateTimeOffset? lastEstimatedTokenAt = null,
         DateTimeOffset? lastReportedTokenAt = null,
+        SessionTokenUsageOperation? lastUsageOperation = null,
         int turnCount = 0)
     {
         ThreadId = Guard.Required(threadId, nameof(threadId));
@@ -40,7 +43,9 @@ public sealed record LiveSessionMetadata
         EstimatedOutputTokens = Guard.NonNegative(estimatedOutputTokens, nameof(estimatedOutputTokens));
         EstimatedTotalTokens = Guard.NonNegative(estimatedTotalTokens, nameof(estimatedTotalTokens));
         LastReportedInputTokens = Guard.NonNegative(lastReportedInputTokens, nameof(lastReportedInputTokens));
+        LastReportedCachedInputTokens = Guard.NonNegative(lastReportedCachedInputTokens, nameof(lastReportedCachedInputTokens));
         LastReportedOutputTokens = Guard.NonNegative(lastReportedOutputTokens, nameof(lastReportedOutputTokens));
+        LastReportedReasoningTokens = Guard.NonNegative(lastReportedReasoningTokens, nameof(lastReportedReasoningTokens));
         LastReportedTotalTokens = Guard.NonNegative(lastReportedTotalTokens, nameof(lastReportedTotalTokens));
         TokenComparisonStatus = tokenComparisonStatus;
         TokenInputDelta = tokenInputDelta;
@@ -48,6 +53,7 @@ public sealed record LiveSessionMetadata
         TokenTotalDelta = tokenTotalDelta;
         LastEstimatedTokenAt = lastEstimatedTokenAt;
         LastReportedTokenAt = lastReportedTokenAt;
+        LastUsageOperation = lastUsageOperation;
         TurnCount = Guard.NonNegative(turnCount, nameof(turnCount));
 
         if (CodexTotalTokens < CodexInputTokens + CodexOutputTokens)
@@ -103,7 +109,11 @@ public sealed record LiveSessionMetadata
 
     public int LastReportedInputTokens { get; }
 
+    public int LastReportedCachedInputTokens { get; }
+
     public int LastReportedOutputTokens { get; }
+
+    public int LastReportedReasoningTokens { get; }
 
     public int LastReportedTotalTokens { get; }
 
@@ -118,6 +128,8 @@ public sealed record LiveSessionMetadata
     public DateTimeOffset? LastEstimatedTokenAt { get; }
 
     public DateTimeOffset? LastReportedTokenAt { get; }
+
+    public SessionTokenUsageOperation? LastUsageOperation { get; }
 
     public int TurnCount { get; }
 }

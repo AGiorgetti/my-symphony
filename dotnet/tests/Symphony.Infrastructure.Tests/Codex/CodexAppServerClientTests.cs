@@ -619,7 +619,15 @@ public sealed class CodexAppServerClientTests
                             usage = new
                             {
                                 input_tokens = 30,
+                                input_tokens_details = new
+                                {
+                                    cached_tokens = 6
+                                },
                                 output_tokens = 12,
+                                output_tokens_details = new
+                                {
+                                    reasoning_tokens = 4
+                                },
                                 total_tokens = 42
                             }
                         }
@@ -637,10 +645,16 @@ public sealed class CodexAppServerClientTests
         Assert.True(latestSession.EstimatedInputTokens > 0);
         Assert.True(latestSession.EstimatedOutputTokens > 0);
         Assert.Equal(30, latestSession.LastReportedInputTokens);
+        Assert.Equal(6, latestSession.LastReportedCachedInputTokens);
         Assert.Equal(12, latestSession.LastReportedOutputTokens);
+        Assert.Equal(4, latestSession.LastReportedReasoningTokens);
         Assert.Equal(42, latestSession.LastReportedTotalTokens);
         Assert.Equal(42, latestSession.CodexTotalTokens);
         Assert.Equal(SessionTokenComparisonStatus.Mismatch, latestSession.TokenComparisonStatus);
+        Assert.NotNull(latestSession.LastUsageOperation);
+        Assert.Equal("turn-456:turn_completed", latestSession.LastUsageOperation!.OperationId);
+        Assert.Equal(6, latestSession.LastUsageOperation.CachedInputTokens);
+        Assert.Equal(4, latestSession.LastUsageOperation.ReasoningTokens);
 
         Assert.NotEmpty(transcriptSink.SessionMetadata);
         var lastMetadata = transcriptSink.SessionMetadata[^1];
@@ -649,6 +663,85 @@ public sealed class CodexAppServerClientTests
         Assert.Equal(42, lastMetadata.Session.CodexTotalTokens);
         Assert.True(lastMetadata.Session.LastEstimatedTokenAt.HasValue);
         Assert.True(lastMetadata.Session.LastReportedTokenAt.HasValue);
+    }
+
+    [Fact]
+    public async Task RunAsync_accumulates_reported_usage_across_multiple_turns()
+    {
+        var transcriptSink = new RecordingTranscriptSink();
+        var turnCounter = 0;
+        var sessionFactory = new TestCodexProcessSessionFactory(
+            async (line, session) =>
+            {
+                using var document = JsonDocument.Parse(line);
+                var root = document.RootElement;
+                var method = root.TryGetProperty("method", out var methodElement)
+                    ? methodElement.GetString()
+                    : null;
+
+                if (method == "initialize")
+                {
+                    session.EnqueueStdout(new { id = 1, result = new { } });
+                    return;
+                }
+
+                if (method == "thread/start")
+                {
+                    session.EnqueueStdout(new { id = 2, result = new { thread = new { id = "thread-123" } } });
+                    return;
+                }
+
+                if (method == "turn/start")
+                {
+                    turnCounter++;
+                    session.EnqueueStdout(new { id = turnCounter + 2, result = new { turn = new { id = $"turn-{turnCounter}" } } });
+                    session.EnqueueStdout(new
+                    {
+                        method = "turn/completed",
+                        @params = new
+                        {
+                            message = $"done-{turnCounter}",
+                            usage = turnCounter == 1
+                                ? new
+                                {
+                                    input_tokens = 30,
+                                    input_tokens_details = new { cached_tokens = 6 },
+                                    output_tokens = 12,
+                                    output_tokens_details = new { reasoning_tokens = 4 },
+                                    total_tokens = 42
+                                }
+                                : new
+                                {
+                                    input_tokens = 20,
+                                    input_tokens_details = new { cached_tokens = 2 },
+                                    output_tokens = 8,
+                                    output_tokens_details = new { reasoning_tokens = 1 },
+                                    total_tokens = 28
+                                }
+                        }
+                    });
+                }
+
+                await Task.CompletedTask;
+            });
+        var client = CreateClient(sessionFactory, transcriptSink);
+        using var testContext = CreateContext();
+
+        await client.RunAsync(
+            testContext.Context,
+            Path.GetTempPath(),
+            "Prompt body",
+            CreateCodexOptions(),
+            (completedTurnCount, _) => Task.FromResult<string?>(completedTurnCount == 1 ? "Continuation prompt" : null));
+
+        var latestSession = Assert.IsType<LiveSessionMetadata>(testContext.Context.Session);
+        Assert.Equal(50, latestSession.LastReportedInputTokens);
+        Assert.Equal(8, latestSession.LastReportedCachedInputTokens);
+        Assert.Equal(20, latestSession.LastReportedOutputTokens);
+        Assert.Equal(5, latestSession.LastReportedReasoningTokens);
+        Assert.Equal(70, latestSession.LastReportedTotalTokens);
+        Assert.Equal(70, latestSession.CodexTotalTokens);
+        Assert.Equal("turn-2:turn_completed", latestSession.LastUsageOperation!.OperationId);
     }
 
     private static WorkflowCodexOptions CreateCodexOptions()
