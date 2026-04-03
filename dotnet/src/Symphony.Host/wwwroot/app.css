@@ -822,6 +822,40 @@ code {
     display: none;
 }
 
+.session-topdeck-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    color: var(--color-on-surface-secondary);
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.session-topdeck-toggle__text--expanded,
+.session-topdeck-section[open] .session-topdeck-toggle__text--collapsed {
+    display: none;
+}
+
+.session-topdeck-section[open] .session-topdeck-toggle__text--expanded {
+    display: inline;
+}
+
+.session-topdeck-toggle__chevron {
+    width: 0.7rem;
+    height: 0.7rem;
+    border-right: 2px solid currentColor;
+    border-bottom: 2px solid currentColor;
+    transform: rotate(45deg) translateY(-0.08rem);
+    transition: transform 0.18s ease;
+}
+
+.session-topdeck-section[open] .session-topdeck-toggle__chevron {
+    transform: rotate(-135deg) translateY(-0.02rem);
+}
+
 .session-topdeck-section__heading {
     min-width: 0;
 }

@@ -42,7 +42,14 @@ public sealed class SessionDetailPageIntegrationTests
         Assert.DoesNotContain("data-testid=\"session-detail-breadcrumb\"", html, StringComparison.Ordinal);
         Assert.Contains("data-testid=\"session-detail-header\"", html, StringComparison.Ordinal);
         Assert.Contains("data-testid=\"session-detail-summary-section\"", html, StringComparison.Ordinal);
+        Assert.Contains("data-testid=\"session-detail-metadata-section\"", html, StringComparison.Ordinal);
+        Assert.Contains("data-testid=\"session-detail-filters-section\"", html, StringComparison.Ordinal);
         Assert.DoesNotContain("data-testid=\"session-detail-summary-section\" open", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("data-testid=\"session-detail-metadata-section\" open", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("data-testid=\"session-detail-filters-section\" open", html, StringComparison.Ordinal);
+        Assert.Contains("data-testid=\"session-detail-summary-toggle\"", html, StringComparison.Ordinal);
+        Assert.Contains("data-testid=\"session-detail-metadata-toggle\"", html, StringComparison.Ordinal);
+        Assert.Contains("data-testid=\"session-detail-filters-toggle\"", html, StringComparison.Ordinal);
         Assert.Contains("Open tracker issue", html, StringComparison.Ordinal);
         Assert.Contains("data-testid=\"session-detail-export-link\"", html, StringComparison.Ordinal);
         Assert.Contains("href=\"/api/v1/export/sessions/ABC-1\"", html, StringComparison.Ordinal);

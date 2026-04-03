@@ -15,6 +15,11 @@
                         <span class="session-topdeck-chip">@SessionDetailDisplay.GetAttemptLabel(MetadataModel.Attempt, MetadataModel.IsAttemptKnown)</span>
                         <span class="session-topdeck-chip">@FormatInt(MetadataModel.TurnCount) turns</span>
                     </div>
+                    <span class="session-topdeck-toggle" data-testid="session-detail-summary-toggle" aria-hidden="true">
+                        <span class="session-topdeck-toggle__text session-topdeck-toggle__text--collapsed">Expand</span>
+                        <span class="session-topdeck-toggle__text session-topdeck-toggle__text--expanded">Collapse</span>
+                        <span class="session-topdeck-toggle__chevron"></span>
+                    </span>
                 </summary>
                 <div class="session-topdeck-section__body">
                     <div class="detail-metrics-grid detail-metrics-grid--metadata">
@@ -58,7 +63,7 @@
             </details>
 
             <div data-testid="session-detail-metadata-panel">
-            <details class="session-topdeck-section" open data-testid="session-detail-metadata-section">
+            <details class="session-topdeck-section" data-testid="session-detail-metadata-section">
                 <summary class="session-topdeck-section__summary" data-testid="session-detail-metadata-summary">
                     <div class="session-topdeck-section__heading">
                         <p class="section-kicker">Details</p>
@@ -71,6 +76,11 @@
                         <span class="session-topdeck-chip" data-testid="session-detail-metadata-reasoning-strip-tokens">Reason @FormatLong(GetReportedReasoningTokens())</span>
                         <span class="session-topdeck-chip" data-testid="session-detail-metadata-total-tokens">Rep Total @FormatLong(GetReportedTotalTokens())</span>
                     </div>
+                    <span class="session-topdeck-toggle" data-testid="session-detail-metadata-toggle" aria-hidden="true">
+                        <span class="session-topdeck-toggle__text session-topdeck-toggle__text--collapsed">Expand</span>
+                        <span class="session-topdeck-toggle__text session-topdeck-toggle__text--expanded">Collapse</span>
+                        <span class="session-topdeck-toggle__chevron"></span>
+                    </span>
                 </summary>
                 <div class="session-topdeck-section__body" data-testid="session-detail-metadata">
                     @if (!string.IsNullOrWhiteSpace(MetadataModel.AvailabilityMessage))
@@ -117,7 +127,7 @@
             </details>
             </div>
 
-            <details class="session-topdeck-section" open data-testid="session-detail-filters-section">
+            <details class="session-topdeck-section" data-testid="session-detail-filters-section">
                 <summary class="session-topdeck-section__summary" data-testid="session-detail-filters-summary">
                     <div class="session-topdeck-section__heading">
                         <p class="section-kicker">Filter</p>
@@ -128,6 +138,11 @@
                         <span class="session-topdeck-chip">@EnabledMethodCount/@MethodFilters.Count methods</span>
                         <span class="session-topdeck-chip">Empty agent msgs @(HideEmptyAgentMessages ? "hidden" : "shown")</span>
                     </div>
+                    <span class="session-topdeck-toggle" data-testid="session-detail-filters-toggle" aria-hidden="true">
+                        <span class="session-topdeck-toggle__text session-topdeck-toggle__text--collapsed">Expand</span>
+                        <span class="session-topdeck-toggle__text session-topdeck-toggle__text--expanded">Collapse</span>
+                        <span class="session-topdeck-toggle__chevron"></span>
+                    </span>
                 </summary>
                 <div class="session-topdeck-section__body" data-testid="session-detail-filter-panel">
                     <div class="session-topdeck-actions">
