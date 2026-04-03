@@ -160,7 +160,7 @@ public sealed class FakeDashboardDataLoader(
 
     private static DashboardSessionHistorySnapshot NormalizeImportedHistory(DashboardSessionHistorySnapshot history)
     {
-        var normalizedActivities = history.Activities.Select(SessionActivityTokenEstimator.Normalize).ToArray();
+        var normalizedActivities = history.Activities.Select(SessionActivityTokenAnnotator.Normalize).ToArray();
         return history with
         {
             Activities = normalizedActivities

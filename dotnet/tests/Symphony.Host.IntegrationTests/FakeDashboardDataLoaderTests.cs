@@ -151,7 +151,7 @@ public sealed class FakeDashboardDataLoaderTests
     }
 
     [Fact]
-    public async Task LoadFromStreamAsync_normalizes_imported_activity_token_usage_for_supported_debug_entries()
+    public async Task LoadFromStreamAsync_normalizes_imported_activity_token_usage_for_thread_usage_updates()
     {
         var loader = CreateLoader();
         var timestamp = DateTimeOffset.Parse("2026-04-03T10:14:32.6902943+00:00", System.Globalization.CultureInfo.InvariantCulture);
@@ -230,22 +230,22 @@ public sealed class FakeDashboardDataLoaderTests
                         new SessionActivityEntry(
                             SessionActivityKind.DebugMessage,
                             timestamp,
-                            "Sent turn/start",
-                            "{\"id\":3,\"method\":\"turn/start\",\"params\":{\"threadId\":\"thread-1\",\"input\":[{\"type\":\"text\",\"text\":\"Prompt body for estimation\"}]}}",
+                            "Received thread/tokenUsage/updated",
+                            "{\"method\":\"thread/tokenUsage/updated\",\"params\":{\"turnId\":\"thread-1-turn-3\",\"tokenUsage\":{\"total\":{\"inputTokens\":4472,\"cachedInputTokens\":4300,\"outputTokens\":112,\"reasoningOutputTokens\":40,\"totalTokens\":4584},\"last\":{\"inputTokens\":320,\"cachedInputTokens\":280,\"outputTokens\":112,\"reasoningOutputTokens\":40,\"totalTokens\":432}}}}",
                             new SessionActivityTokenSnapshot(
                                 "current",
                                 4472,
-                                0,
+                                112,
+                                4584,
                                 4472,
+                                112,
+                                4584,
                                 4472,
-                                0,
-                                4472,
-                                0,
-                                0,
-                                0,
-                                0,
-                                0,
-                                Symphony.Domain.Sessions.SessionTokenComparisonStatus.EstimatedOnly,
+                                4300,
+                                112,
+                                40,
+                                4584,
+                                Symphony.Domain.Sessions.SessionTokenComparisonStatus.ReportedOnly,
                                 0,
                                 0,
                                 0,
@@ -254,34 +254,34 @@ public sealed class FakeDashboardDataLoaderTests
                         new SessionActivityEntry(
                             SessionActivityKind.DebugMessage,
                             timestamp.AddSeconds(1),
+                            "Sent turn/start",
+                            "{\"id\":3,\"method\":\"turn/start\",\"params\":{\"threadId\":\"thread-1\",\"input\":[{\"type\":\"text\",\"text\":\"Prompt body for estimation\"}]}}",
+                            null),
+                        new SessionActivityEntry(
+                            SessionActivityKind.DebugMessage,
+                            timestamp.AddSeconds(2),
                             "Received item/started",
                             "{\"method\":\"item/started\",\"params\":{\"item\":{\"id\":\"item-1\",\"type\":\"userMessage\",\"content\":[{\"type\":\"text\",\"text\":\"Prompt body for estimation\"}]}}}",
                             null),
                         new SessionActivityEntry(
                             SessionActivityKind.DebugMessage,
-                            timestamp.AddSeconds(2),
+                            timestamp.AddSeconds(3),
                             "Received item/completed",
                             "{\"method\":\"item/completed\",\"params\":{\"item\":{\"id\":\"item-2\",\"type\":\"agentMessage\",\"content\":[{\"type\":\"output_text\",\"text\":\"Assistant reply payload\"}]}}}",
-                            null),
-                        new SessionActivityEntry(
-                            SessionActivityKind.DebugMessage,
-                            timestamp.AddSeconds(3),
-                            "Received turn/started",
-                            "{\"method\":\"turn/started\",\"params\":{\"turn\":{\"id\":\"turn-1\"}}}",
                             new SessionActivityTokenSnapshot(
                                 "reported",
                                 4472,
-                                0,
+                                112,
+                                4584,
                                 4472,
+                                112,
+                                4584,
                                 4472,
-                                0,
-                                4472,
-                                0,
-                                0,
-                                0,
-                                0,
-                                0,
-                                Symphony.Domain.Sessions.SessionTokenComparisonStatus.EstimatedOnly,
+                                4300,
+                                112,
+                                40,
+                                4584,
+                                Symphony.Domain.Sessions.SessionTokenComparisonStatus.ReportedOnly,
                                 0,
                                 0,
                                 0,
@@ -303,16 +303,16 @@ public sealed class FakeDashboardDataLoaderTests
         var importedSession = Assert.Single(result.DataSet.Sessions, session => session.Session.IssueIdentifier == "IMP-EST");
         Assert.Equal(4, importedSession.Activities.Count);
 
-        Assert.Equal("per-entry-estimate", importedSession.Activities[0].TokenUsage!.Source);
-        Assert.True(importedSession.Activities[0].TokenUsage!.EstimatedInputTokens > 0);
-        Assert.Equal(0, importedSession.Activities[0].TokenUsage!.EstimatedOutputTokens);
+        Assert.Equal("thread-token-usage", importedSession.Activities[0].TokenUsage!.Source);
+        Assert.Equal(4472, importedSession.Activities[0].TokenUsage!.ReportedInputTokens);
+        Assert.Equal(4300, importedSession.Activities[0].TokenUsage!.ReportedCachedInputTokens);
+        Assert.Equal(112, importedSession.Activities[0].TokenUsage!.ReportedOutputTokens);
+        Assert.Equal(40, importedSession.Activities[0].TokenUsage!.ReportedReasoningTokens);
+        Assert.Equal(4584, importedSession.Activities[0].TokenUsage!.ReportedTotalTokens);
+        Assert.Equal(432, importedSession.Activities[0].TokenUsage!.LastOperation!.TotalTokens);
 
-        Assert.Equal("per-entry-estimate", importedSession.Activities[1].TokenUsage!.Source);
-        Assert.True(importedSession.Activities[1].TokenUsage!.EstimatedInputTokens > 0);
-
-        Assert.Equal("per-entry-estimate", importedSession.Activities[2].TokenUsage!.Source);
-        Assert.True(importedSession.Activities[2].TokenUsage!.EstimatedOutputTokens > 0);
-
+        Assert.Null(importedSession.Activities[1].TokenUsage);
+        Assert.Null(importedSession.Activities[2].TokenUsage);
         Assert.Null(importedSession.Activities[3].TokenUsage);
     }
 

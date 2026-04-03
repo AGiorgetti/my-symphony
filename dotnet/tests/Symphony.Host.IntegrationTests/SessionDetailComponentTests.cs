@@ -253,8 +253,6 @@ public sealed class SessionDetailComponentTests : BunitContext
         Assert.Contains("50", cut.Markup, StringComparison.Ordinal);
         Assert.Contains("47", cut.Markup, StringComparison.Ordinal);
         Assert.Contains("9", cut.Markup, StringComparison.Ordinal);
-        Assert.Contains("118", cut.Markup, StringComparison.Ordinal);
-        Assert.Contains("40", cut.Markup, StringComparison.Ordinal);
         Assert.Contains("Rep In", cut.Markup, StringComparison.Ordinal);
         Assert.Contains("Rep Out", cut.Markup, StringComparison.Ordinal);
         Assert.Contains("Rep Total", cut.Markup, StringComparison.Ordinal);
@@ -263,10 +261,10 @@ public sealed class SessionDetailComponentTests : BunitContext
         Assert.Contains("Cached Input Tokens", cut.Markup, StringComparison.Ordinal);
         Assert.Contains("Reasoning Tokens", cut.Markup, StringComparison.Ordinal);
         Assert.Contains("Reported Total Tokens", cut.Markup, StringComparison.Ordinal);
-        Assert.Contains("Estimated Input Tokens", cut.Markup, StringComparison.Ordinal);
-        Assert.Contains("Estimated Output Tokens", cut.Markup, StringComparison.Ordinal);
-        Assert.Contains("Estimated Total Tokens", cut.Markup, StringComparison.Ordinal);
-        Assert.Contains("Token Comparison", cut.Markup, StringComparison.Ordinal);
+        Assert.DoesNotContain("Estimated Input Tokens", cut.Markup, StringComparison.Ordinal);
+        Assert.DoesNotContain("Estimated Output Tokens", cut.Markup, StringComparison.Ordinal);
+        Assert.DoesNotContain("Estimated Total Tokens", cut.Markup, StringComparison.Ordinal);
+        Assert.DoesNotContain("Token Comparison", cut.Markup, StringComparison.Ordinal);
         Assert.Contains("thread-1-turn-4", cut.Markup, StringComparison.Ordinal);
         Assert.Contains("Attempt 2", cut.Markup, StringComparison.Ordinal);
         Assert.Contains("Finished sessions keep the last known session ID and attempt when available.", cut.Markup, StringComparison.Ordinal);

@@ -96,25 +96,16 @@ public sealed class SessionDetailPageIntegrationTests
         Assert.Contains("thread-2-turn-3", html, StringComparison.Ordinal);
         Assert.Contains("Attempt 1", html, StringComparison.Ordinal);
         Assert.Contains("Finished sessions keep the last known session ID and token totals when available.", html, StringComparison.Ordinal);
-        Assert.Contains("data-testid=\"session-detail-metadata-estimated-total-tokens\"", html, StringComparison.Ordinal);
-        Assert.Contains("data-testid=\"session-detail-metadata-estimated-input-tokens\"", html, StringComparison.Ordinal);
-        Assert.Contains("data-testid=\"session-detail-metadata-estimated-output-tokens\"", html, StringComparison.Ordinal);
         Assert.Contains("data-testid=\"session-detail-metadata-reported-input-tokens\"", html, StringComparison.Ordinal);
         Assert.Contains("data-testid=\"session-detail-metadata-reported-output-tokens\"", html, StringComparison.Ordinal);
         Assert.Contains("data-testid=\"session-detail-metadata-reported-total-tokens\"", html, StringComparison.Ordinal);
         Assert.Contains("data-testid=\"session-detail-metadata-cached-input-tokens\"", html, StringComparison.Ordinal);
         Assert.Contains("data-testid=\"session-detail-metadata-reasoning-tokens\"", html, StringComparison.Ordinal);
-        Assert.Contains("data-testid=\"session-detail-metadata-comparison-status\"", html, StringComparison.Ordinal);
-        Assert.Contains(">60<", html, StringComparison.Ordinal);
-        Assert.Contains(">30<", html, StringComparison.Ordinal);
         Assert.Contains(">64<", html, StringComparison.Ordinal);
         Assert.Contains(">32<", html, StringComparison.Ordinal);
-        Assert.Contains(">90<", html, StringComparison.Ordinal);
         Assert.Contains(">96<", html, StringComparison.Ordinal);
         Assert.Contains(">12<", html, StringComparison.Ordinal);
         Assert.Contains(">9<", html, StringComparison.Ordinal);
-        Assert.Contains("Mismatch", html, StringComparison.Ordinal);
-        Assert.Contains("6", html, StringComparison.Ordinal);
         Assert.DoesNotContain("data-testid=\"session-detail-timeline-entry-token-indicator\"", html, StringComparison.Ordinal);
     }
 
@@ -174,11 +165,7 @@ public sealed class SessionDetailPageIntegrationTests
         Assert.Contains("&quot;method&quot;: &quot;turn/completed&quot;", html, StringComparison.Ordinal);
         Assert.Contains("&quot;message&quot;: &quot;done&quot;", html, StringComparison.Ordinal);
         Assert.Contains("&quot;method&quot;: &quot;item/agentMessage/delta&quot;", html, StringComparison.Ordinal);
-        Assert.Contains("data-testid=\"session-detail-timeline-entry-token-indicator\"", html, StringComparison.Ordinal);
-        Assert.Contains("Tokens: Estimate", html, StringComparison.Ordinal);
-        Assert.Contains("Estimated input", html, StringComparison.Ordinal);
-        Assert.Contains("Estimated output", html, StringComparison.Ordinal);
-        Assert.Contains("Estimated total", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("data-testid=\"session-detail-timeline-entry-token-indicator\"", html, StringComparison.Ordinal);
     }
 
     [Fact]

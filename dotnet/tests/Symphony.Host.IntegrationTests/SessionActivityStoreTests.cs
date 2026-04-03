@@ -138,7 +138,7 @@ public sealed class SessionActivityStoreTests
     }
 
     [Fact]
-    public void RecordActivity_attaches_single_request_estimate_only_to_supported_debug_messages()
+    public void RecordActivity_attaches_reported_token_usage_only_to_thread_usage_updates()
     {
         var store = CreateStore();
         var startedAt = new DateTimeOffset(2026, 3, 19, 16, 30, 0, TimeSpan.Zero);
@@ -171,7 +171,30 @@ public sealed class SessionActivityStoreTests
                 SessionActivityKind.DebugMessage,
                 startedAt.AddSeconds(4),
                 "Received thread/tokenUsage/updated",
-                "{\"method\":\"thread/tokenUsage/updated\"}"));
+                """
+                {
+                  "method": "thread/tokenUsage/updated",
+                  "params": {
+                    "turnId": "thread-5-turn-1",
+                    "tokenUsage": {
+                      "total": {
+                        "inputTokens": 120,
+                        "cachedInputTokens": 44,
+                        "outputTokens": 25,
+                        "reasoningOutputTokens": 7,
+                        "totalTokens": 145
+                      },
+                      "last": {
+                        "inputTokens": 120,
+                        "cachedInputTokens": 44,
+                        "outputTokens": 25,
+                        "reasoningOutputTokens": 7,
+                        "totalTokens": 145
+                      }
+                    }
+                  }
+                }
+                """));
 
         store.RecordSessionMetadata(
             "ABC-5",
@@ -213,22 +236,18 @@ public sealed class SessionActivityStoreTests
         var activities = store.GetActivities("ABC-5");
         Assert.Equal(4, activities.Count);
 
-        Assert.NotNull(activities[0].TokenUsage);
-        Assert.Equal("per-entry-estimate", activities[0].TokenUsage!.Source);
-        Assert.True(activities[0].TokenUsage!.EstimatedInputTokens > 0);
-        Assert.Equal(0, activities[0].TokenUsage!.EstimatedOutputTokens);
+        Assert.Null(activities[0].TokenUsage);
+        Assert.Null(activities[1].TokenUsage);
+        Assert.Null(activities[2].TokenUsage);
 
-        Assert.NotNull(activities[1].TokenUsage);
-        Assert.Equal("per-entry-estimate", activities[1].TokenUsage!.Source);
-        Assert.True(activities[1].TokenUsage!.EstimatedInputTokens > 0);
-        Assert.Equal(0, activities[1].TokenUsage!.EstimatedOutputTokens);
-
-        Assert.NotNull(activities[2].TokenUsage);
-        Assert.Equal("per-entry-estimate", activities[2].TokenUsage!.Source);
-        Assert.Equal(0, activities[2].TokenUsage!.EstimatedInputTokens);
-        Assert.True(activities[2].TokenUsage!.EstimatedOutputTokens > 0);
-
-        Assert.Null(activities[3].TokenUsage);
+        Assert.NotNull(activities[3].TokenUsage);
+        Assert.Equal("thread-token-usage", activities[3].TokenUsage!.Source);
+        Assert.Equal(120, activities[3].TokenUsage!.ReportedInputTokens);
+        Assert.Equal(44, activities[3].TokenUsage!.ReportedCachedInputTokens);
+        Assert.Equal(25, activities[3].TokenUsage!.ReportedOutputTokens);
+        Assert.Equal(7, activities[3].TokenUsage!.ReportedReasoningTokens);
+        Assert.Equal(145, activities[3].TokenUsage!.ReportedTotalTokens);
+        Assert.Equal(145, activities[3].TokenUsage!.LastOperation!.TotalTokens);
     }
 
     private static SessionActivityStore CreateStore(bool trackAgentMessageDeltas = false)

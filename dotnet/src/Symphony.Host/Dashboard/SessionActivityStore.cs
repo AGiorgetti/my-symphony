@@ -295,7 +295,7 @@ public sealed class SessionActivityStore(
     private static SessionActivityEntry EnrichNewActivity(
         SessionActivityEntry activity)
     {
-        return SessionActivityTokenEstimator.Normalize(activity);
+        return SessionActivityTokenAnnotator.Normalize(activity);
     }
 
     private sealed record SessionState(

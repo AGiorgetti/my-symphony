@@ -82,22 +82,6 @@
                             <p class="detail-metric-label">Reported Total Tokens</p>
                             <p class="detail-metric-value">@FormatLong(Metadata.TokenUsage.ReportedTotalTokens)</p>
                         </div>
-                        <div class="detail-metric-card" data-testid="session-detail-metadata-estimated-input-tokens">
-                            <p class="detail-metric-label">Estimated Input Tokens</p>
-                            <p class="detail-metric-value">@FormatLong(Metadata.TokenUsage.EstimatedInputTokens)</p>
-                        </div>
-                        <div class="detail-metric-card" data-testid="session-detail-metadata-estimated-output-tokens">
-                            <p class="detail-metric-label">Estimated Output Tokens</p>
-                            <p class="detail-metric-value">@FormatLong(Metadata.TokenUsage.EstimatedOutputTokens)</p>
-                        </div>
-                        <div class="detail-metric-card" data-testid="session-detail-metadata-estimated-total-tokens">
-                            <p class="detail-metric-label">Estimated Total Tokens</p>
-                            <p class="detail-metric-value">@FormatLong(Metadata.TokenUsage.EstimatedTotalTokens)</p>
-                        </div>
-                        <div class="detail-metric-card" data-testid="session-detail-metadata-comparison-status">
-                            <p class="detail-metric-label">Token Comparison</p>
-                            <p class="detail-metric-value">@FormatComparisonStatus(Metadata.TokenUsage)</p>
-                        </div>
                     }
                 </div>
             </div>
@@ -125,19 +109,6 @@
     private static string FormatText(string? value)
     {
         return string.IsNullOrWhiteSpace(value) ? "Unavailable" : value;
-    }
-
-    private static string FormatComparisonStatus(DashboardSessionTokenUsageSnapshot tokenUsage)
-    {
-        return tokenUsage.ComparisonStatus switch
-        {
-            SessionTokenComparisonStatus.None => "Unavailable",
-            SessionTokenComparisonStatus.EstimatedOnly => "Estimated only",
-            SessionTokenComparisonStatus.ReportedOnly => "Reported only",
-            SessionTokenComparisonStatus.Match => "Match",
-            SessionTokenComparisonStatus.Mismatch => $"Mismatch ({tokenUsage.TotalDelta:+#;-#;0})",
-            _ => tokenUsage.ComparisonStatus.ToString()
-        };
     }
 
     private long? GetReportedInputTokens() => Metadata.TokenUsage?.ReportedInputTokens ?? Metadata.InputTokens;
