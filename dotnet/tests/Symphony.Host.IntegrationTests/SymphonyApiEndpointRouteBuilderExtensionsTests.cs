@@ -20,6 +20,7 @@ using Symphony.Host.Configuration;
 using Symphony.Host.Dashboard;
 using Symphony.Host.Health;
 using Symphony.Domain.Issues;
+using Symphony.Domain.Sessions;
 
 namespace Symphony.Host.IntegrationTests;
 
@@ -254,6 +255,37 @@ public sealed class SymphonyApiEndpointRouteBuilderExtensionsTests
         var sessionStore = new SessionActivityStore(Microsoft.Extensions.Logging.Abstractions.NullLogger<SessionActivityStore>.Instance);
         var startedAt = new DateTimeOffset(2026, 4, 2, 8, 0, 0, TimeSpan.Zero);
         sessionStore.RecordSessionStart("ABC-1", startedAt, "https://example.invalid/issues/ABC-1");
+        sessionStore.RecordSessionMetadata(
+            "ABC-1",
+            startedAt.AddMinutes(2),
+            new LiveSessionMetadata(
+                "thread-1",
+                "turn-1",
+                lastCodexEvent: "turn_completed",
+                lastCodexTimestamp: startedAt.AddMinutes(2),
+                lastCodexMessage: "Applied change",
+                codexInputTokens: 10,
+                codexOutputTokens: 5,
+                codexTotalTokens: 15,
+                lastReportedInputTokens: 10,
+                lastReportedCachedInputTokens: 3,
+                lastReportedOutputTokens: 5,
+                lastReportedReasoningTokens: 2,
+                lastReportedTotalTokens: 15,
+                lastReportedTokenAt: startedAt.AddMinutes(2),
+                lastUsageOperation: new SessionTokenUsageOperation(
+                    "thread-1-turn-1:turn_completed",
+                    "turn_completed",
+                    startedAt.AddMinutes(2),
+                    1,
+                    10,
+                    3,
+                    5,
+                    2,
+                    15),
+                turnCount: 1),
+            attempt: 1,
+            orchestratorSessionId: "orch-1");
         sessionStore.RecordActivity("ABC-1", new SessionActivityEntry(SessionActivityKind.AgentMessage, startedAt.AddMinutes(1), "turn_completed", "Applied change"));
         sessionStore.RecordActivity("ABC-1", new SessionActivityEntry(SessionActivityKind.DebugMessage, startedAt.AddMinutes(2), "Received item/agentMessage/delta", "{\"method\":\"item/agentMessage/delta\",\"params\":{\"turnId\":\"turn-1\"}}"));
 
@@ -305,6 +337,14 @@ public sealed class SymphonyApiEndpointRouteBuilderExtensionsTests
         Assert.Equal(10, payload.SingleSession.Metadata!.InputTokens);
         Assert.Equal(5, payload.SingleSession.Metadata.OutputTokens);
         Assert.Equal(15, payload.SingleSession.Metadata.TotalTokens);
+        Assert.NotNull(payload.SingleSession.Metadata.TokenUsage);
+        Assert.Equal(3, payload.SingleSession.Metadata.TokenUsage.ReportedCachedInputTokens);
+        Assert.Equal(2, payload.SingleSession.Metadata.TokenUsage.ReportedReasoningTokens);
+        Assert.Equal(15, payload.SingleSession.Metadata.TokenUsage.ReportedTotalTokens);
+        Assert.NotNull(payload.SingleSession.Metadata.TokenUsage.LastOperation);
+        Assert.Equal("thread-1-turn-1:turn_completed", payload.SingleSession.Metadata.TokenUsage.LastOperation!.OperationId);
+        Assert.NotNull(payload.SingleSession.History!.Metadata);
+        Assert.Equal(15, payload.SingleSession.History.Metadata!.TokenUsage!.EffectiveTotalTokens);
     }
 
     [Fact]

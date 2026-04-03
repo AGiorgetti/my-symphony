@@ -1,3 +1,5 @@
+using Symphony.Domain.Sessions;
+
 namespace Symphony.Host.Dashboard;
 
 public interface ISessionActivityStore
@@ -8,7 +10,16 @@ public interface ISessionActivityStore
 
     void RecordSessionEnd(string issueIdentifier, DateTimeOffset endedAt, string outcome, string? error = null);
 
+    void RecordSessionMetadata(
+        string issueIdentifier,
+        DateTimeOffset timestamp,
+        LiveSessionMetadata session,
+        int? attempt,
+        string orchestratorSessionId);
+
     IReadOnlyList<SessionRecord> GetAllSessions();
+
+    IReadOnlyList<DashboardSessionHistorySnapshot> GetAllSessionHistories();
 
     IReadOnlyList<SessionRecord> GetActiveSessions();
 
@@ -17,4 +28,6 @@ public interface ISessionActivityStore
     SessionRecord? GetSession(string issueIdentifier);
 
     IReadOnlyList<SessionActivityEntry> GetActivities(string issueIdentifier);
+
+    DashboardSessionHistorySnapshot? GetSessionHistory(string issueIdentifier);
 }

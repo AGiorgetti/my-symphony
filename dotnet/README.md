@@ -342,7 +342,10 @@ surface only: if dashboard rendering fails, the orchestrator and JSON API contin
   timeline also includes the full outbound Codex request transcript, full inbound replies/events,
   and stderr/diagnostic lines for each session. A persistent left-side filter panel exposes one
   checkbox per observed debug transcript `method`, including `item/agentMessage/delta` when
-  `Dashboard:TrackAgentMessageDeltas` is on.
+  `Dashboard:TrackAgentMessageDeltas` is on. Session history now also retains token usage snapshots
+  for the life of the current application run, using reported usage totals from Codex payloads and
+  per-turn cost events that retain authoritative reported usage for completed turns. When present,
+  those cost events include cached input and reasoning token breakdowns from the Codex usage payload.
 - When `Dashboard:EnableFakeDataMode` is on, the same dashboard, session list, and session detail
   routes can be opened with `?mode=fake` to validate the host UI against a built-in dataset that
   includes active, retrying, blocked, failed, succeeded, and large debug-payload scenarios. The
@@ -365,6 +368,10 @@ surface only: if dashboard rendering fails, the orchestrator and JSON API contin
 - `GET /api/v1/orchestration` for the current started/stopped control state
 - `POST /api/v1/orchestration/start` to resume polling and new issue assignment
 - `POST /api/v1/orchestration/stop` to pause polling and new issue assignment
+
+Single-session and full-bundle exports now include everything the session history view can render
+for that session, including retained token usage metadata and debug transcript entries when those
+were recorded.
 
 ## Project Layout
 

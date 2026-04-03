@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Symphony.Abstractions.Orchestration;
 using Symphony.Application.Orchestration;
 using Symphony.Application.Runtime;
+using Symphony.Domain.Sessions;
 
 namespace Symphony.Host.Dashboard;
 
@@ -57,6 +58,15 @@ public sealed class FakeDashboardPageDataSource
             return _dataSet.Sessions
                 .Select(history => history.Session)
                 .FirstOrDefault(session => string.Equals(session.IssueIdentifier, issueIdentifier, StringComparison.OrdinalIgnoreCase));
+        }
+    }
+
+    public DashboardSessionHistorySnapshot? GetSessionHistory(string issueIdentifier)
+    {
+        lock (_sync)
+        {
+            return _dataSet.Sessions
+                .FirstOrDefault(history => string.Equals(history.Session.IssueIdentifier, issueIdentifier, StringComparison.OrdinalIgnoreCase));
         }
     }
 
@@ -276,7 +286,27 @@ public sealed class FakeDashboardPageDataSource
                     resolvedAt.AddSeconds(5),
                     "Session resumed",
                     "Fake mode resumed the blocked session for UI validation.")
-            ]);
+            ],
+            new DashboardSessionMetadataSnapshot(
+                InputTokens: 410,
+                OutputTokens: 152,
+                TotalTokens: 562,
+                TurnCount: 4,
+                SessionId: "fake-thread-303-turn-4",
+                OrchestratorSessionId: "orch-fake-303",
+                Attempt: 2,
+                IsAttemptKnown: true,
+                AvailabilityMessage: null,
+                TokenUsage: new DashboardSessionTokenUsageSnapshot(
+                    410,
+                    152,
+                    562,
+                    410,
+                    0,
+                    152,
+                    0,
+                    562,
+                    resolvedAt)));
     }
 
     private static FakeDashboardDataSet CreateFixtureDataSet(ILoggerFactory loggerFactory)
@@ -487,9 +517,7 @@ public sealed class FakeDashboardPageDataSource
 
         return new FakeDashboardDataSet(
             dashboardSnapshot,
-            sessionActivityStore.GetAllSessions()
-                .Select(session => new DashboardSessionHistorySnapshot(session, sessionActivityStore.GetActivities(session.IssueIdentifier)))
-                .ToArray(),
+            sessionActivityStore.GetAllSessionHistories(),
             issueSnapshots);
     }
 
@@ -497,6 +525,27 @@ public sealed class FakeDashboardPageDataSource
     {
         var startedAt = new DateTimeOffset(2026, 4, 1, 8, 38, 0, TimeSpan.Zero);
         store.RecordSessionStart("ABC-101", startedAt, "https://example.invalid/issues/ABC-101");
+        store.RecordSessionMetadata(
+            "ABC-101",
+            startedAt.AddMinutes(21),
+            new LiveSessionMetadata(
+                "fake-thread-101",
+                "turn-7",
+                lastCodexEvent: "turn_completed",
+                lastCodexTimestamp: startedAt.AddMinutes(21),
+                lastCodexMessage: "Refined the dashboard filters and queued one follow-up.",
+                codexInputTokens: 520,
+                codexOutputTokens: 264,
+                codexTotalTokens: 784,
+                lastReportedInputTokens: 520,
+                lastReportedCachedInputTokens: 0,
+                lastReportedOutputTokens: 264,
+                lastReportedReasoningTokens: 0,
+                lastReportedTotalTokens: 784,
+                lastReportedTokenAt: startedAt.AddMinutes(21),
+                turnCount: 7),
+            attempt: 1,
+            orchestratorSessionId: "orch-fake-101");
         store.RecordActivity("ABC-101", new SessionActivityEntry(SessionActivityKind.LifecycleMilestone, startedAt, "Session started", "Fake mode bootstrapped an active dashboard scenario."));
         store.RecordActivity("ABC-101", new SessionActivityEntry(SessionActivityKind.ProgressUpdate, startedAt.AddMinutes(8), "Workspace hydrated", "Loaded design notes and previous attempts."));
         store.RecordActivity("ABC-101", new SessionActivityEntry(SessionActivityKind.Warning, startedAt.AddMinutes(14), "Minor warning", "A non-blocking lint warning is waiting for cleanup."));
@@ -507,6 +556,27 @@ public sealed class FakeDashboardPageDataSource
     {
         var startedAt = new DateTimeOffset(2026, 4, 1, 8, 49, 0, TimeSpan.Zero);
         store.RecordSessionStart("ABC-202", startedAt, "https://example.invalid/issues/ABC-202");
+        store.RecordSessionMetadata(
+            "ABC-202",
+            startedAt.AddMinutes(2),
+            new LiveSessionMetadata(
+                "fake-thread-202",
+                "turn-3",
+                lastCodexEvent: "retry_scheduled",
+                lastCodexTimestamp: startedAt.AddMinutes(2),
+                lastCodexMessage: "Rate limit exceeded on the last attempt.",
+                codexInputTokens: 144,
+                codexOutputTokens: 36,
+                codexTotalTokens: 180,
+                lastReportedInputTokens: 144,
+                lastReportedCachedInputTokens: 0,
+                lastReportedOutputTokens: 36,
+                lastReportedReasoningTokens: 0,
+                lastReportedTotalTokens: 180,
+                lastReportedTokenAt: startedAt.AddMinutes(2),
+                turnCount: 3),
+            attempt: 3,
+            orchestratorSessionId: "orch-fake-202");
         store.RecordActivity("ABC-202", new SessionActivityEntry(SessionActivityKind.LifecycleMilestone, startedAt, "Session started", "Retry scenario seeded for dashboard validation."));
         store.RecordActivity("ABC-202", new SessionActivityEntry(SessionActivityKind.Warning, startedAt.AddMinutes(2), "Queued for retry", "Rate limit exceeded on the last attempt."));
         store.RecordSessionEnd("ABC-202", startedAt.AddMinutes(2), "Retrying", "Rate limit exceeded on the last attempt.");
@@ -517,6 +587,27 @@ public sealed class FakeDashboardPageDataSource
         var startedAt = new DateTimeOffset(2026, 4, 1, 8, 50, 0, TimeSpan.Zero);
         var blockedAt = startedAt.AddMinutes(2);
         store.RecordSessionStart("ABC-303", startedAt, "https://example.invalid/issues/ABC-303");
+        store.RecordSessionMetadata(
+            "ABC-303",
+            blockedAt,
+            new LiveSessionMetadata(
+                "fake-thread-303",
+                "turn-4",
+                lastCodexEvent: "manual_decision_required",
+                lastCodexTimestamp: blockedAt,
+                lastCodexMessage: "Deployment target requires a manual approval step.",
+                codexInputTokens: 410,
+                codexOutputTokens: 152,
+                codexTotalTokens: 562,
+                lastReportedInputTokens: 410,
+                lastReportedCachedInputTokens: 0,
+                lastReportedOutputTokens: 152,
+                lastReportedReasoningTokens: 0,
+                lastReportedTotalTokens: 562,
+                lastReportedTokenAt: blockedAt,
+                turnCount: 4),
+            attempt: 2,
+            orchestratorSessionId: "orch-fake-303");
         store.RecordActivity("ABC-303", new SessionActivityEntry(SessionActivityKind.LifecycleMilestone, startedAt, "Session started", "Manual decision scenario seeded for follow-up validation."));
         store.RecordActivity("ABC-303", new SessionActivityEntry(SessionActivityKind.AttentionRequired, blockedAt, "Follow-up action created", "Review the staged deployment plan, then resolve the follow-up action to resume the session."));
         store.RecordSessionEnd("ABC-303", blockedAt, "Needs attention", "Deployment target requires a manual approval step.");
@@ -533,6 +624,27 @@ public sealed class FakeDashboardPageDataSource
         var completedMessage = string.Concat(deltaChunks);
 
         store.RecordSessionStart("ABC-404", startedAt, "https://example.invalid/issues/ABC-404");
+        store.RecordSessionMetadata(
+            "ABC-404",
+            failedAt,
+            new LiveSessionMetadata(
+                threadId,
+                "turn-3",
+                lastCodexEvent: "turn_failed",
+                lastCodexTimestamp: failedAt,
+                lastCodexMessage: "Prompt build failed after loading a large diagnostics payload.",
+                codexInputTokens: 2384,
+                codexOutputTokens: 912,
+                codexTotalTokens: 3296,
+                lastReportedInputTokens: 2384,
+                lastReportedCachedInputTokens: 0,
+                lastReportedOutputTokens: 912,
+                lastReportedReasoningTokens: 0,
+                lastReportedTotalTokens: 3296,
+                lastReportedTokenAt: startedAt.AddSeconds(31),
+                turnCount: 3),
+            attempt: 1,
+            orchestratorSessionId: "orch-fake-404");
         store.RecordActivity("ABC-404", new SessionActivityEntry(SessionActivityKind.LifecycleMilestone, startedAt, "Session started", "Codex-like large payload scenario seeded for debug mode validation."));
         store.RecordActivity("ABC-404", new SessionActivityEntry(SessionActivityKind.DebugMessage, startedAt.AddSeconds(2), "Sent initialize", """
                 {
@@ -604,6 +716,27 @@ public sealed class FakeDashboardPageDataSource
         var startedAt = new DateTimeOffset(2026, 4, 1, 8, 30, 0, TimeSpan.Zero);
         var endedAt = startedAt.AddMinutes(6);
         store.RecordSessionStart("ABC-505", startedAt, "https://example.invalid/issues/ABC-505");
+        store.RecordSessionMetadata(
+            "ABC-505",
+            endedAt,
+            new LiveSessionMetadata(
+                "fake-thread-505",
+                "turn-5",
+                lastCodexEvent: "turn_completed",
+                lastCodexTimestamp: endedAt,
+                lastCodexMessage: "Published a clean success result.",
+                codexInputTokens: 620,
+                codexOutputTokens: 240,
+                codexTotalTokens: 860,
+                lastReportedInputTokens: 620,
+                lastReportedCachedInputTokens: 0,
+                lastReportedOutputTokens: 240,
+                lastReportedReasoningTokens: 0,
+                lastReportedTotalTokens: 860,
+                lastReportedTokenAt: endedAt,
+                turnCount: 5),
+            attempt: 2,
+            orchestratorSessionId: "orch-fake-505");
         store.RecordActivity("ABC-505", new SessionActivityEntry(SessionActivityKind.LifecycleMilestone, startedAt, "Session started", "Success scenario seeded for list/detail validation."));
         store.RecordActivity("ABC-505", new SessionActivityEntry(SessionActivityKind.Outcome, endedAt, "Run succeeded", "Published a clean success result."));
         store.RecordSessionEnd("ABC-505", endedAt, "Succeeded");

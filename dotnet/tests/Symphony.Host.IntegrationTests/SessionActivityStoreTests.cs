@@ -3,6 +3,7 @@ using Microsoft.Extensions.Options;
 using Symphony.Application.Orchestration;
 using Symphony.Host.Configuration;
 using Symphony.Host.Dashboard;
+using Symphony.Domain.Sessions;
 
 namespace Symphony.Host.IntegrationTests;
 
@@ -134,6 +135,111 @@ public sealed class SessionActivityStoreTests
         var session = Assert.Single(store.GetActiveSessions());
         Assert.Equal("ABC-4", session.IssueIdentifier);
         Assert.Equal(24, store.GetActivities("ABC-4").Count);
+    }
+
+    [Fact]
+    public void RecordActivity_attaches_reported_token_usage_only_to_thread_usage_updates()
+    {
+        var store = CreateStore();
+        var startedAt = new DateTimeOffset(2026, 3, 19, 16, 30, 0, TimeSpan.Zero);
+
+        store.RecordSessionStart("ABC-5", startedAt);
+        store.RecordActivity(
+            "ABC-5",
+            new SessionActivityEntry(
+                SessionActivityKind.DebugMessage,
+                startedAt.AddSeconds(1),
+                "Sent turn/start",
+                "{\"method\":\"turn/start\",\"params\":{\"input\":[{\"type\":\"text\",\"text\":\"Prompt body for estimation\"}]}}"));
+        store.RecordActivity(
+            "ABC-5",
+            new SessionActivityEntry(
+                SessionActivityKind.DebugMessage,
+                startedAt.AddSeconds(2),
+                "Received item/started",
+                "{\"method\":\"item/started\",\"params\":{\"item\":{\"id\":\"item-1\",\"type\":\"userMessage\",\"text\":\"Prompt body for estimation\"}}}"));
+        store.RecordActivity(
+            "ABC-5",
+            new SessionActivityEntry(
+                SessionActivityKind.DebugMessage,
+                startedAt.AddSeconds(3),
+                "Received item/completed",
+                "{\"method\":\"item/completed\",\"params\":{\"item\":{\"id\":\"item-2\",\"type\":\"agentMessage\",\"content\":[{\"type\":\"output_text\",\"text\":\"Assistant reply payload\"}]}}}"));
+        store.RecordActivity(
+            "ABC-5",
+            new SessionActivityEntry(
+                SessionActivityKind.DebugMessage,
+                startedAt.AddSeconds(4),
+                "Received thread/tokenUsage/updated",
+                """
+                {
+                  "method": "thread/tokenUsage/updated",
+                  "params": {
+                    "turnId": "thread-5-turn-1",
+                    "tokenUsage": {
+                      "total": {
+                        "inputTokens": 120,
+                        "cachedInputTokens": 44,
+                        "outputTokens": 25,
+                        "reasoningOutputTokens": 7,
+                        "totalTokens": 145
+                      },
+                      "last": {
+                        "inputTokens": 120,
+                        "cachedInputTokens": 44,
+                        "outputTokens": 25,
+                        "reasoningOutputTokens": 7,
+                        "totalTokens": 145
+                      }
+                    }
+                  }
+                }
+                """));
+
+        store.RecordSessionMetadata(
+            "ABC-5",
+            startedAt.AddSeconds(4),
+            new LiveSessionMetadata(
+                "thread-5",
+                "turn-5",
+                codexInputTokens: 120,
+                codexOutputTokens: 25,
+                codexTotalTokens: 145,
+                lastReportedInputTokens: 120,
+                lastReportedCachedInputTokens: 44,
+                lastReportedOutputTokens: 25,
+                lastReportedReasoningTokens: 7,
+                lastReportedTotalTokens: 145,
+                lastReportedTokenAt: startedAt.AddSeconds(1),
+                lastUsageOperation: new SessionTokenUsageOperation(
+                    "turn-5:thread_tokenUsage_updated:145",
+                    "thread_tokenUsage_updated",
+                    startedAt.AddSeconds(1),
+                    1,
+                    120,
+                    44,
+                    25,
+                    7,
+                    145),
+                turnCount: 1),
+            attempt: 1,
+            orchestratorSessionId: "orch-5");
+
+        var activities = store.GetActivities("ABC-5");
+        Assert.Equal(4, activities.Count);
+
+        Assert.Null(activities[0].TokenUsage);
+        Assert.Null(activities[1].TokenUsage);
+        Assert.Null(activities[2].TokenUsage);
+
+        Assert.NotNull(activities[3].TokenUsage);
+        Assert.Equal("thread-token-usage", activities[3].TokenUsage!.Source);
+        Assert.Equal(120, activities[3].TokenUsage!.ReportedInputTokens);
+        Assert.Equal(44, activities[3].TokenUsage!.ReportedCachedInputTokens);
+        Assert.Equal(25, activities[3].TokenUsage!.ReportedOutputTokens);
+        Assert.Equal(7, activities[3].TokenUsage!.ReportedReasoningTokens);
+        Assert.Equal(145, activities[3].TokenUsage!.ReportedTotalTokens);
+        Assert.Equal(145, activities[3].TokenUsage!.LastOperation!.TotalTokens);
     }
 
     private static SessionActivityStore CreateStore(bool trackAgentMessageDeltas = false)

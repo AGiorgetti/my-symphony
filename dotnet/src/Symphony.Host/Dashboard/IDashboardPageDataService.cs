@@ -19,6 +19,8 @@ public interface IDashboardPageDataService
 
     SessionRecord? GetSession(DashboardPageMode mode, string issueIdentifier);
 
+    DashboardSessionHistorySnapshot? GetSessionHistory(DashboardPageMode mode, string issueIdentifier);
+
     IReadOnlyList<SessionActivityEntry> GetActivities(DashboardPageMode mode, string issueIdentifier);
 
     Task<OrchestratorIssueSnapshot?> GetIssueSnapshotAsync(

@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using MudBlazor;
 using Symphony.Domain.Runs;
+using Symphony.Domain.Sessions;
 using Symphony.Host.Dashboard;
 
 namespace Symphony.Host.Components.SessionDetail;
@@ -116,6 +117,8 @@ internal static class SessionDetailDisplay
         var detail = NormalizeDetail(entry.Detail);
         var detailPresentation = BuildDetailPresentation(detail);
         var displayTitle = HumanizeTitle(entry.Title);
+        var hasVisibleTokenUsage = HasVisibleEntryTokenUsage(entry.TokenUsage);
+        var facts = MergeFacts(detailPresentation.Facts, entry.TokenUsage);
 
         return new SessionActivityTimelineEntryModel(
             entry.Kind,
@@ -125,13 +128,15 @@ internal static class SessionDetailDisplay
             GetKindLabel(entry.Kind),
             GetKindBadgeColor(entry.Kind),
             detailPresentation.Summary,
-            detailPresentation.Facts,
+            facts,
             detailPresentation.Detail,
             detailPresentation.DetailPreview,
             detailPresentation.DetailToggleLabel,
             detailPresentation.HasExpandableDetail,
             detailPresentation.IsStructuredDetail,
-            GetTimelineColor(entry));
+            GetTimelineColor(entry),
+            hasVisibleTokenUsage,
+            GetTokenSourceLabel(entry.TokenUsage));
     }
 
     internal static int? TryParseTurnCount(string? sessionId)
@@ -418,9 +423,19 @@ internal static class SessionDetailDisplay
                 facts.Add(new SessionActivityFactModel("Input", input));
             }
 
+            if (TryGetNumeric(stats, "cachedInput", out var cachedInput))
+            {
+                facts.Add(new SessionActivityFactModel("Cached input", cachedInput));
+            }
+
             if (TryGetNumeric(stats, "output", out var output))
             {
                 facts.Add(new SessionActivityFactModel("Output", output));
+            }
+
+            if (TryGetNumeric(stats, "reasoning", out var reasoning))
+            {
+                facts.Add(new SessionActivityFactModel("Reasoning", reasoning));
             }
 
             if (TryGetNumeric(stats, "total", out var total))
@@ -428,6 +443,17 @@ internal static class SessionDetailDisplay
                 facts.Add(new SessionActivityFactModel("Total", total));
             }
         }
+
+        if (TryGetString(element, "source", out var source))
+        {
+            facts.Add(new SessionActivityFactModel("Source", source));
+        }
+
+        AddTokenUsageFacts(facts, element, "effective", "Current");
+        AddTokenUsageFacts(facts, element, "estimated", "Estimated");
+        AddTokenUsageFacts(facts, element, "reported", "Reported");
+        AddOperationFacts(facts, element);
+        AddComparisonFacts(facts, element);
 
         if (TryGetString(element, "error", out var error))
         {
@@ -439,6 +465,139 @@ internal static class SessionDetailDisplay
         }
 
         return facts;
+    }
+
+    private static IReadOnlyList<SessionActivityFactModel> MergeFacts(
+        IReadOnlyList<SessionActivityFactModel> existingFacts,
+        SessionActivityTokenSnapshot? tokenUsage)
+    {
+        if (!HasVisibleEntryTokenUsage(tokenUsage))
+        {
+            return existingFacts;
+        }
+
+        var visibleTokenUsage = tokenUsage!;
+        var facts = new List<SessionActivityFactModel>(existingFacts);
+
+        AddFactIfMissing(facts, "Token source", GetTokenSourceLabel(visibleTokenUsage));
+        AddFactIfMissing(facts, "Reported input", visibleTokenUsage.ReportedInputTokens.ToString(CultureInfo.InvariantCulture));
+        if (visibleTokenUsage.ReportedCachedInputTokens > 0)
+        {
+            AddFactIfMissing(facts, "Cached input", visibleTokenUsage.ReportedCachedInputTokens.ToString(CultureInfo.InvariantCulture));
+        }
+        AddFactIfMissing(facts, "Reported output", visibleTokenUsage.ReportedOutputTokens.ToString(CultureInfo.InvariantCulture));
+        if (visibleTokenUsage.ReportedReasoningTokens > 0)
+        {
+            AddFactIfMissing(facts, "Reasoning", visibleTokenUsage.ReportedReasoningTokens.ToString(CultureInfo.InvariantCulture));
+        }
+        AddFactIfMissing(facts, "Reported total", visibleTokenUsage.ReportedTotalTokens.ToString(CultureInfo.InvariantCulture));
+
+        return facts;
+    }
+
+    private static void AddFactIfMissing(ICollection<SessionActivityFactModel> facts, string label, string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)
+            || facts.Any(candidate => string.Equals(candidate.Label, label, StringComparison.Ordinal)))
+        {
+            return;
+        }
+
+        facts.Add(new SessionActivityFactModel(label, value));
+    }
+
+    private static string? GetTokenSourceLabel(SessionActivityTokenSnapshot? tokenUsage)
+    {
+        if (!HasVisibleEntryTokenUsage(tokenUsage))
+        {
+            return null;
+        }
+
+        return tokenUsage!.Source switch
+        {
+            "thread-token-usage" => "Reported",
+            _ => "Available"
+        };
+    }
+
+    private static bool HasVisibleEntryTokenUsage(SessionActivityTokenSnapshot? tokenUsage)
+    {
+        return tokenUsage is not null
+            && string.Equals(tokenUsage.Source, "thread-token-usage", StringComparison.Ordinal)
+            && tokenUsage.ReportedTotalTokens > 0;
+    }
+
+    private static void AddTokenUsageFacts(
+        ICollection<SessionActivityFactModel> facts,
+        JsonElement element,
+        string propertyName,
+        string labelPrefix)
+    {
+        if (!element.TryGetProperty(propertyName, out var tokenGroup) || tokenGroup.ValueKind != JsonValueKind.Object)
+        {
+            return;
+        }
+
+        if (TryGetNumeric(tokenGroup, "inputTokens", out var input))
+        {
+            facts.Add(new SessionActivityFactModel($"{labelPrefix} input", input));
+        }
+
+        if (TryGetNumeric(tokenGroup, "cachedInputTokens", out var cachedInput))
+        {
+            facts.Add(new SessionActivityFactModel($"{labelPrefix} cached", cachedInput));
+        }
+
+        if (TryGetNumeric(tokenGroup, "outputTokens", out var output))
+        {
+            facts.Add(new SessionActivityFactModel($"{labelPrefix} output", output));
+        }
+
+        if (TryGetNumeric(tokenGroup, "reasoningTokens", out var reasoning))
+        {
+            facts.Add(new SessionActivityFactModel($"{labelPrefix} reasoning", reasoning));
+        }
+
+        if (TryGetNumeric(tokenGroup, "totalTokens", out var total))
+        {
+            facts.Add(new SessionActivityFactModel($"{labelPrefix} total", total));
+        }
+    }
+
+    private static void AddOperationFacts(ICollection<SessionActivityFactModel> facts, JsonElement element)
+    {
+        if (!element.TryGetProperty("operation", out var operation) || operation.ValueKind != JsonValueKind.Object)
+        {
+            return;
+        }
+
+        if (TryGetNumeric(operation, "turnNumber", out var turnNumber))
+        {
+            facts.Add(new SessionActivityFactModel("Turn", turnNumber));
+        }
+
+        if (TryGetString(operation, "kind", out var kind))
+        {
+            facts.Add(new SessionActivityFactModel("Kind", kind));
+        }
+    }
+
+    private static void AddComparisonFacts(ICollection<SessionActivityFactModel> facts, JsonElement element)
+    {
+        if (!element.TryGetProperty("comparison", out var comparison) || comparison.ValueKind != JsonValueKind.Object)
+        {
+            return;
+        }
+
+        if (TryGetScalar(comparison, "status", out var status))
+        {
+            facts.Add(new SessionActivityFactModel("Comparison", status));
+        }
+
+        if (TryGetScalar(comparison, "totalDelta", out var totalDelta))
+        {
+            facts.Add(new SessionActivityFactModel("Total delta", totalDelta));
+        }
     }
 
     private static bool TryGetScalar(JsonElement element, string propertyName, out string value)

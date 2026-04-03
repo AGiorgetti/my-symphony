@@ -53,6 +53,13 @@ public sealed class DashboardPageDataService(
             : sessionActivityStore.GetSession(issueIdentifier);
     }
 
+    public DashboardSessionHistorySnapshot? GetSessionHistory(DashboardPageMode mode, string issueIdentifier)
+    {
+        return mode.IsFake
+            ? fakeDashboardPageDataSource.GetSessionHistory(issueIdentifier)
+            : sessionActivityStore.GetSessionHistory(issueIdentifier);
+    }
+
     public IReadOnlyList<SessionActivityEntry> GetActivities(DashboardPageMode mode, string issueIdentifier)
     {
         return mode.IsFake

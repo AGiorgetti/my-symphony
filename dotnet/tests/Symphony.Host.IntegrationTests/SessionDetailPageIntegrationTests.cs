@@ -19,6 +19,7 @@ using Symphony.Host.Configuration;
 using Symphony.Host.Dashboard;
 using Symphony.Host.Theming;
 using Symphony.Domain.Issues;
+using Symphony.Domain.Sessions;
 
 namespace Symphony.Host.IntegrationTests;
 
@@ -94,7 +95,18 @@ public sealed class SessionDetailPageIntegrationTests
         Assert.Contains("Prompt build failed", html, StringComparison.Ordinal);
         Assert.Contains("thread-2-turn-3", html, StringComparison.Ordinal);
         Assert.Contains("Attempt 1", html, StringComparison.Ordinal);
-        Assert.Contains("Finished sessions keep the last known session ID and attempt when available.", html, StringComparison.Ordinal);
+        Assert.Contains("Finished sessions keep the last known session ID and token totals when available.", html, StringComparison.Ordinal);
+        Assert.Contains("data-testid=\"session-detail-metadata-reported-input-tokens\"", html, StringComparison.Ordinal);
+        Assert.Contains("data-testid=\"session-detail-metadata-reported-output-tokens\"", html, StringComparison.Ordinal);
+        Assert.Contains("data-testid=\"session-detail-metadata-reported-total-tokens\"", html, StringComparison.Ordinal);
+        Assert.Contains("data-testid=\"session-detail-metadata-cached-input-tokens\"", html, StringComparison.Ordinal);
+        Assert.Contains("data-testid=\"session-detail-metadata-reasoning-tokens\"", html, StringComparison.Ordinal);
+        Assert.Contains(">64<", html, StringComparison.Ordinal);
+        Assert.Contains(">32<", html, StringComparison.Ordinal);
+        Assert.Contains(">96<", html, StringComparison.Ordinal);
+        Assert.Contains(">12<", html, StringComparison.Ordinal);
+        Assert.Contains(">9<", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("data-testid=\"session-detail-timeline-entry-token-indicator\"", html, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -153,6 +165,7 @@ public sealed class SessionDetailPageIntegrationTests
         Assert.Contains("&quot;method&quot;: &quot;turn/completed&quot;", html, StringComparison.Ordinal);
         Assert.Contains("&quot;message&quot;: &quot;done&quot;", html, StringComparison.Ordinal);
         Assert.Contains("&quot;method&quot;: &quot;item/agentMessage/delta&quot;", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("data-testid=\"session-detail-timeline-entry-token-indicator\"", html, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -293,6 +306,24 @@ public sealed class SessionDetailPageIntegrationTests
             new SessionActivityEntry(
                 SessionActivityKind.DebugMessage,
                 startedAt.AddMinutes(1).AddSeconds(1),
+                "Received item/started",
+                """
+                {
+                  "method": "item/started",
+                  "params": {
+                    "item": {
+                      "id": "item-user-message-1",
+                      "type": "userMessage",
+                      "text": "Prompt body"
+                    }
+                  }
+                }
+                """));
+        store.RecordActivity(
+            "ABC-3",
+            new SessionActivityEntry(
+                SessionActivityKind.DebugMessage,
+                startedAt.AddMinutes(1).AddSeconds(2),
                 "Received turn/completed",
                 """
                 {
@@ -311,7 +342,30 @@ public sealed class SessionDetailPageIntegrationTests
             "ABC-3",
             new SessionActivityEntry(
                 SessionActivityKind.DebugMessage,
-                startedAt.AddMinutes(1).AddSeconds(2),
+                startedAt.AddMinutes(1).AddSeconds(3),
+                "Received item/completed",
+                """
+                {
+                  "method": "item/completed",
+                  "params": {
+                    "item": {
+                      "id": "item-agent-message-1",
+                      "type": "agentMessage",
+                      "content": [
+                        {
+                          "type": "output_text",
+                          "text": "Completed assistant reply"
+                        }
+                      ]
+                    }
+                  }
+                }
+                """));
+        store.RecordActivity(
+            "ABC-3",
+            new SessionActivityEntry(
+                SessionActivityKind.DebugMessage,
+                startedAt.AddMinutes(1).AddSeconds(4),
                 "Received item/agentMessage/delta",
                 """
                 {
@@ -332,6 +386,37 @@ public sealed class SessionDetailPageIntegrationTests
         var endedAt = startedAt.AddMinutes(5);
 
         store.RecordSessionStart("ABC-2", startedAt, "https://github.com/AGiorgetti/my-symphony/issues/ABC-2");
+        store.RecordSessionMetadata(
+            "ABC-2",
+            endedAt,
+            new LiveSessionMetadata(
+                "thread-2",
+                "turn-3",
+                lastCodexEvent: "turn_failed",
+                lastCodexTimestamp: endedAt,
+                lastCodexMessage: "The workflow prompt could not be assembled.",
+                codexInputTokens: 64,
+                codexOutputTokens: 32,
+                codexTotalTokens: 96,
+                lastReportedInputTokens: 64,
+                lastReportedCachedInputTokens: 12,
+                lastReportedOutputTokens: 32,
+                lastReportedReasoningTokens: 9,
+                lastReportedTotalTokens: 96,
+                lastReportedTokenAt: endedAt,
+                lastUsageOperation: new SessionTokenUsageOperation(
+                    "thread-2-turn-3:turn_failed",
+                    "turn_failed",
+                    endedAt,
+                    3,
+                    64,
+                    12,
+                    32,
+                    9,
+                    96),
+                turnCount: 3),
+            attempt: 1,
+            orchestratorSessionId: "orch-2");
         store.RecordActivity("ABC-2", new SessionActivityEntry(SessionActivityKind.LifecycleMilestone, startedAt, "Session started", "Tracker moved to In Progress"));
         store.RecordActivity("ABC-2", new SessionActivityEntry(SessionActivityKind.Error, endedAt, "Prompt build failed", "The workflow prompt could not be assembled."));
         store.RecordSessionEnd("ABC-2", endedAt, "Failed", "Prompt build failed");
