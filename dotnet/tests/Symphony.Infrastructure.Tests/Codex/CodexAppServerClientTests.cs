@@ -744,6 +744,89 @@ public sealed class CodexAppServerClientTests
         Assert.Equal("turn-2:turn_completed", latestSession.LastUsageOperation!.OperationId);
     }
 
+    [Fact]
+    public async Task RunAsync_uses_thread_token_usage_updates_as_authoritative_reported_totals()
+    {
+        var transcriptSink = new RecordingTranscriptSink();
+        var sessionFactory = new TestCodexProcessSessionFactory(
+            async (line, session) =>
+            {
+                using var document = JsonDocument.Parse(line);
+                var root = document.RootElement;
+                var method = root.TryGetProperty("method", out var methodElement)
+                    ? methodElement.GetString()
+                    : null;
+
+                if (method == "initialize")
+                {
+                    session.EnqueueStdout(new { id = 1, result = new { } });
+                    return;
+                }
+
+                if (method == "thread/start")
+                {
+                    session.EnqueueStdout(new { id = 2, result = new { thread = new { id = "thread-123" } } });
+                    return;
+                }
+
+                if (method == "turn/start")
+                {
+                    session.EnqueueStdout(new { id = 3, result = new { turn = new { id = "turn-456" } } });
+                    session.EnqueueStdout(new
+                    {
+                        method = "thread/tokenUsage/updated",
+                        @params = new
+                        {
+                            threadId = "thread-123",
+                            turnId = "turn-456",
+                            tokenUsage = new
+                            {
+                                total = new
+                                {
+                                    totalTokens = 1556316,
+                                    inputTokens = 1546338,
+                                    cachedInputTokens = 1484032,
+                                    outputTokens = 9978,
+                                    reasoningOutputTokens = 2932
+                                },
+                                last = new
+                                {
+                                    totalTokens = 55660,
+                                    inputTokens = 55532,
+                                    cachedInputTokens = 55168,
+                                    outputTokens = 128,
+                                    reasoningOutputTokens = 19
+                                }
+                            }
+                        }
+                    });
+                    session.EnqueueStdout(new { method = "turn/completed", @params = new { message = "done" } });
+                }
+
+                await Task.CompletedTask;
+            });
+        var client = CreateClient(sessionFactory, transcriptSink);
+        using var testContext = CreateContext();
+
+        await client.RunAsync(testContext.Context, Path.GetTempPath(), "Prompt body", CreateCodexOptions());
+
+        var latestSession = Assert.IsType<LiveSessionMetadata>(testContext.Context.Session);
+        Assert.Equal(1546338, latestSession.LastReportedInputTokens);
+        Assert.Equal(1484032, latestSession.LastReportedCachedInputTokens);
+        Assert.Equal(9978, latestSession.LastReportedOutputTokens);
+        Assert.Equal(2932, latestSession.LastReportedReasoningTokens);
+        Assert.Equal(1556316, latestSession.LastReportedTotalTokens);
+        Assert.Equal(1556316, latestSession.CodexTotalTokens);
+        Assert.True(latestSession.LastReportedTokenAt.HasValue);
+        Assert.NotNull(latestSession.LastUsageOperation);
+        Assert.Equal(55532, latestSession.LastUsageOperation!.InputTokens);
+        Assert.Equal(55168, latestSession.LastUsageOperation.CachedInputTokens);
+        Assert.Equal(128, latestSession.LastUsageOperation.OutputTokens);
+        Assert.Equal(19, latestSession.LastUsageOperation.ReasoningTokens);
+        Assert.Equal(55660, latestSession.LastUsageOperation.TotalTokens);
+        Assert.Equal("turn-456:thread_tokenUsage_updated:1556316", latestSession.LastUsageOperation.OperationId);
+    }
+
     private static WorkflowCodexOptions CreateCodexOptions()
     {
         return new WorkflowCodexOptions(

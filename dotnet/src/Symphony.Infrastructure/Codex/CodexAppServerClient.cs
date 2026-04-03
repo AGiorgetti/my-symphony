@@ -609,6 +609,7 @@ internal sealed class CodexAppServerClient(
 
         var timestamp = timeProvider.GetUtcNow();
         var usage = ExtractUsage(payload);
+        var threadTokenUsage = ExtractThreadTokenUsageUpdate(payload);
         var outputEstimateDelta = EstimateAssistantOutputTokens(payload);
         var estimatedInputTokens = context.Session.EstimatedInputTokens;
         var estimatedOutputTokens = context.Session.EstimatedOutputTokens + outputEstimateDelta;
@@ -621,9 +622,26 @@ internal sealed class CodexAppServerClient(
         var lastReportedReasoningTokens = context.Session.LastReportedReasoningTokens;
         var lastReportedTotalTokens = context.Session.LastReportedTotalTokens;
         SessionTokenUsageOperation? lastUsageOperation = context.Session.LastUsageOperation;
-        if (TryCreateReportedUsageOperation(context.Session, eventName, timestamp, usage, out var usageOperation))
+        SessionTokenUsageOperation? usageOperation = null;
+
+        if (threadTokenUsage is not null)
         {
-            var reportedOperation = usageOperation!;
+            lastReportedInputTokens = threadTokenUsage.Value.Total.InputTokens;
+            lastReportedCachedInputTokens = threadTokenUsage.Value.Total.CachedInputTokens;
+            lastReportedOutputTokens = threadTokenUsage.Value.Total.OutputTokens;
+            lastReportedReasoningTokens = threadTokenUsage.Value.Total.ReasoningTokens;
+            lastReportedTotalTokens = threadTokenUsage.Value.Total.TotalTokens;
+
+            if (TryCreateThreadUsageOperation(context.Session, eventName, timestamp, threadTokenUsage.Value, out var threadUsageOperation))
+            {
+                usageOperation = threadUsageOperation;
+                lastUsageOperation = threadUsageOperation;
+            }
+        }
+        else if (TryCreateReportedUsageOperation(context.Session, eventName, timestamp, usage, out var reportedUsageOperation))
+        {
+            usageOperation = reportedUsageOperation;
+            var reportedOperation = reportedUsageOperation!;
             lastReportedInputTokens += reportedOperation.InputTokens;
             lastReportedCachedInputTokens += reportedOperation.CachedInputTokens;
             lastReportedOutputTokens += reportedOperation.OutputTokens;
@@ -825,9 +843,46 @@ internal sealed class CodexAppServerClient(
         return true;
     }
 
+    private static bool TryCreateThreadUsageOperation(
+        LiveSessionMetadata session,
+        string eventName,
+        DateTimeOffset timestamp,
+        ThreadTokenUsageUpdateInfo usageUpdate,
+        out SessionTokenUsageOperation? operation)
+    {
+        operation = null;
+
+        var turnUsage = usageUpdate.Last;
+        if (!turnUsage.HasAny)
+        {
+            return false;
+        }
+
+        var turnId = string.IsNullOrWhiteSpace(usageUpdate.TurnId)
+            ? session.TurnId
+            : usageUpdate.TurnId!;
+        var operationId = $"{turnId}:{eventName}:{usageUpdate.Total.TotalTokens}";
+        if (string.Equals(session.LastUsageOperation?.OperationId, operationId, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        operation = new SessionTokenUsageOperation(
+            operationId,
+            eventName,
+            timestamp,
+            session.TurnCount,
+            turnUsage.InputTokens,
+            turnUsage.CachedInputTokens,
+            turnUsage.OutputTokens,
+            turnUsage.ReasoningTokens,
+            turnUsage.TotalTokens);
+        return true;
+    }
+
     private static bool IsUsageAggregationEvent(string eventName)
     {
-        return eventName is "turn_completed" or "turn_failed" or "turn_cancelled";
+        return eventName is "turn_completed" or "turn_failed" or "turn_cancelled" or "thread_tokenUsage_updated";
     }
 
     private static TokenComparisonInfo CompareTokenUsage(
@@ -1236,8 +1291,68 @@ internal sealed class CodexAppServerClient(
             FindFirstInt(payload, static name => name is "input_tokens" or "inputTokens"),
             FindFirstInt(payload, static name => name is "cached_tokens" or "cachedTokens"),
             FindFirstInt(payload, static name => name is "output_tokens" or "outputTokens"),
-            FindFirstInt(payload, static name => name is "reasoning_tokens" or "reasoningTokens"),
+            FindFirstInt(payload, static name => name is "reasoning_tokens" or "reasoningTokens" or "reasoningOutputTokens"),
             FindFirstInt(payload, static name => name is "total_tokens" or "totalTokens"));
+    }
+
+    private static ThreadTokenUsageUpdateInfo? ExtractThreadTokenUsageUpdate(JsonElement payload)
+    {
+        var method = TryGetMethod(payload);
+        if (!string.Equals(method, "thread/tokenUsage/updated", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        if (!payload.TryGetProperty("params", out var parameters)
+            || parameters.ValueKind != JsonValueKind.Object
+            || !parameters.TryGetProperty("tokenUsage", out var tokenUsage)
+            || tokenUsage.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        if (!TryGetTokenUsageSample(tokenUsage, "total", out var total))
+        {
+            return null;
+        }
+
+        _ = TryGetTokenUsageSample(tokenUsage, "last", out var last);
+        var turnId = parameters.TryGetProperty("turnId", out var turnIdElement) && turnIdElement.ValueKind == JsonValueKind.String
+            ? turnIdElement.GetString()
+            : null;
+
+        return new ThreadTokenUsageUpdateInfo(turnId, total, last);
+    }
+
+    private static bool TryGetTokenUsageSample(JsonElement tokenUsage, string propertyName, out UsageSample sample)
+    {
+        sample = default;
+
+        if (!tokenUsage.TryGetProperty(propertyName, out var usageElement) || usageElement.ValueKind != JsonValueKind.Object)
+        {
+            return false;
+        }
+
+        sample = new UsageSample(
+            ReadNumeric(usageElement, "input_tokens", "inputTokens"),
+            ReadNumeric(usageElement, "cached_tokens", "cachedTokens", "cachedInputTokens"),
+            ReadNumeric(usageElement, "output_tokens", "outputTokens"),
+            ReadNumeric(usageElement, "reasoning_tokens", "reasoningTokens", "reasoningOutputTokens"),
+            ReadNumeric(usageElement, "total_tokens", "totalTokens"));
+        return sample.HasAny;
+    }
+
+    private static int ReadNumeric(JsonElement element, params string[] propertyNames)
+    {
+        foreach (var propertyName in propertyNames)
+        {
+            if (element.TryGetProperty(propertyName, out var property) && property.TryGetInt32(out var value))
+            {
+                return value;
+            }
+        }
+
+        return 0;
     }
 
     private static int? FindFirstInt(JsonElement element, Func<string, bool> nameMatcher)
@@ -1407,6 +1522,26 @@ internal sealed class CodexAppServerClient(
             || ReasoningTokens is not null
             || TotalTokens is not null;
     }
+
+    private readonly record struct UsageSample(
+        int InputTokens,
+        int CachedInputTokens,
+        int OutputTokens,
+        int ReasoningTokens,
+        int TotalTokens)
+    {
+        public bool HasAny =>
+            InputTokens > 0
+            || CachedInputTokens > 0
+            || OutputTokens > 0
+            || ReasoningTokens > 0
+            || TotalTokens > 0;
+    }
+
+    private readonly record struct ThreadTokenUsageUpdateInfo(
+        string? TurnId,
+        UsageSample Total,
+        UsageSample Last);
 
     private readonly record struct TokenComparisonInfo(
         SessionTokenComparisonStatus Status,
