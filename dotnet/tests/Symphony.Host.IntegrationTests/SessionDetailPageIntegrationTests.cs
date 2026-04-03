@@ -26,7 +26,7 @@ namespace Symphony.Host.IntegrationTests;
 public sealed class SessionDetailPageIntegrationTests
 {
     [Fact]
-    public async Task Session_detail_page_renders_breadcrumb_activity_and_compact_metadata()
+    public async Task Session_detail_page_hides_breadcrumb_and_starts_summary_collapsed()
     {
         var store = CreateStoreWithActiveSession();
         using var app = await StartSessionDetailApplicationAsync(
@@ -39,9 +39,10 @@ public sealed class SessionDetailPageIntegrationTests
         var html = await response.Content.ReadAsStringAsync();
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Contains("data-testid=\"session-detail-breadcrumb\"", html, StringComparison.Ordinal);
-        Assert.Contains("href=\"/sessions\"", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("data-testid=\"session-detail-breadcrumb\"", html, StringComparison.Ordinal);
         Assert.Contains("data-testid=\"session-detail-header\"", html, StringComparison.Ordinal);
+        Assert.Contains("data-testid=\"session-detail-summary-section\"", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("data-testid=\"session-detail-summary-section\" open", html, StringComparison.Ordinal);
         Assert.Contains("Open tracker issue", html, StringComparison.Ordinal);
         Assert.Contains("data-testid=\"session-detail-export-link\"", html, StringComparison.Ordinal);
         Assert.Contains("href=\"/api/v1/export/sessions/ABC-1\"", html, StringComparison.Ordinal);
@@ -226,8 +227,7 @@ public sealed class SessionDetailPageIntegrationTests
         Assert.Contains("item/agentMessage/delta", html, StringComparison.Ordinal);
         Assert.Contains("Trace sample 36", html, StringComparison.Ordinal);
         Assert.Contains("Sent turn/start", html, StringComparison.Ordinal);
-        Assert.Contains("href=\"/?mode=fake\"", html, StringComparison.Ordinal);
-        Assert.Contains("href=\"/sessions?mode=fake\"", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("data-testid=\"session-detail-breadcrumb\"", html, StringComparison.Ordinal);
     }
 
     [Fact]
