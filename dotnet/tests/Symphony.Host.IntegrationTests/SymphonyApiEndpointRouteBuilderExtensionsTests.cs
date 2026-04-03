@@ -267,19 +267,11 @@ public sealed class SymphonyApiEndpointRouteBuilderExtensionsTests
                 codexInputTokens: 10,
                 codexOutputTokens: 5,
                 codexTotalTokens: 15,
-                estimatedInputTokens: 8,
-                estimatedOutputTokens: 4,
-                estimatedTotalTokens: 12,
                 lastReportedInputTokens: 10,
                 lastReportedCachedInputTokens: 3,
                 lastReportedOutputTokens: 5,
                 lastReportedReasoningTokens: 2,
                 lastReportedTotalTokens: 15,
-                tokenComparisonStatus: SessionTokenComparisonStatus.Mismatch,
-                tokenInputDelta: 2,
-                tokenOutputDelta: 1,
-                tokenTotalDelta: 3,
-                lastEstimatedTokenAt: startedAt.AddMinutes(1),
                 lastReportedTokenAt: startedAt.AddMinutes(2),
                 lastUsageOperation: new SessionTokenUsageOperation(
                     "thread-1-turn-1:turn_completed",
@@ -346,7 +338,6 @@ public sealed class SymphonyApiEndpointRouteBuilderExtensionsTests
         Assert.Equal(5, payload.SingleSession.Metadata.OutputTokens);
         Assert.Equal(15, payload.SingleSession.Metadata.TotalTokens);
         Assert.NotNull(payload.SingleSession.Metadata.TokenUsage);
-        Assert.Equal(12, payload.SingleSession.Metadata.TokenUsage!.EstimatedTotalTokens);
         Assert.Equal(3, payload.SingleSession.Metadata.TokenUsage.ReportedCachedInputTokens);
         Assert.Equal(2, payload.SingleSession.Metadata.TokenUsage.ReportedReasoningTokens);
         Assert.Equal(15, payload.SingleSession.Metadata.TokenUsage.ReportedTotalTokens);

@@ -642,15 +642,12 @@ public sealed class CodexAppServerClientTests
         await client.RunAsync(testContext.Context, Path.GetTempPath(), "Prompt body", CreateCodexOptions());
 
         var latestSession = Assert.IsType<LiveSessionMetadata>(testContext.Context.Session);
-        Assert.True(latestSession.EstimatedInputTokens > 0);
-        Assert.True(latestSession.EstimatedOutputTokens > 0);
         Assert.Equal(30, latestSession.LastReportedInputTokens);
         Assert.Equal(6, latestSession.LastReportedCachedInputTokens);
         Assert.Equal(12, latestSession.LastReportedOutputTokens);
         Assert.Equal(4, latestSession.LastReportedReasoningTokens);
         Assert.Equal(42, latestSession.LastReportedTotalTokens);
         Assert.Equal(42, latestSession.CodexTotalTokens);
-        Assert.Equal(SessionTokenComparisonStatus.Mismatch, latestSession.TokenComparisonStatus);
         Assert.NotNull(latestSession.LastUsageOperation);
         Assert.Equal("turn-456:turn_completed", latestSession.LastUsageOperation!.OperationId);
         Assert.Equal(6, latestSession.LastUsageOperation.CachedInputTokens);
@@ -661,7 +658,6 @@ public sealed class CodexAppServerClientTests
         Assert.Equal("#21", lastMetadata.IssueIdentifier);
         Assert.Equal(latestSession.SessionId, lastMetadata.Session.SessionId);
         Assert.Equal(42, lastMetadata.Session.CodexTotalTokens);
-        Assert.True(lastMetadata.Session.LastEstimatedTokenAt.HasValue);
         Assert.True(lastMetadata.Session.LastReportedTokenAt.HasValue);
     }
 

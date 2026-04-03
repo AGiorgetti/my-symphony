@@ -203,7 +203,6 @@ internal sealed class CodexAppServerClient(
         WorkflowCodexOptions codexOptions,
         ConcurrentQueue<string> startupDiagnostics)
     {
-        var estimatedInputTokenDelta = EstimateTextTokens(prompt);
         var previousSession = context.Session;
 
         await SendAsync(
@@ -243,29 +242,9 @@ internal sealed class CodexAppServerClient(
             .ConfigureAwait(false);
         var turnId = ExtractRequiredNestedId(turnStartResponse, "turn");
         var sessionUpdatedAt = timeProvider.GetUtcNow();
-        var estimatedInputTokens = (previousSession?.EstimatedInputTokens ?? 0) + estimatedInputTokenDelta;
-        var estimatedOutputTokens = previousSession?.EstimatedOutputTokens ?? 0;
-        var estimatedTotalTokens = Math.Max(previousSession?.EstimatedTotalTokens ?? 0, estimatedInputTokens + estimatedOutputTokens);
         var lastReportedInputTokens = previousSession?.LastReportedInputTokens ?? 0;
         var lastReportedOutputTokens = previousSession?.LastReportedOutputTokens ?? 0;
         var lastReportedTotalTokens = previousSession?.LastReportedTotalTokens ?? 0;
-        var comparison = CompareTokenUsage(
-            estimatedInputTokens,
-            estimatedOutputTokens,
-            estimatedTotalTokens,
-            lastReportedInputTokens,
-            lastReportedOutputTokens,
-            lastReportedTotalTokens);
-        var effectiveTotals = ResolveEffectiveTokenUsage(
-            previousSession?.CodexInputTokens ?? 0,
-            previousSession?.CodexOutputTokens ?? 0,
-            previousSession?.CodexTotalTokens ?? 0,
-            estimatedInputTokens,
-            estimatedOutputTokens,
-            estimatedTotalTokens,
-            lastReportedInputTokens,
-            lastReportedOutputTokens,
-            lastReportedTotalTokens);
 
         var liveSession = new LiveSessionMetadata(
             threadId,
@@ -274,22 +253,14 @@ internal sealed class CodexAppServerClient(
             lastCodexEvent: turnNumber == 1 ? "session_started" : "turn_started",
             lastCodexTimestamp: sessionUpdatedAt,
             lastCodexMessage: "turn_started",
-            codexInputTokens: effectiveTotals.InputTokens,
-            codexOutputTokens: effectiveTotals.OutputTokens,
-            codexTotalTokens: effectiveTotals.TotalTokens,
-            estimatedInputTokens: estimatedInputTokens,
-            estimatedOutputTokens: estimatedOutputTokens,
-            estimatedTotalTokens: estimatedTotalTokens,
+            codexInputTokens: previousSession?.CodexInputTokens ?? 0,
+            codexOutputTokens: previousSession?.CodexOutputTokens ?? 0,
+            codexTotalTokens: previousSession?.CodexTotalTokens ?? 0,
             lastReportedInputTokens: lastReportedInputTokens,
             lastReportedCachedInputTokens: previousSession?.LastReportedCachedInputTokens ?? 0,
             lastReportedOutputTokens: lastReportedOutputTokens,
             lastReportedReasoningTokens: previousSession?.LastReportedReasoningTokens ?? 0,
             lastReportedTotalTokens: lastReportedTotalTokens,
-            tokenComparisonStatus: comparison.Status,
-            tokenInputDelta: comparison.InputDelta,
-            tokenOutputDelta: comparison.OutputDelta,
-            tokenTotalDelta: comparison.TotalDelta,
-            lastEstimatedTokenAt: estimatedInputTokenDelta > 0 ? sessionUpdatedAt : previousSession?.LastEstimatedTokenAt,
             lastReportedTokenAt: previousSession?.LastReportedTokenAt,
             lastUsageOperation: previousSession?.LastUsageOperation,
             turnCount: turnNumber);
@@ -610,12 +581,6 @@ internal sealed class CodexAppServerClient(
         var timestamp = timeProvider.GetUtcNow();
         var usage = ExtractUsage(payload);
         var threadTokenUsage = ExtractThreadTokenUsageUpdate(payload);
-        var outputEstimateDelta = EstimateAssistantOutputTokens(payload);
-        var estimatedInputTokens = context.Session.EstimatedInputTokens;
-        var estimatedOutputTokens = context.Session.EstimatedOutputTokens + outputEstimateDelta;
-        var estimatedTotalTokens = Math.Max(
-            context.Session.EstimatedTotalTokens,
-            estimatedInputTokens + estimatedOutputTokens);
         var lastReportedInputTokens = context.Session.LastReportedInputTokens;
         var lastReportedCachedInputTokens = context.Session.LastReportedCachedInputTokens;
         var lastReportedOutputTokens = context.Session.LastReportedOutputTokens;
@@ -650,29 +615,6 @@ internal sealed class CodexAppServerClient(
             lastUsageOperation = reportedOperation;
         }
 
-        var comparison = CompareTokenUsage(
-            estimatedInputTokens,
-            estimatedOutputTokens,
-            estimatedTotalTokens,
-            lastReportedInputTokens,
-            lastReportedOutputTokens,
-            lastReportedTotalTokens);
-        var effectiveTotals = usageOperation is null
-            ? ResolveEffectiveTokenUsage(
-                context.Session.CodexInputTokens,
-                context.Session.CodexOutputTokens,
-                context.Session.CodexTotalTokens,
-                estimatedInputTokens,
-                estimatedOutputTokens,
-                estimatedTotalTokens,
-                lastReportedInputTokens,
-                lastReportedOutputTokens,
-                lastReportedTotalTokens)
-            : new TokenTotals(
-                lastReportedInputTokens,
-                lastReportedOutputTokens,
-                lastReportedTotalTokens);
-
         var updatedSession = new LiveSessionMetadata(
             context.Session.ThreadId,
             context.Session.TurnId,
@@ -680,22 +622,14 @@ internal sealed class CodexAppServerClient(
             eventName,
             timestamp,
             ExtractMessage(payload) ?? fallbackMessage ?? eventName,
-            effectiveTotals.InputTokens,
-            effectiveTotals.OutputTokens,
-            effectiveTotals.TotalTokens,
-            estimatedInputTokens,
-            estimatedOutputTokens,
-            estimatedTotalTokens,
+            lastReportedInputTokens,
+            lastReportedOutputTokens,
+            lastReportedTotalTokens,
             lastReportedInputTokens,
             lastReportedCachedInputTokens,
             lastReportedOutputTokens,
             lastReportedReasoningTokens,
             lastReportedTotalTokens,
-            comparison.Status,
-            comparison.InputDelta,
-            comparison.OutputDelta,
-            comparison.TotalDelta,
-            outputEstimateDelta > 0 ? timestamp : context.Session.LastEstimatedTokenAt,
             usageOperation is null ? context.Session.LastReportedTokenAt : timestamp,
             lastUsageOperation,
             context.Session.TurnCount);
@@ -758,50 +692,6 @@ internal sealed class CodexAppServerClient(
             session,
             context.Attempt,
             context.OrchestratorSessionId);
-    }
-
-    private static int EstimateTextTokens(string? text)
-    {
-        if (string.IsNullOrWhiteSpace(text))
-        {
-            return 0;
-        }
-
-        var trimmed = text.Trim();
-        return Math.Max(1, (int)Math.Ceiling(trimmed.Length / 4d));
-    }
-
-    private static int EstimateAssistantOutputTokens(JsonElement payload)
-    {
-        var method = TryGetMethod(payload);
-        if (!string.Equals(method, "item/completed", StringComparison.OrdinalIgnoreCase))
-        {
-            return 0;
-        }
-
-        if (!payload.TryGetProperty("params", out var parameters)
-            || parameters.ValueKind != JsonValueKind.Object
-            || !parameters.TryGetProperty("item", out var item)
-            || item.ValueKind != JsonValueKind.Object)
-        {
-            return 0;
-        }
-
-        var total = 0;
-        if (item.TryGetProperty("content", out var content) && content.ValueKind == JsonValueKind.Array)
-        {
-            foreach (var contentItem in content.EnumerateArray())
-            {
-                if (contentItem.ValueKind == JsonValueKind.Object
-                    && contentItem.TryGetProperty("text", out var textElement)
-                    && textElement.ValueKind == JsonValueKind.String)
-                {
-                    total += EstimateTextTokens(textElement.GetString());
-                }
-            }
-        }
-
-        return total;
     }
 
     private static bool TryCreateReportedUsageOperation(
@@ -883,59 +773,6 @@ internal sealed class CodexAppServerClient(
     private static bool IsUsageAggregationEvent(string eventName)
     {
         return eventName is "turn_completed" or "turn_failed" or "turn_cancelled" or "thread_tokenUsage_updated";
-    }
-
-    private static TokenComparisonInfo CompareTokenUsage(
-        int estimatedInputTokens,
-        int estimatedOutputTokens,
-        int estimatedTotalTokens,
-        int reportedInputTokens,
-        int reportedOutputTokens,
-        int reportedTotalTokens)
-    {
-        var hasEstimate = estimatedInputTokens > 0 || estimatedOutputTokens > 0 || estimatedTotalTokens > 0;
-        var hasReport = reportedInputTokens > 0 || reportedOutputTokens > 0 || reportedTotalTokens > 0;
-        if (hasEstimate && hasReport)
-        {
-            var inputDelta = reportedInputTokens - estimatedInputTokens;
-            var outputDelta = reportedOutputTokens - estimatedOutputTokens;
-            var totalDelta = reportedTotalTokens - estimatedTotalTokens;
-            var status = inputDelta == 0 && outputDelta == 0 && totalDelta == 0
-                ? SessionTokenComparisonStatus.Match
-                : SessionTokenComparisonStatus.Mismatch;
-            return new TokenComparisonInfo(status, inputDelta, outputDelta, totalDelta);
-        }
-
-        if (hasEstimate)
-        {
-            return new TokenComparisonInfo(SessionTokenComparisonStatus.EstimatedOnly, 0, 0, 0);
-        }
-
-        if (hasReport)
-        {
-            return new TokenComparisonInfo(SessionTokenComparisonStatus.ReportedOnly, 0, 0, 0);
-        }
-
-        return new TokenComparisonInfo(SessionTokenComparisonStatus.None, 0, 0, 0);
-    }
-
-    private static TokenTotals ResolveEffectiveTokenUsage(
-        int currentInputTokens,
-        int currentOutputTokens,
-        int currentTotalTokens,
-        int estimatedInputTokens,
-        int estimatedOutputTokens,
-        int estimatedTotalTokens,
-        int reportedInputTokens,
-        int reportedOutputTokens,
-        int reportedTotalTokens)
-    {
-        var inputTokens = Math.Max(currentInputTokens, Math.Max(estimatedInputTokens, reportedInputTokens));
-        var outputTokens = Math.Max(currentOutputTokens, Math.Max(estimatedOutputTokens, reportedOutputTokens));
-        var totalTokens = Math.Max(
-            Math.Max(currentTotalTokens, Math.Max(estimatedTotalTokens, reportedTotalTokens)),
-            inputTokens + outputTokens);
-        return new TokenTotals(inputTokens, outputTokens, totalTokens);
     }
 
     private static string ExtractRequiredNestedId(JsonElement payload, string propertyName)
@@ -1542,12 +1379,6 @@ internal sealed class CodexAppServerClient(
         string? TurnId,
         UsageSample Total,
         UsageSample Last);
-
-    private readonly record struct TokenComparisonInfo(
-        SessionTokenComparisonStatus Status,
-        int InputDelta,
-        int OutputDelta,
-        int TotalDelta);
 
     private readonly record struct TokenTotals(
         int InputTokens,

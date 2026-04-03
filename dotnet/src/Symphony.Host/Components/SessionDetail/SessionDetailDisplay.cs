@@ -480,21 +480,17 @@ internal static class SessionDetailDisplay
         var facts = new List<SessionActivityFactModel>(existingFacts);
 
         AddFactIfMissing(facts, "Token source", GetTokenSourceLabel(visibleTokenUsage));
-
-        if (visibleTokenUsage.EstimatedTotalTokens > 0)
+        AddFactIfMissing(facts, "Reported input", visibleTokenUsage.ReportedInputTokens.ToString(CultureInfo.InvariantCulture));
+        if (visibleTokenUsage.ReportedCachedInputTokens > 0)
         {
-            if (visibleTokenUsage.EstimatedInputTokens > 0)
-            {
-                AddFactIfMissing(facts, "Estimated input", visibleTokenUsage.EstimatedInputTokens.ToString(CultureInfo.InvariantCulture));
-            }
-
-            if (visibleTokenUsage.EstimatedOutputTokens > 0)
-            {
-                AddFactIfMissing(facts, "Estimated output", visibleTokenUsage.EstimatedOutputTokens.ToString(CultureInfo.InvariantCulture));
-            }
-
-            AddFactIfMissing(facts, "Estimated total", visibleTokenUsage.EstimatedTotalTokens.ToString(CultureInfo.InvariantCulture));
+            AddFactIfMissing(facts, "Cached input", visibleTokenUsage.ReportedCachedInputTokens.ToString(CultureInfo.InvariantCulture));
         }
+        AddFactIfMissing(facts, "Reported output", visibleTokenUsage.ReportedOutputTokens.ToString(CultureInfo.InvariantCulture));
+        if (visibleTokenUsage.ReportedReasoningTokens > 0)
+        {
+            AddFactIfMissing(facts, "Reasoning", visibleTokenUsage.ReportedReasoningTokens.ToString(CultureInfo.InvariantCulture));
+        }
+        AddFactIfMissing(facts, "Reported total", visibleTokenUsage.ReportedTotalTokens.ToString(CultureInfo.InvariantCulture));
 
         return facts;
     }
@@ -519,7 +515,7 @@ internal static class SessionDetailDisplay
 
         return tokenUsage!.Source switch
         {
-            "per-entry-estimate" => "Estimate",
+            "thread-token-usage" => "Reported",
             _ => "Available"
         };
     }
@@ -527,8 +523,8 @@ internal static class SessionDetailDisplay
     private static bool HasVisibleEntryTokenUsage(SessionActivityTokenSnapshot? tokenUsage)
     {
         return tokenUsage is not null
-            && string.Equals(tokenUsage.Source, "per-entry-estimate", StringComparison.Ordinal)
-            && tokenUsage.EstimatedTotalTokens > 0;
+            && string.Equals(tokenUsage.Source, "thread-token-usage", StringComparison.Ordinal)
+            && tokenUsage.ReportedTotalTokens > 0;
     }
 
     private static void AddTokenUsageFacts(
