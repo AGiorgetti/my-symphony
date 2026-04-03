@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Collections.Immutable;
+using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Symphony.Application.Orchestration;
@@ -57,7 +58,7 @@ public sealed class SessionActivityStore(
                         null),
                     (_, existing) => existing with
                     {
-                        Activities = existing.Activities.Add(EnrichNewActivity(activity, existing.Metadata))
+                        Activities = existing.Activities.Add(EnrichNewActivity(activity))
                     });
             });
     }
@@ -110,11 +111,9 @@ public sealed class SessionActivityStore(
                     {
                         var metadata = BuildMetadataSnapshot(session, attempt, orchestratorSessionId);
                         var activities = EnrichActivitiesWithTokenUsage(
-                            issueIdentifier,
                             ImmutableList<SessionActivityEntry>.Empty,
                             previousMetadata: null,
-                            metadata,
-                            timestamp);
+                            metadata);
                         return new SessionState(
                             new SessionRecord(issueIdentifier, null, timestamp, null, null, null, true),
                             activities,
@@ -124,11 +123,9 @@ public sealed class SessionActivityStore(
                     {
                         var metadata = BuildMetadataSnapshot(session, attempt, orchestratorSessionId);
                         var activities = EnrichActivitiesWithTokenUsage(
-                            issueIdentifier,
                             existing.Activities,
                             existing.Metadata,
-                            metadata,
-                            timestamp);
+                            metadata);
                         return existing with
                         {
                             Metadata = metadata,
@@ -287,199 +284,217 @@ public sealed class SessionActivityStore(
     }
 
     private static ImmutableList<SessionActivityEntry> EnrichActivitiesWithTokenUsage(
-        string issueIdentifier,
         ImmutableList<SessionActivityEntry> existingActivities,
         DashboardSessionMetadataSnapshot? previousMetadata,
-        DashboardSessionMetadataSnapshot currentMetadata,
-        DateTimeOffset timestamp)
+        DashboardSessionMetadataSnapshot currentMetadata)
     {
-        var updatedActivities = existingActivities;
-        var previousUsage = previousMetadata?.TokenUsage;
-        var currentUsage = currentMetadata.TokenUsage;
-        if (currentUsage is null)
-        {
-            return updatedActivities;
-        }
-
-        if (previousUsage is null
-            || previousUsage.EstimatedInputTokens != currentUsage.EstimatedInputTokens
-            || previousUsage.EstimatedOutputTokens != currentUsage.EstimatedOutputTokens
-            || previousUsage.EstimatedTotalTokens != currentUsage.EstimatedTotalTokens)
-        {
-            updatedActivities = AttachTokenUsageToNearestActivity(
-                updatedActivities,
-                currentUsage.LastEstimatedAt ?? timestamp,
-                CreateActivityTokenSnapshot("estimated", currentUsage),
-                static entry => entry.Title.StartsWith("Sent turn/start", StringComparison.Ordinal)
-                    || entry.Title.StartsWith("Received response", StringComparison.Ordinal)
-                    || entry.Title.StartsWith("Turn started", StringComparison.OrdinalIgnoreCase));
-        }
-
-        if (previousUsage is null
-            || previousUsage.ReportedInputTokens != currentUsage.ReportedInputTokens
-            || previousUsage.ReportedOutputTokens != currentUsage.ReportedOutputTokens
-            || previousUsage.ReportedTotalTokens != currentUsage.ReportedTotalTokens)
-        {
-            updatedActivities = AttachTokenUsageToNearestActivity(
-                updatedActivities,
-                currentUsage.LastReportedAt ?? timestamp,
-                CreateActivityTokenSnapshot("reported", currentUsage),
-                static entry => entry.Title.StartsWith("Received thread/tokenUsage/updated", StringComparison.Ordinal)
-                    || entry.Title.StartsWith("Received turn/completed", StringComparison.Ordinal)
-                    || entry.Title.StartsWith("Received turn/failed", StringComparison.Ordinal)
-                    || entry.Title.StartsWith("Received turn/cancelled", StringComparison.Ordinal));
-        }
-
-        if (currentUsage.LastOperation is not null
-            && previousUsage?.LastOperation?.OperationId != currentUsage.LastOperation.OperationId)
-        {
-            updatedActivities = AttachTokenUsageToNearestActivity(
-                updatedActivities,
-                currentUsage.LastOperation.Timestamp,
-                CreateActivityTokenSnapshot("operation", currentUsage),
-                static entry => entry.Title.StartsWith("Received thread/tokenUsage/updated", StringComparison.Ordinal)
-                    || entry.Title.StartsWith("Received turn/completed", StringComparison.Ordinal)
-                    || entry.Title.StartsWith("Received turn/failed", StringComparison.Ordinal)
-                    || entry.Title.StartsWith("Received turn/cancelled", StringComparison.Ordinal));
-        }
-
-        if (currentUsage.ComparisonStatus == SessionTokenComparisonStatus.Mismatch
-            && previousUsage?.ComparisonStatus != SessionTokenComparisonStatus.Mismatch)
-        {
-            updatedActivities = AttachTokenUsageToNearestActivity(
-                updatedActivities,
-                currentUsage.LastReportedAt ?? currentUsage.LastEstimatedAt ?? timestamp,
-                CreateActivityTokenSnapshot("comparison", currentUsage),
-                static entry => entry.Kind is SessionActivityKind.Warning or SessionActivityKind.Error
-                    || entry.Title.StartsWith("Received thread/tokenUsage/updated", StringComparison.Ordinal)
-                    || entry.Title.StartsWith("Received turn/completed", StringComparison.Ordinal)
-                    || entry.Title.StartsWith("Received turn/failed", StringComparison.Ordinal)
-                    || entry.Title.StartsWith("Received turn/cancelled", StringComparison.Ordinal));
-        }
-
-        return updatedActivities;
-    }
-
-    private static ImmutableList<SessionActivityEntry> AttachTokenUsageToNearestActivity(
-        ImmutableList<SessionActivityEntry> activities,
-        DateTimeOffset targetTimestamp,
-        SessionActivityTokenSnapshot tokenUsage,
-        Func<SessionActivityEntry, bool> preferredPredicate)
-    {
-        if (activities.Count == 0)
-        {
-            return activities;
-        }
-
-        var preferredIndex = -1;
-        for (var index = activities.Count - 1; index >= 0; index--)
-        {
-            var activity = activities[index];
-            if (activity.Timestamp > targetTimestamp)
-            {
-                continue;
-            }
-
-            if (preferredPredicate(activity))
-            {
-                preferredIndex = index;
-                break;
-            }
-        }
-
-        var fallbackIndex = preferredIndex >= 0
-            ? preferredIndex
-            : activities.FindLastIndex(activity => activity.Timestamp <= targetTimestamp);
-
-        if (fallbackIndex < 0)
-        {
-            fallbackIndex = activities.Count - 1;
-        }
-
-        var existing = activities[fallbackIndex];
-        return activities.SetItem(
-            fallbackIndex,
-            existing with
-            {
-                TokenUsage = MergeTokenUsage(existing.TokenUsage, tokenUsage)
-            });
+        _ = previousMetadata;
+        _ = currentMetadata;
+        return existingActivities;
     }
 
     private static SessionActivityEntry EnrichNewActivity(
-        SessionActivityEntry activity,
-        DashboardSessionMetadataSnapshot? metadata)
+        SessionActivityEntry activity)
     {
-        if (metadata?.TokenUsage is null || activity.TokenUsage is not null)
+        if (activity.TokenUsage is not null)
         {
             return activity;
         }
 
-        if (activity.Kind == SessionActivityKind.LifecycleMilestone)
+        var tokenUsage = TryCreatePerEntryEstimatedTokenSnapshot(activity);
+        if (tokenUsage is null)
         {
             return activity;
         }
 
         return activity with
         {
-            TokenUsage = CreateActivityTokenSnapshot("current", metadata.TokenUsage)
+            TokenUsage = tokenUsage
         };
     }
 
-    private static SessionActivityTokenSnapshot MergeTokenUsage(
-        SessionActivityTokenSnapshot? existing,
-        SessionActivityTokenSnapshot incoming)
+    private static SessionActivityTokenSnapshot? TryCreatePerEntryEstimatedTokenSnapshot(SessionActivityEntry activity)
     {
-        if (existing is null)
+        if (activity.Kind != SessionActivityKind.DebugMessage || string.IsNullOrWhiteSpace(activity.Detail))
         {
-            return incoming;
+            return null;
         }
 
-        var preferredSource = GetSourcePriority(existing.Source) >= GetSourcePriority(incoming.Source)
-            ? existing.Source
-            : incoming.Source;
-
-        return incoming with
+        var title = activity.Title.Trim();
+        if (title.StartsWith("Sent turn/start", StringComparison.Ordinal))
         {
-            Source = preferredSource
-        };
+            var inputTokens = EstimateTurnStartTokens(activity.Detail);
+            return inputTokens > 0
+                ? CreatePerEntryEstimateSnapshot("turn/start", activity.Timestamp, inputTokens, 0)
+                : null;
+        }
+
+        if (title.StartsWith("Received item/started", StringComparison.Ordinal))
+        {
+            var inputTokens = EstimateItemStartedTokens(activity.Detail);
+            return inputTokens > 0
+                ? CreatePerEntryEstimateSnapshot("item/started", activity.Timestamp, inputTokens, 0)
+                : null;
+        }
+
+        if (title.StartsWith("Received item/completed", StringComparison.Ordinal))
+        {
+            var outputTokens = EstimateItemCompletedTokens(activity.Detail);
+            return outputTokens > 0
+                ? CreatePerEntryEstimateSnapshot("item/completed", activity.Timestamp, 0, outputTokens)
+                : null;
+        }
+
+        return null;
     }
 
-    private static int GetSourcePriority(string source)
+    private static SessionActivityTokenSnapshot CreatePerEntryEstimateSnapshot(
+        string kind,
+        DateTimeOffset timestamp,
+        long inputTokens,
+        long outputTokens)
     {
-        return source switch
-        {
-            "operation" => 4,
-            "reported" => 3,
-            "comparison" => 2,
-            "estimated" => 1,
-            _ => 0
-        };
-    }
-
-    private static SessionActivityTokenSnapshot CreateActivityTokenSnapshot(
-        string source,
-        DashboardSessionTokenUsageSnapshot tokenUsage)
-    {
+        var totalTokens = inputTokens + outputTokens;
         return new SessionActivityTokenSnapshot(
-            source,
-            tokenUsage.EffectiveInputTokens,
-            tokenUsage.EffectiveOutputTokens,
-            tokenUsage.EffectiveTotalTokens,
-            tokenUsage.EstimatedInputTokens,
-            tokenUsage.EstimatedOutputTokens,
-            tokenUsage.EstimatedTotalTokens,
-            tokenUsage.ReportedInputTokens,
-            tokenUsage.ReportedCachedInputTokens,
-            tokenUsage.ReportedOutputTokens,
-            tokenUsage.ReportedReasoningTokens,
-            tokenUsage.ReportedTotalTokens,
-            tokenUsage.ComparisonStatus,
-            tokenUsage.InputDelta,
-            tokenUsage.OutputDelta,
-            tokenUsage.TotalDelta,
-            tokenUsage.LastEstimatedAt,
-            tokenUsage.LastReportedAt,
-            tokenUsage.LastOperation);
+            "per-entry-estimate",
+            EffectiveInputTokens: 0,
+            EffectiveOutputTokens: 0,
+            EffectiveTotalTokens: 0,
+            EstimatedInputTokens: inputTokens,
+            EstimatedOutputTokens: outputTokens,
+            EstimatedTotalTokens: totalTokens,
+            ReportedInputTokens: 0,
+            ReportedCachedInputTokens: 0,
+            ReportedOutputTokens: 0,
+            ReportedReasoningTokens: 0,
+            ReportedTotalTokens: 0,
+            ComparisonStatus: SessionTokenComparisonStatus.None,
+            InputDelta: 0,
+            OutputDelta: 0,
+            TotalDelta: 0,
+            LastEstimatedAt: timestamp,
+            LastReportedAt: null,
+            LastOperation: new DashboardSessionTokenOperationSnapshot(
+                $"{kind}:{timestamp:O}",
+                kind,
+                timestamp,
+                TurnNumber: 0,
+                InputTokens: inputTokens,
+                CachedInputTokens: 0,
+                OutputTokens: outputTokens,
+                ReasoningTokens: 0,
+                TotalTokens: totalTokens));
+    }
+
+    private static int EstimateTurnStartTokens(string payload)
+    {
+        return TryParsePayload(
+            payload,
+            static root =>
+            {
+                if (!TryGetNestedElement(root, ["params", "input"], out var inputItems)
+                    || inputItems.ValueKind != JsonValueKind.Array)
+                {
+                    return 0;
+                }
+
+                var total = 0;
+                foreach (var item in inputItems.EnumerateArray())
+                {
+                    total += EstimateTextTokensFromElement(item);
+                }
+
+                return total;
+            });
+    }
+
+    private static int EstimateItemStartedTokens(string payload)
+    {
+        return TryParsePayload(
+            payload,
+            static root => TryGetNestedElement(root, ["params", "item"], out var item)
+                ? EstimateTextTokensFromElement(item)
+                : 0);
+    }
+
+    private static int EstimateItemCompletedTokens(string payload)
+    {
+        return TryParsePayload(
+            payload,
+            static root => TryGetNestedElement(root, ["params", "item"], out var item)
+                ? EstimateTextTokensFromElement(item)
+                : 0);
+    }
+
+    private static int TryParsePayload(string payload, Func<JsonElement, int> estimator)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(payload);
+            return estimator(document.RootElement);
+        }
+        catch (JsonException)
+        {
+            return 0;
+        }
+    }
+
+    private static int EstimateTextTokensFromElement(JsonElement element)
+    {
+        var total = 0;
+
+        if (element.ValueKind == JsonValueKind.Object)
+        {
+            if (element.TryGetProperty("text", out var textElement) && textElement.ValueKind == JsonValueKind.String)
+            {
+                total += EstimateTextTokens(textElement.GetString());
+            }
+
+            if (element.TryGetProperty("content", out var contentElement) && contentElement.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var item in contentElement.EnumerateArray())
+                {
+                    total += EstimateTextTokensFromElement(item);
+                }
+            }
+        }
+        else if (element.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in element.EnumerateArray())
+            {
+                total += EstimateTextTokensFromElement(item);
+            }
+        }
+
+        return total;
+    }
+
+    private static bool TryGetNestedElement(JsonElement element, IReadOnlyList<string> path, out JsonElement value)
+    {
+        value = element;
+        var current = element;
+
+        foreach (var segment in path)
+        {
+            if (current.ValueKind != JsonValueKind.Object || !current.TryGetProperty(segment, out current))
+            {
+                return false;
+            }
+        }
+
+        value = current;
+        return true;
+    }
+
+    private static int EstimateTextTokens(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return 0;
+        }
+
+        var trimmed = text.Trim();
+        return Math.Max(1, (int)Math.Ceiling(trimmed.Length / 4d));
     }
 
     private sealed record SessionState(

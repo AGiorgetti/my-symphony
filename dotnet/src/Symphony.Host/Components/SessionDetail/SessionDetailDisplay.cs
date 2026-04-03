@@ -117,6 +117,7 @@ internal static class SessionDetailDisplay
         var detail = NormalizeDetail(entry.Detail);
         var detailPresentation = BuildDetailPresentation(detail);
         var displayTitle = HumanizeTitle(entry.Title);
+        var hasVisibleTokenUsage = HasVisibleEntryTokenUsage(entry.TokenUsage);
         var facts = MergeFacts(detailPresentation.Facts, entry.TokenUsage);
 
         return new SessionActivityTimelineEntryModel(
@@ -134,7 +135,7 @@ internal static class SessionDetailDisplay
             detailPresentation.HasExpandableDetail,
             detailPresentation.IsStructuredDetail,
             GetTimelineColor(entry),
-            entry.TokenUsage is not null,
+            hasVisibleTokenUsage,
             GetTokenSourceLabel(entry.TokenUsage));
     }
 
@@ -470,36 +471,29 @@ internal static class SessionDetailDisplay
         IReadOnlyList<SessionActivityFactModel> existingFacts,
         SessionActivityTokenSnapshot? tokenUsage)
     {
-        if (tokenUsage is null)
+        if (!HasVisibleEntryTokenUsage(tokenUsage))
         {
             return existingFacts;
         }
 
+        var visibleTokenUsage = tokenUsage!;
         var facts = new List<SessionActivityFactModel>(existingFacts);
 
-        AddFactIfMissing(facts, "Token source", GetTokenSourceLabel(tokenUsage));
+        AddFactIfMissing(facts, "Token source", GetTokenSourceLabel(visibleTokenUsage));
 
-        if (tokenUsage.LastOperation is not null)
+        if (visibleTokenUsage.EstimatedTotalTokens > 0)
         {
-            AddFactIfMissing(facts, "Entry total", tokenUsage.LastOperation.TotalTokens.ToString(CultureInfo.InvariantCulture));
-        }
+            if (visibleTokenUsage.EstimatedInputTokens > 0)
+            {
+                AddFactIfMissing(facts, "Estimated input", visibleTokenUsage.EstimatedInputTokens.ToString(CultureInfo.InvariantCulture));
+            }
 
-        AddFactIfMissing(facts, "Current total", tokenUsage.EffectiveTotalTokens.ToString(CultureInfo.InvariantCulture));
+            if (visibleTokenUsage.EstimatedOutputTokens > 0)
+            {
+                AddFactIfMissing(facts, "Estimated output", visibleTokenUsage.EstimatedOutputTokens.ToString(CultureInfo.InvariantCulture));
+            }
 
-        if (tokenUsage.EstimatedTotalTokens > 0)
-        {
-            AddFactIfMissing(facts, "Estimated total", tokenUsage.EstimatedTotalTokens.ToString(CultureInfo.InvariantCulture));
-        }
-
-        if (tokenUsage.ReportedTotalTokens > 0)
-        {
-            AddFactIfMissing(facts, "Reported total", tokenUsage.ReportedTotalTokens.ToString(CultureInfo.InvariantCulture));
-        }
-
-        if (tokenUsage.ComparisonStatus == SessionTokenComparisonStatus.Mismatch)
-        {
-            AddFactIfMissing(facts, "Comparison", "Mismatch");
-            AddFactIfMissing(facts, "Total delta", tokenUsage.TotalDelta.ToString(CultureInfo.InvariantCulture));
+            AddFactIfMissing(facts, "Estimated total", visibleTokenUsage.EstimatedTotalTokens.ToString(CultureInfo.InvariantCulture));
         }
 
         return facts;
@@ -518,19 +512,23 @@ internal static class SessionDetailDisplay
 
     private static string? GetTokenSourceLabel(SessionActivityTokenSnapshot? tokenUsage)
     {
-        if (tokenUsage is null)
+        if (!HasVisibleEntryTokenUsage(tokenUsage))
         {
             return null;
         }
 
-        return tokenUsage.Source switch
+        return tokenUsage!.Source switch
         {
-            "estimated" => "Estimate",
-            "reported" => "Reported",
-            "operation" => "Per-entry",
-            "comparison" => "Comparison",
+            "per-entry-estimate" => "Estimate",
             _ => "Available"
         };
+    }
+
+    private static bool HasVisibleEntryTokenUsage(SessionActivityTokenSnapshot? tokenUsage)
+    {
+        return tokenUsage is not null
+            && string.Equals(tokenUsage.Source, "per-entry-estimate", StringComparison.Ordinal)
+            && tokenUsage.EstimatedTotalTokens > 0;
     }
 
     private static void AddTokenUsageFacts(

@@ -115,13 +115,7 @@ public sealed class SessionDetailPageIntegrationTests
         Assert.Contains(">9<", html, StringComparison.Ordinal);
         Assert.Contains("Mismatch", html, StringComparison.Ordinal);
         Assert.Contains("6", html, StringComparison.Ordinal);
-        Assert.Contains("data-testid=\"session-detail-timeline-entry-token-indicator\"", html, StringComparison.Ordinal);
-        Assert.Contains("Tokens: Available", html, StringComparison.Ordinal);
-        Assert.Contains("Entry total", html, StringComparison.Ordinal);
-        Assert.Contains("Reported total", html, StringComparison.Ordinal);
-        Assert.Contains("Current total", html, StringComparison.Ordinal);
-        Assert.Contains("Estimated total", html, StringComparison.Ordinal);
-        Assert.Contains("Comparison", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("data-testid=\"session-detail-timeline-entry-token-indicator\"", html, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -180,6 +174,11 @@ public sealed class SessionDetailPageIntegrationTests
         Assert.Contains("&quot;method&quot;: &quot;turn/completed&quot;", html, StringComparison.Ordinal);
         Assert.Contains("&quot;message&quot;: &quot;done&quot;", html, StringComparison.Ordinal);
         Assert.Contains("&quot;method&quot;: &quot;item/agentMessage/delta&quot;", html, StringComparison.Ordinal);
+        Assert.Contains("data-testid=\"session-detail-timeline-entry-token-indicator\"", html, StringComparison.Ordinal);
+        Assert.Contains("Tokens: Estimate", html, StringComparison.Ordinal);
+        Assert.Contains("Estimated input", html, StringComparison.Ordinal);
+        Assert.Contains("Estimated output", html, StringComparison.Ordinal);
+        Assert.Contains("Estimated total", html, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -320,6 +319,24 @@ public sealed class SessionDetailPageIntegrationTests
             new SessionActivityEntry(
                 SessionActivityKind.DebugMessage,
                 startedAt.AddMinutes(1).AddSeconds(1),
+                "Received item/started",
+                """
+                {
+                  "method": "item/started",
+                  "params": {
+                    "item": {
+                      "id": "item-user-message-1",
+                      "type": "userMessage",
+                      "text": "Prompt body"
+                    }
+                  }
+                }
+                """));
+        store.RecordActivity(
+            "ABC-3",
+            new SessionActivityEntry(
+                SessionActivityKind.DebugMessage,
+                startedAt.AddMinutes(1).AddSeconds(2),
                 "Received turn/completed",
                 """
                 {
@@ -338,7 +355,30 @@ public sealed class SessionDetailPageIntegrationTests
             "ABC-3",
             new SessionActivityEntry(
                 SessionActivityKind.DebugMessage,
-                startedAt.AddMinutes(1).AddSeconds(2),
+                startedAt.AddMinutes(1).AddSeconds(3),
+                "Received item/completed",
+                """
+                {
+                  "method": "item/completed",
+                  "params": {
+                    "item": {
+                      "id": "item-agent-message-1",
+                      "type": "agentMessage",
+                      "content": [
+                        {
+                          "type": "output_text",
+                          "text": "Completed assistant reply"
+                        }
+                      ]
+                    }
+                  }
+                }
+                """));
+        store.RecordActivity(
+            "ABC-3",
+            new SessionActivityEntry(
+                SessionActivityKind.DebugMessage,
+                startedAt.AddMinutes(1).AddSeconds(4),
                 "Received item/agentMessage/delta",
                 """
                 {

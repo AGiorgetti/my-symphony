@@ -138,7 +138,7 @@ public sealed class SessionActivityStoreTests
     }
 
     [Fact]
-    public void RecordSessionMetadata_enriches_existing_activity_entries_with_token_usage()
+    public void RecordActivity_attaches_single_request_estimate_only_to_supported_debug_messages()
     {
         var store = CreateStore();
         var startedAt = new DateTimeOffset(2026, 3, 19, 16, 30, 0, TimeSpan.Zero);
@@ -149,12 +149,33 @@ public sealed class SessionActivityStoreTests
             new SessionActivityEntry(
                 SessionActivityKind.DebugMessage,
                 startedAt.AddSeconds(1),
+                "Sent turn/start",
+                "{\"method\":\"turn/start\",\"params\":{\"input\":[{\"type\":\"text\",\"text\":\"Prompt body for estimation\"}]}}"));
+        store.RecordActivity(
+            "ABC-5",
+            new SessionActivityEntry(
+                SessionActivityKind.DebugMessage,
+                startedAt.AddSeconds(2),
+                "Received item/started",
+                "{\"method\":\"item/started\",\"params\":{\"item\":{\"id\":\"item-1\",\"type\":\"userMessage\",\"text\":\"Prompt body for estimation\"}}}"));
+        store.RecordActivity(
+            "ABC-5",
+            new SessionActivityEntry(
+                SessionActivityKind.DebugMessage,
+                startedAt.AddSeconds(3),
+                "Received item/completed",
+                "{\"method\":\"item/completed\",\"params\":{\"item\":{\"id\":\"item-2\",\"type\":\"agentMessage\",\"content\":[{\"type\":\"output_text\",\"text\":\"Assistant reply payload\"}]}}}"));
+        store.RecordActivity(
+            "ABC-5",
+            new SessionActivityEntry(
+                SessionActivityKind.DebugMessage,
+                startedAt.AddSeconds(4),
                 "Received thread/tokenUsage/updated",
                 "{\"method\":\"thread/tokenUsage/updated\"}"));
 
         store.RecordSessionMetadata(
             "ABC-5",
-            startedAt.AddSeconds(1),
+            startedAt.AddSeconds(4),
             new LiveSessionMetadata(
                 "thread-5",
                 "turn-5",
@@ -189,12 +210,25 @@ public sealed class SessionActivityStoreTests
             attempt: 1,
             orchestratorSessionId: "orch-5");
 
-        var activity = Assert.Single(store.GetActivities("ABC-5"));
-        Assert.NotNull(activity.TokenUsage);
-        Assert.Equal("operation", activity.TokenUsage!.Source);
-        Assert.Equal(145, activity.TokenUsage.EffectiveTotalTokens);
-        Assert.Equal(145, activity.TokenUsage.ReportedTotalTokens);
-        Assert.Equal(145, activity.TokenUsage.LastOperation!.TotalTokens);
+        var activities = store.GetActivities("ABC-5");
+        Assert.Equal(4, activities.Count);
+
+        Assert.NotNull(activities[0].TokenUsage);
+        Assert.Equal("per-entry-estimate", activities[0].TokenUsage!.Source);
+        Assert.True(activities[0].TokenUsage!.EstimatedInputTokens > 0);
+        Assert.Equal(0, activities[0].TokenUsage!.EstimatedOutputTokens);
+
+        Assert.NotNull(activities[1].TokenUsage);
+        Assert.Equal("per-entry-estimate", activities[1].TokenUsage!.Source);
+        Assert.True(activities[1].TokenUsage!.EstimatedInputTokens > 0);
+        Assert.Equal(0, activities[1].TokenUsage!.EstimatedOutputTokens);
+
+        Assert.NotNull(activities[2].TokenUsage);
+        Assert.Equal("per-entry-estimate", activities[2].TokenUsage!.Source);
+        Assert.Equal(0, activities[2].TokenUsage!.EstimatedInputTokens);
+        Assert.True(activities[2].TokenUsage!.EstimatedOutputTokens > 0);
+
+        Assert.Null(activities[3].TokenUsage);
     }
 
     private static SessionActivityStore CreateStore(bool trackAgentMessageDeltas = false)
