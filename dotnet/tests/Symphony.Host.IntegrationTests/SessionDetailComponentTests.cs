@@ -15,6 +15,7 @@ using Symphony.Host.Components.SessionDetail;
 using Symphony.Host.Configuration;
 using Symphony.Host.Dashboard;
 using Symphony.Domain.Issues;
+using Symphony.Domain.Sessions;
 
 namespace Symphony.Host.IntegrationTests;
 
@@ -217,9 +218,44 @@ public sealed class SessionDetailComponentTests : BunitContext
                     null,
                     2,
                     true,
-                    "Finished sessions keep the last known session ID and attempt when available.")));
+                    "Finished sessions keep the last known session ID and attempt when available.",
+                    new DashboardSessionTokenUsageSnapshot(
+                        120,
+                        45,
+                        165,
+                        118,
+                        40,
+                        158,
+                        130,
+                        50,
+                        47,
+                        9,
+                        177,
+                        SessionTokenComparisonStatus.Mismatch,
+                        12,
+                        7,
+                        19,
+                        DateTimeOffset.UtcNow.AddMinutes(-1),
+                        DateTimeOffset.UtcNow,
+                        new DashboardSessionTokenOperationSnapshot(
+                            "turn-4:thread_tokenUsage_updated:177",
+                            "thread_tokenUsage_updated",
+                            DateTimeOffset.UtcNow,
+                            4,
+                            130,
+                            50,
+                            47,
+                            9,
+                            177)))));
 
-        Assert.Contains("165", cut.Markup, StringComparison.Ordinal);
+        Assert.Contains("177", cut.Markup, StringComparison.Ordinal);
+        Assert.Contains("130", cut.Markup, StringComparison.Ordinal);
+        Assert.Contains("50", cut.Markup, StringComparison.Ordinal);
+        Assert.Contains("47", cut.Markup, StringComparison.Ordinal);
+        Assert.Contains("9", cut.Markup, StringComparison.Ordinal);
+        Assert.Contains("Rep In", cut.Markup, StringComparison.Ordinal);
+        Assert.Contains("Rep Out", cut.Markup, StringComparison.Ordinal);
+        Assert.Contains("Rep Total", cut.Markup, StringComparison.Ordinal);
         Assert.Contains("thread-1-turn-4", cut.Markup, StringComparison.Ordinal);
         Assert.Contains("Attempt 2", cut.Markup, StringComparison.Ordinal);
         Assert.Contains("Finished sessions keep the last known session ID and attempt when available.", cut.Markup, StringComparison.Ordinal);

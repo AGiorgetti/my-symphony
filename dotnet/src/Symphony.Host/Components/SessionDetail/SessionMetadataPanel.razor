@@ -12,16 +12,24 @@
 
                 <div class="session-metadata-strip">
                     <div class="session-metadata-chip" data-testid="session-detail-metadata-input-tokens">
-                        <span class="session-metadata-chip__label">In</span>
-                        <span class="session-metadata-chip__value">@FormatLong(Metadata.InputTokens)</span>
+                        <span class="session-metadata-chip__label">Rep In</span>
+                        <span class="session-metadata-chip__value">@FormatLong(GetReportedInputTokens())</span>
+                    </div>
+                    <div class="session-metadata-chip" data-testid="session-detail-metadata-cached-input-strip-tokens">
+                        <span class="session-metadata-chip__label">Cached</span>
+                        <span class="session-metadata-chip__value">@FormatLong(GetReportedCachedInputTokens())</span>
                     </div>
                     <div class="session-metadata-chip" data-testid="session-detail-metadata-output-tokens">
-                        <span class="session-metadata-chip__label">Out</span>
-                        <span class="session-metadata-chip__value">@FormatLong(Metadata.OutputTokens)</span>
+                        <span class="session-metadata-chip__label">Rep Out</span>
+                        <span class="session-metadata-chip__value">@FormatLong(GetReportedOutputTokens())</span>
+                    </div>
+                    <div class="session-metadata-chip" data-testid="session-detail-metadata-reasoning-strip-tokens">
+                        <span class="session-metadata-chip__label">Reason</span>
+                        <span class="session-metadata-chip__value">@FormatLong(GetReportedReasoningTokens())</span>
                     </div>
                     <div class="session-metadata-chip" data-testid="session-detail-metadata-total-tokens">
-                        <span class="session-metadata-chip__label">Total</span>
-                        <span class="session-metadata-chip__value">@FormatLong(Metadata.TotalTokens)</span>
+                        <span class="session-metadata-chip__label">Rep Total</span>
+                        <span class="session-metadata-chip__value">@FormatLong(GetReportedTotalTokens())</span>
                     </div>
                     <div class="session-metadata-chip" data-testid="session-detail-metadata-turn-count">
                         <span class="session-metadata-chip__label">Turns</span>
@@ -115,4 +123,14 @@
             _ => tokenUsage.ComparisonStatus.ToString()
         };
     }
+
+    private long? GetReportedInputTokens() => Metadata.TokenUsage?.ReportedInputTokens ?? Metadata.InputTokens;
+
+    private long? GetReportedCachedInputTokens() => Metadata.TokenUsage?.ReportedCachedInputTokens;
+
+    private long? GetReportedOutputTokens() => Metadata.TokenUsage?.ReportedOutputTokens ?? Metadata.OutputTokens;
+
+    private long? GetReportedReasoningTokens() => Metadata.TokenUsage?.ReportedReasoningTokens;
+
+    private long? GetReportedTotalTokens() => Metadata.TokenUsage?.ReportedTotalTokens ?? Metadata.TotalTokens;
 }
