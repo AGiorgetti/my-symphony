@@ -105,9 +105,10 @@ public sealed class FakeDashboardDataLoader(
             return Invalid(builtInDataSet, "upload", "The full-bundle export payload is missing or inconsistent.");
         }
 
+        var normalizedSessions = NormalizeImportedSessions(envelope.Bundle.Sessions);
         var dataSet = new FakeDashboardDataSet(
             envelope.Bundle.DashboardSnapshot,
-            envelope.Bundle.Sessions,
+            normalizedSessions,
             envelope.Bundle.IssueSnapshots.ToDictionary(snapshot => snapshot.IssueIdentifier, StringComparer.OrdinalIgnoreCase));
         var name = string.IsNullOrWhiteSpace(sourceName) ? "imported bundle" : sourceName;
         return (
@@ -126,7 +127,8 @@ public sealed class FakeDashboardDataLoader(
             return Invalid(builtInDataSet, "upload", "The single-session export payload is missing or inconsistent.");
         }
 
-        var importedHistory = singleSession.History ?? new DashboardSessionHistorySnapshot(singleSession.Session, singleSession.Activities);
+        var importedHistory = NormalizeImportedHistory(
+            singleSession.History ?? new DashboardSessionHistorySnapshot(singleSession.Session, singleSession.Activities));
         var issueIdentifier = importedHistory.Session.IssueIdentifier;
         var sessions = builtInDataSet.Sessions
             .Where(history => !string.Equals(history.Session.IssueIdentifier, issueIdentifier, StringComparison.OrdinalIgnoreCase))
@@ -148,6 +150,21 @@ public sealed class FakeDashboardDataLoader(
         return (
             new FakeDashboardDataSet(mergedSnapshot, sessions, issueSnapshots),
             new FakeDashboardDataStatus(true, false, "upload", $"Merged imported session '{issueIdentifier}' from '{name}' into fake mode."));
+    }
+
+    private static IReadOnlyList<DashboardSessionHistorySnapshot> NormalizeImportedSessions(
+        IReadOnlyList<DashboardSessionHistorySnapshot> sessions)
+    {
+        return sessions.Select(NormalizeImportedHistory).ToArray();
+    }
+
+    private static DashboardSessionHistorySnapshot NormalizeImportedHistory(DashboardSessionHistorySnapshot history)
+    {
+        var normalizedActivities = history.Activities.Select(SessionActivityTokenEstimator.Normalize).ToArray();
+        return history with
+        {
+            Activities = normalizedActivities
+        };
     }
 
     private static DashboardSnapshot MergeSingleSessionIntoDashboardSnapshot(

@@ -151,6 +151,172 @@ public sealed class FakeDashboardDataLoaderTests
     }
 
     [Fact]
+    public async Task LoadFromStreamAsync_normalizes_imported_activity_token_usage_for_supported_debug_entries()
+    {
+        var loader = CreateLoader();
+        var timestamp = DateTimeOffset.Parse("2026-04-03T10:14:32.6902943+00:00", System.Globalization.CultureInfo.InvariantCulture);
+        var envelope = new DashboardDataExportEnvelope(
+            DashboardDataExportSchema.CurrentVersion,
+            timestamp,
+            DashboardDataExportSchema.SingleSessionKind,
+            new DashboardDataExportSource("tests", "1.0.0", "Development"),
+            new DashboardDataSessionExport(
+                new SessionRecord("IMP-EST", null, timestamp.AddMinutes(-1), timestamp, "Succeeded", null, false),
+                [
+                    new SessionActivityEntry(
+                        SessionActivityKind.DebugMessage,
+                        timestamp,
+                        "Sent turn/start",
+                        "{\"id\":3,\"method\":\"turn/start\",\"params\":{\"threadId\":\"thread-1\",\"input\":[{\"type\":\"text\",\"text\":\"Prompt body for estimation\"}]}}",
+                        new SessionActivityTokenSnapshot(
+                            "current",
+                            4472,
+                            0,
+                            4472,
+                            4472,
+                            0,
+                            4472,
+                            0,
+                            0,
+                            0,
+                            0,
+                            0,
+                            Symphony.Domain.Sessions.SessionTokenComparisonStatus.EstimatedOnly,
+                            0,
+                            0,
+                            0,
+                            timestamp,
+                            null)),
+                    new SessionActivityEntry(
+                        SessionActivityKind.DebugMessage,
+                        timestamp.AddSeconds(1),
+                        "Received item/started",
+                        "{\"method\":\"item/started\",\"params\":{\"item\":{\"id\":\"item-1\",\"type\":\"userMessage\",\"content\":[{\"type\":\"text\",\"text\":\"Prompt body for estimation\"}]}}}",
+                        null),
+                    new SessionActivityEntry(
+                        SessionActivityKind.DebugMessage,
+                        timestamp.AddSeconds(2),
+                        "Received item/completed",
+                        "{\"method\":\"item/completed\",\"params\":{\"item\":{\"id\":\"item-2\",\"type\":\"agentMessage\",\"content\":[{\"type\":\"output_text\",\"text\":\"Assistant reply payload\"}]}}}",
+                        null),
+                    new SessionActivityEntry(
+                        SessionActivityKind.DebugMessage,
+                        timestamp.AddSeconds(3),
+                        "Received turn/started",
+                        "{\"method\":\"turn/started\",\"params\":{\"turn\":{\"id\":\"turn-1\"}}}",
+                        new SessionActivityTokenSnapshot(
+                            "reported",
+                            4472,
+                            0,
+                            4472,
+                            4472,
+                            0,
+                            4472,
+                            0,
+                            0,
+                            0,
+                            0,
+                            0,
+                            Symphony.Domain.Sessions.SessionTokenComparisonStatus.EstimatedOnly,
+                            0,
+                            0,
+                            0,
+                            timestamp,
+                            null))
+                ],
+                new DashboardSessionHistorySnapshot(
+                    new SessionRecord("IMP-EST", null, timestamp.AddMinutes(-1), timestamp, "Succeeded", null, false),
+                    [
+                        new SessionActivityEntry(
+                            SessionActivityKind.DebugMessage,
+                            timestamp,
+                            "Sent turn/start",
+                            "{\"id\":3,\"method\":\"turn/start\",\"params\":{\"threadId\":\"thread-1\",\"input\":[{\"type\":\"text\",\"text\":\"Prompt body for estimation\"}]}}",
+                            new SessionActivityTokenSnapshot(
+                                "current",
+                                4472,
+                                0,
+                                4472,
+                                4472,
+                                0,
+                                4472,
+                                0,
+                                0,
+                                0,
+                                0,
+                                0,
+                                Symphony.Domain.Sessions.SessionTokenComparisonStatus.EstimatedOnly,
+                                0,
+                                0,
+                                0,
+                                timestamp,
+                                null)),
+                        new SessionActivityEntry(
+                            SessionActivityKind.DebugMessage,
+                            timestamp.AddSeconds(1),
+                            "Received item/started",
+                            "{\"method\":\"item/started\",\"params\":{\"item\":{\"id\":\"item-1\",\"type\":\"userMessage\",\"content\":[{\"type\":\"text\",\"text\":\"Prompt body for estimation\"}]}}}",
+                            null),
+                        new SessionActivityEntry(
+                            SessionActivityKind.DebugMessage,
+                            timestamp.AddSeconds(2),
+                            "Received item/completed",
+                            "{\"method\":\"item/completed\",\"params\":{\"item\":{\"id\":\"item-2\",\"type\":\"agentMessage\",\"content\":[{\"type\":\"output_text\",\"text\":\"Assistant reply payload\"}]}}}",
+                            null),
+                        new SessionActivityEntry(
+                            SessionActivityKind.DebugMessage,
+                            timestamp.AddSeconds(3),
+                            "Received turn/started",
+                            "{\"method\":\"turn/started\",\"params\":{\"turn\":{\"id\":\"turn-1\"}}}",
+                            new SessionActivityTokenSnapshot(
+                                "reported",
+                                4472,
+                                0,
+                                4472,
+                                4472,
+                                0,
+                                4472,
+                                0,
+                                0,
+                                0,
+                                0,
+                                0,
+                                Symphony.Domain.Sessions.SessionTokenComparisonStatus.EstimatedOnly,
+                                0,
+                                0,
+                                0,
+                                timestamp,
+                                null))
+                    ]),
+                IssueSnapshot: null,
+                ActiveSession: null,
+                RetryEntry: null,
+                RecentAttempt: null,
+                BlockedSession: null,
+                FollowUpActions: []),
+            Bundle: null);
+        await using var stream = new MemoryStream(System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(envelope, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web)));
+
+        var result = await loader.LoadFromStreamAsync(stream, "import-estimates.json", CreateBuiltInDataSet());
+
+        Assert.False(result.Status.HasError);
+        var importedSession = Assert.Single(result.DataSet.Sessions, session => session.Session.IssueIdentifier == "IMP-EST");
+        Assert.Equal(4, importedSession.Activities.Count);
+
+        Assert.Equal("per-entry-estimate", importedSession.Activities[0].TokenUsage!.Source);
+        Assert.True(importedSession.Activities[0].TokenUsage!.EstimatedInputTokens > 0);
+        Assert.Equal(0, importedSession.Activities[0].TokenUsage!.EstimatedOutputTokens);
+
+        Assert.Equal("per-entry-estimate", importedSession.Activities[1].TokenUsage!.Source);
+        Assert.True(importedSession.Activities[1].TokenUsage!.EstimatedInputTokens > 0);
+
+        Assert.Equal("per-entry-estimate", importedSession.Activities[2].TokenUsage!.Source);
+        Assert.True(importedSession.Activities[2].TokenUsage!.EstimatedOutputTokens > 0);
+
+        Assert.Null(importedSession.Activities[3].TokenUsage);
+    }
+
+    [Fact]
     public async Task LoadFromStreamAsync_accepts_bundle_export_with_sessions_missing_metadata()
     {
         var loader = CreateLoader();
