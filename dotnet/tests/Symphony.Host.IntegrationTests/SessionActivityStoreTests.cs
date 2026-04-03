@@ -3,6 +3,7 @@ using Microsoft.Extensions.Options;
 using Symphony.Application.Orchestration;
 using Symphony.Host.Configuration;
 using Symphony.Host.Dashboard;
+using Symphony.Domain.Sessions;
 
 namespace Symphony.Host.IntegrationTests;
 
@@ -134,6 +135,66 @@ public sealed class SessionActivityStoreTests
         var session = Assert.Single(store.GetActiveSessions());
         Assert.Equal("ABC-4", session.IssueIdentifier);
         Assert.Equal(24, store.GetActivities("ABC-4").Count);
+    }
+
+    [Fact]
+    public void RecordSessionMetadata_enriches_existing_activity_entries_with_token_usage()
+    {
+        var store = CreateStore();
+        var startedAt = new DateTimeOffset(2026, 3, 19, 16, 30, 0, TimeSpan.Zero);
+
+        store.RecordSessionStart("ABC-5", startedAt);
+        store.RecordActivity(
+            "ABC-5",
+            new SessionActivityEntry(
+                SessionActivityKind.DebugMessage,
+                startedAt.AddSeconds(1),
+                "Received thread/tokenUsage/updated",
+                "{\"method\":\"thread/tokenUsage/updated\"}"));
+
+        store.RecordSessionMetadata(
+            "ABC-5",
+            startedAt.AddSeconds(1),
+            new LiveSessionMetadata(
+                "thread-5",
+                "turn-5",
+                codexInputTokens: 120,
+                codexOutputTokens: 25,
+                codexTotalTokens: 145,
+                estimatedInputTokens: 118,
+                estimatedOutputTokens: 20,
+                estimatedTotalTokens: 138,
+                lastReportedInputTokens: 120,
+                lastReportedCachedInputTokens: 44,
+                lastReportedOutputTokens: 25,
+                lastReportedReasoningTokens: 7,
+                lastReportedTotalTokens: 145,
+                tokenComparisonStatus: SessionTokenComparisonStatus.Mismatch,
+                tokenInputDelta: 2,
+                tokenOutputDelta: 5,
+                tokenTotalDelta: 7,
+                lastEstimatedTokenAt: startedAt,
+                lastReportedTokenAt: startedAt.AddSeconds(1),
+                lastUsageOperation: new SessionTokenUsageOperation(
+                    "turn-5:thread_tokenUsage_updated:145",
+                    "thread_tokenUsage_updated",
+                    startedAt.AddSeconds(1),
+                    1,
+                    120,
+                    44,
+                    25,
+                    7,
+                    145),
+                turnCount: 1),
+            attempt: 1,
+            orchestratorSessionId: "orch-5");
+
+        var activity = Assert.Single(store.GetActivities("ABC-5"));
+        Assert.NotNull(activity.TokenUsage);
+        Assert.Equal("operation", activity.TokenUsage!.Source);
+        Assert.Equal(145, activity.TokenUsage.EffectiveTotalTokens);
+        Assert.Equal(145, activity.TokenUsage.ReportedTotalTokens);
+        Assert.Equal(145, activity.TokenUsage.LastOperation!.TotalTokens);
     }
 
     private static SessionActivityStore CreateStore(bool trackAgentMessageDeltas = false)

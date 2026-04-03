@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using MudBlazor;
 using Symphony.Domain.Runs;
+using Symphony.Domain.Sessions;
 using Symphony.Host.Dashboard;
 
 namespace Symphony.Host.Components.SessionDetail;
@@ -116,6 +117,7 @@ internal static class SessionDetailDisplay
         var detail = NormalizeDetail(entry.Detail);
         var detailPresentation = BuildDetailPresentation(detail);
         var displayTitle = HumanizeTitle(entry.Title);
+        var facts = MergeFacts(detailPresentation.Facts, entry.TokenUsage);
 
         return new SessionActivityTimelineEntryModel(
             entry.Kind,
@@ -125,13 +127,15 @@ internal static class SessionDetailDisplay
             GetKindLabel(entry.Kind),
             GetKindBadgeColor(entry.Kind),
             detailPresentation.Summary,
-            detailPresentation.Facts,
+            facts,
             detailPresentation.Detail,
             detailPresentation.DetailPreview,
             detailPresentation.DetailToggleLabel,
             detailPresentation.HasExpandableDetail,
             detailPresentation.IsStructuredDetail,
-            GetTimelineColor(entry));
+            GetTimelineColor(entry),
+            entry.TokenUsage is not null,
+            GetTokenSourceLabel(entry.TokenUsage));
     }
 
     internal static int? TryParseTurnCount(string? sessionId)
@@ -460,6 +464,73 @@ internal static class SessionDetailDisplay
         }
 
         return facts;
+    }
+
+    private static IReadOnlyList<SessionActivityFactModel> MergeFacts(
+        IReadOnlyList<SessionActivityFactModel> existingFacts,
+        SessionActivityTokenSnapshot? tokenUsage)
+    {
+        if (tokenUsage is null)
+        {
+            return existingFacts;
+        }
+
+        var facts = new List<SessionActivityFactModel>(existingFacts);
+
+        AddFactIfMissing(facts, "Token source", GetTokenSourceLabel(tokenUsage));
+
+        if (tokenUsage.LastOperation is not null)
+        {
+            AddFactIfMissing(facts, "Entry total", tokenUsage.LastOperation.TotalTokens.ToString(CultureInfo.InvariantCulture));
+        }
+
+        AddFactIfMissing(facts, "Current total", tokenUsage.EffectiveTotalTokens.ToString(CultureInfo.InvariantCulture));
+
+        if (tokenUsage.EstimatedTotalTokens > 0)
+        {
+            AddFactIfMissing(facts, "Estimated total", tokenUsage.EstimatedTotalTokens.ToString(CultureInfo.InvariantCulture));
+        }
+
+        if (tokenUsage.ReportedTotalTokens > 0)
+        {
+            AddFactIfMissing(facts, "Reported total", tokenUsage.ReportedTotalTokens.ToString(CultureInfo.InvariantCulture));
+        }
+
+        if (tokenUsage.ComparisonStatus == SessionTokenComparisonStatus.Mismatch)
+        {
+            AddFactIfMissing(facts, "Comparison", "Mismatch");
+            AddFactIfMissing(facts, "Total delta", tokenUsage.TotalDelta.ToString(CultureInfo.InvariantCulture));
+        }
+
+        return facts;
+    }
+
+    private static void AddFactIfMissing(ICollection<SessionActivityFactModel> facts, string label, string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)
+            || facts.Any(candidate => string.Equals(candidate.Label, label, StringComparison.Ordinal)))
+        {
+            return;
+        }
+
+        facts.Add(new SessionActivityFactModel(label, value));
+    }
+
+    private static string? GetTokenSourceLabel(SessionActivityTokenSnapshot? tokenUsage)
+    {
+        if (tokenUsage is null)
+        {
+            return null;
+        }
+
+        return tokenUsage.Source switch
+        {
+            "estimated" => "Estimate",
+            "reported" => "Reported",
+            "operation" => "Per-entry",
+            "comparison" => "Comparison",
+            _ => "Available"
+        };
     }
 
     private static void AddTokenUsageFacts(

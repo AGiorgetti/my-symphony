@@ -102,6 +102,12 @@
                             <div class="timeline-entry__head">
                                 <div class="timeline-entry__meta">
                                     <StatusPill Text="@entry.KindLabel" Color="@entry.KindBadgeColor" />
+                                    @if (entry.HasTokenUsage)
+                                    {
+                                        <div data-testid="session-detail-timeline-entry-token-indicator">
+                                            <StatusPill Text="@($"Tokens: {entry.TokenSourceLabel}")" Color="Color.Info" />
+                                        </div>
+                                    }
                                     @if (entry.Facts.Count > 0)
                                     {
                                         <div class="fact-list">

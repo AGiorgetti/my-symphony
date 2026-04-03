@@ -1,6 +1,5 @@
 using System.Collections.Concurrent;
 using System.Collections.Immutable;
-using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Symphony.Application.Orchestration;
@@ -14,10 +13,6 @@ public sealed class SessionActivityStore(
     IOptions<DashboardUiOptions>? dashboardUiOptions = null) : ISessionActivityStore, IAgentDebugTranscriptSink
 {
     private readonly ConcurrentDictionary<string, SessionState> _sessions = new(StringComparer.OrdinalIgnoreCase);
-    private static readonly JsonSerializerOptions TokenUsageJsonOptions = new(JsonSerializerDefaults.Web)
-    {
-        WriteIndented = true
-    };
 
     public bool TrackAgentMessageDeltas => dashboardUiOptions?.Value.TrackAgentMessageDeltas ?? false;
 
@@ -62,7 +57,7 @@ public sealed class SessionActivityStore(
                         null),
                     (_, existing) => existing with
                     {
-                        Activities = existing.Activities.Add(activity)
+                        Activities = existing.Activities.Add(EnrichNewActivity(activity, existing.Metadata))
                     });
             });
     }
@@ -114,7 +109,7 @@ public sealed class SessionActivityStore(
                     _ =>
                     {
                         var metadata = BuildMetadataSnapshot(session, attempt, orchestratorSessionId);
-                        var activities = CreateTokenActivities(
+                        var activities = EnrichActivitiesWithTokenUsage(
                             issueIdentifier,
                             ImmutableList<SessionActivityEntry>.Empty,
                             previousMetadata: null,
@@ -128,7 +123,7 @@ public sealed class SessionActivityStore(
                     (_, existing) =>
                     {
                         var metadata = BuildMetadataSnapshot(session, attempt, orchestratorSessionId);
-                        var activities = CreateTokenActivities(
+                        var activities = EnrichActivitiesWithTokenUsage(
                             issueIdentifier,
                             existing.Activities,
                             existing.Metadata,
@@ -291,7 +286,7 @@ public sealed class SessionActivityStore(
             tokenUsage);
     }
 
-    private static ImmutableList<SessionActivityEntry> CreateTokenActivities(
+    private static ImmutableList<SessionActivityEntry> EnrichActivitiesWithTokenUsage(
         string issueIdentifier,
         ImmutableList<SessionActivityEntry> existingActivities,
         DashboardSessionMetadataSnapshot? previousMetadata,
@@ -311,12 +306,13 @@ public sealed class SessionActivityStore(
             || previousUsage.EstimatedOutputTokens != currentUsage.EstimatedOutputTokens
             || previousUsage.EstimatedTotalTokens != currentUsage.EstimatedTotalTokens)
         {
-            updatedActivities = updatedActivities.Add(
-                new SessionActivityEntry(
-                    SessionActivityKind.ProgressUpdate,
-                    currentUsage.LastEstimatedAt ?? timestamp,
-                    "Estimated token usage updated",
-                    SerializeTokenUsagePayload(issueIdentifier, "estimated", currentUsage)));
+            updatedActivities = AttachTokenUsageToNearestActivity(
+                updatedActivities,
+                currentUsage.LastEstimatedAt ?? timestamp,
+                CreateActivityTokenSnapshot("estimated", currentUsage),
+                static entry => entry.Title.StartsWith("Sent turn/start", StringComparison.Ordinal)
+                    || entry.Title.StartsWith("Received response", StringComparison.Ordinal)
+                    || entry.Title.StartsWith("Turn started", StringComparison.OrdinalIgnoreCase));
         }
 
         if (previousUsage is null
@@ -324,119 +320,166 @@ public sealed class SessionActivityStore(
             || previousUsage.ReportedOutputTokens != currentUsage.ReportedOutputTokens
             || previousUsage.ReportedTotalTokens != currentUsage.ReportedTotalTokens)
         {
-            updatedActivities = updatedActivities.Add(
-                new SessionActivityEntry(
-                    SessionActivityKind.ProgressUpdate,
-                    currentUsage.LastReportedAt ?? timestamp,
-                    "Reported token usage updated",
-                    SerializeTokenUsagePayload(issueIdentifier, "reported", currentUsage)));
+            updatedActivities = AttachTokenUsageToNearestActivity(
+                updatedActivities,
+                currentUsage.LastReportedAt ?? timestamp,
+                CreateActivityTokenSnapshot("reported", currentUsage),
+                static entry => entry.Title.StartsWith("Received thread/tokenUsage/updated", StringComparison.Ordinal)
+                    || entry.Title.StartsWith("Received turn/completed", StringComparison.Ordinal)
+                    || entry.Title.StartsWith("Received turn/failed", StringComparison.Ordinal)
+                    || entry.Title.StartsWith("Received turn/cancelled", StringComparison.Ordinal));
         }
 
         if (currentUsage.LastOperation is not null
             && previousUsage?.LastOperation?.OperationId != currentUsage.LastOperation.OperationId)
         {
-            updatedActivities = updatedActivities.Add(
-                new SessionActivityEntry(
-                    SessionActivityKind.ProgressUpdate,
-                    currentUsage.LastOperation.Timestamp,
-                    $"Token usage recorded for turn {currentUsage.LastOperation.TurnNumber}",
-                    SerializeOperationUsagePayload(issueIdentifier, currentUsage)));
+            updatedActivities = AttachTokenUsageToNearestActivity(
+                updatedActivities,
+                currentUsage.LastOperation.Timestamp,
+                CreateActivityTokenSnapshot("operation", currentUsage),
+                static entry => entry.Title.StartsWith("Received thread/tokenUsage/updated", StringComparison.Ordinal)
+                    || entry.Title.StartsWith("Received turn/completed", StringComparison.Ordinal)
+                    || entry.Title.StartsWith("Received turn/failed", StringComparison.Ordinal)
+                    || entry.Title.StartsWith("Received turn/cancelled", StringComparison.Ordinal));
         }
 
         if (currentUsage.ComparisonStatus == SessionTokenComparisonStatus.Mismatch
             && previousUsage?.ComparisonStatus != SessionTokenComparisonStatus.Mismatch)
         {
-            updatedActivities = updatedActivities.Add(
-                new SessionActivityEntry(
-                    SessionActivityKind.Warning,
-                    currentUsage.LastReportedAt ?? currentUsage.LastEstimatedAt ?? timestamp,
-                    "Token usage mismatch detected",
-                    SerializeTokenUsagePayload(issueIdentifier, "comparison", currentUsage)));
+            updatedActivities = AttachTokenUsageToNearestActivity(
+                updatedActivities,
+                currentUsage.LastReportedAt ?? currentUsage.LastEstimatedAt ?? timestamp,
+                CreateActivityTokenSnapshot("comparison", currentUsage),
+                static entry => entry.Kind is SessionActivityKind.Warning or SessionActivityKind.Error
+                    || entry.Title.StartsWith("Received thread/tokenUsage/updated", StringComparison.Ordinal)
+                    || entry.Title.StartsWith("Received turn/completed", StringComparison.Ordinal)
+                    || entry.Title.StartsWith("Received turn/failed", StringComparison.Ordinal)
+                    || entry.Title.StartsWith("Received turn/cancelled", StringComparison.Ordinal));
         }
 
         return updatedActivities;
     }
 
-    private static string SerializeTokenUsagePayload(
-        string issueIdentifier,
+    private static ImmutableList<SessionActivityEntry> AttachTokenUsageToNearestActivity(
+        ImmutableList<SessionActivityEntry> activities,
+        DateTimeOffset targetTimestamp,
+        SessionActivityTokenSnapshot tokenUsage,
+        Func<SessionActivityEntry, bool> preferredPredicate)
+    {
+        if (activities.Count == 0)
+        {
+            return activities;
+        }
+
+        var preferredIndex = -1;
+        for (var index = activities.Count - 1; index >= 0; index--)
+        {
+            var activity = activities[index];
+            if (activity.Timestamp > targetTimestamp)
+            {
+                continue;
+            }
+
+            if (preferredPredicate(activity))
+            {
+                preferredIndex = index;
+                break;
+            }
+        }
+
+        var fallbackIndex = preferredIndex >= 0
+            ? preferredIndex
+            : activities.FindLastIndex(activity => activity.Timestamp <= targetTimestamp);
+
+        if (fallbackIndex < 0)
+        {
+            fallbackIndex = activities.Count - 1;
+        }
+
+        var existing = activities[fallbackIndex];
+        return activities.SetItem(
+            fallbackIndex,
+            existing with
+            {
+                TokenUsage = MergeTokenUsage(existing.TokenUsage, tokenUsage)
+            });
+    }
+
+    private static SessionActivityEntry EnrichNewActivity(
+        SessionActivityEntry activity,
+        DashboardSessionMetadataSnapshot? metadata)
+    {
+        if (metadata?.TokenUsage is null || activity.TokenUsage is not null)
+        {
+            return activity;
+        }
+
+        if (activity.Kind == SessionActivityKind.LifecycleMilestone)
+        {
+            return activity;
+        }
+
+        return activity with
+        {
+            TokenUsage = CreateActivityTokenSnapshot("current", metadata.TokenUsage)
+        };
+    }
+
+    private static SessionActivityTokenSnapshot MergeTokenUsage(
+        SessionActivityTokenSnapshot? existing,
+        SessionActivityTokenSnapshot incoming)
+    {
+        if (existing is null)
+        {
+            return incoming;
+        }
+
+        var preferredSource = GetSourcePriority(existing.Source) >= GetSourcePriority(incoming.Source)
+            ? existing.Source
+            : incoming.Source;
+
+        return incoming with
+        {
+            Source = preferredSource
+        };
+    }
+
+    private static int GetSourcePriority(string source)
+    {
+        return source switch
+        {
+            "operation" => 4,
+            "reported" => 3,
+            "comparison" => 2,
+            "estimated" => 1,
+            _ => 0
+        };
+    }
+
+    private static SessionActivityTokenSnapshot CreateActivityTokenSnapshot(
         string source,
         DashboardSessionTokenUsageSnapshot tokenUsage)
     {
-        return JsonSerializer.Serialize(
-            new
-            {
-                issueIdentifier,
-                source,
-                effective = new
-                {
-                    inputTokens = tokenUsage.EffectiveInputTokens,
-                    outputTokens = tokenUsage.EffectiveOutputTokens,
-                    totalTokens = tokenUsage.EffectiveTotalTokens
-                },
-                estimated = new
-                {
-                    inputTokens = tokenUsage.EstimatedInputTokens,
-                    outputTokens = tokenUsage.EstimatedOutputTokens,
-                    totalTokens = tokenUsage.EstimatedTotalTokens
-                },
-                reported = new
-                {
-                    inputTokens = tokenUsage.ReportedInputTokens,
-                    cachedInputTokens = tokenUsage.ReportedCachedInputTokens,
-                    outputTokens = tokenUsage.ReportedOutputTokens,
-                    reasoningTokens = tokenUsage.ReportedReasoningTokens,
-                    totalTokens = tokenUsage.ReportedTotalTokens
-                },
-                comparison = new
-                {
-                    status = tokenUsage.ComparisonStatus,
-                    inputDelta = tokenUsage.InputDelta,
-                    outputDelta = tokenUsage.OutputDelta,
-                    totalDelta = tokenUsage.TotalDelta
-                }
-            },
-            TokenUsageJsonOptions);
-    }
-
-    private static string SerializeOperationUsagePayload(
-        string issueIdentifier,
-        DashboardSessionTokenUsageSnapshot tokenUsage)
-    {
-        var operation = tokenUsage.LastOperation!;
-        return JsonSerializer.Serialize(
-            new
-            {
-                issueIdentifier,
-                operation = new
-                {
-                    operationId = operation.OperationId,
-                    kind = operation.Kind,
-                    turnNumber = operation.TurnNumber,
-                    timestamp = operation.Timestamp,
-                    inputTokens = operation.InputTokens,
-                    cachedInputTokens = operation.CachedInputTokens,
-                    outputTokens = operation.OutputTokens,
-                    reasoningTokens = operation.ReasoningTokens,
-                    totalTokens = operation.TotalTokens
-                },
-                cumulative = new
-                {
-                    inputTokens = tokenUsage.ReportedInputTokens,
-                    cachedInputTokens = tokenUsage.ReportedCachedInputTokens,
-                    outputTokens = tokenUsage.ReportedOutputTokens,
-                    reasoningTokens = tokenUsage.ReportedReasoningTokens,
-                    totalTokens = tokenUsage.ReportedTotalTokens
-                },
-                stats = new
-                {
-                    input = operation.InputTokens,
-                    cachedInput = operation.CachedInputTokens,
-                    output = operation.OutputTokens,
-                    reasoning = operation.ReasoningTokens,
-                    total = operation.TotalTokens
-                }
-            },
-            TokenUsageJsonOptions);
+        return new SessionActivityTokenSnapshot(
+            source,
+            tokenUsage.EffectiveInputTokens,
+            tokenUsage.EffectiveOutputTokens,
+            tokenUsage.EffectiveTotalTokens,
+            tokenUsage.EstimatedInputTokens,
+            tokenUsage.EstimatedOutputTokens,
+            tokenUsage.EstimatedTotalTokens,
+            tokenUsage.ReportedInputTokens,
+            tokenUsage.ReportedCachedInputTokens,
+            tokenUsage.ReportedOutputTokens,
+            tokenUsage.ReportedReasoningTokens,
+            tokenUsage.ReportedTotalTokens,
+            tokenUsage.ComparisonStatus,
+            tokenUsage.InputDelta,
+            tokenUsage.OutputDelta,
+            tokenUsage.TotalDelta,
+            tokenUsage.LastEstimatedAt,
+            tokenUsage.LastReportedAt,
+            tokenUsage.LastOperation);
     }
 
     private sealed record SessionState(

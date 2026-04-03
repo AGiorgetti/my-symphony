@@ -17,7 +17,9 @@ public sealed record SessionActivityTimelineEntryModel(
     string? DetailToggleLabel,
     bool HasExpandableDetail,
     bool IsStructuredDetail,
-    Color Color);
+    Color Color,
+    bool HasTokenUsage = false,
+    string? TokenSourceLabel = null);
 
 public sealed record SessionActivityFactModel(
     string Label,
