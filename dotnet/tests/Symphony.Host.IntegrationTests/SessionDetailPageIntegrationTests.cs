@@ -97,10 +97,14 @@ public sealed class SessionDetailPageIntegrationTests
         Assert.Contains("Attempt 1", html, StringComparison.Ordinal);
         Assert.Contains("Finished sessions keep the last known session ID and token totals when available.", html, StringComparison.Ordinal);
         Assert.Contains("data-testid=\"session-detail-metadata-estimated-total-tokens\"", html, StringComparison.Ordinal);
+        Assert.Contains("data-testid=\"session-detail-metadata-estimated-input-tokens\"", html, StringComparison.Ordinal);
+        Assert.Contains("data-testid=\"session-detail-metadata-estimated-output-tokens\"", html, StringComparison.Ordinal);
         Assert.Contains("data-testid=\"session-detail-metadata-reported-total-tokens\"", html, StringComparison.Ordinal);
         Assert.Contains("data-testid=\"session-detail-metadata-cached-input-tokens\"", html, StringComparison.Ordinal);
         Assert.Contains("data-testid=\"session-detail-metadata-reasoning-tokens\"", html, StringComparison.Ordinal);
         Assert.Contains("data-testid=\"session-detail-metadata-comparison-status\"", html, StringComparison.Ordinal);
+        Assert.Contains(">60<", html, StringComparison.Ordinal);
+        Assert.Contains(">30<", html, StringComparison.Ordinal);
         Assert.Contains(">90<", html, StringComparison.Ordinal);
         Assert.Contains(">96<", html, StringComparison.Ordinal);
         Assert.Contains(">12<", html, StringComparison.Ordinal);

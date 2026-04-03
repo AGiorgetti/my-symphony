@@ -62,6 +62,14 @@
 
                     @if (Metadata.TokenUsage is not null)
                     {
+                        <div class="detail-metric-card" data-testid="session-detail-metadata-estimated-input-tokens">
+                            <p class="detail-metric-label">Estimated Input Tokens</p>
+                            <p class="detail-metric-value">@FormatLong(Metadata.TokenUsage.EstimatedInputTokens)</p>
+                        </div>
+                        <div class="detail-metric-card" data-testid="session-detail-metadata-estimated-output-tokens">
+                            <p class="detail-metric-label">Estimated Output Tokens</p>
+                            <p class="detail-metric-value">@FormatLong(Metadata.TokenUsage.EstimatedOutputTokens)</p>
+                        </div>
                         <div class="detail-metric-card" data-testid="session-detail-metadata-estimated-total-tokens">
                             <p class="detail-metric-label">Estimated Total Tokens</p>
                             <p class="detail-metric-value">@FormatLong(Metadata.TokenUsage.EstimatedTotalTokens)</p>
