@@ -278,8 +278,8 @@
                         @if (ShouldRenderExpandableDetail(entry))
                         {
                             <details class="@GetEntryContainerClasses(entry)" data-testid="session-detail-timeline-detail">
-                                <summary class="timeline-entry__row" title="@GetDetailToggleLabel(entry)">
-                                    @RenderCompactRow(entry)
+                                <summary class="timeline-entry__row">
+                                    @RenderCompactRow(entry, isExpandable: true)
                                 </summary>
                                 <div class="timeline-entry__body" data-testid="session-detail-timeline-entry">
                                     @RenderExpandedBody(entry)
@@ -290,7 +290,7 @@
                         {
                             <div class="@GetEntryContainerClasses(entry)" data-testid="session-detail-timeline-entry">
                                 <div class="timeline-entry__row">
-                                    @RenderCompactRow(entry)
+                                    @RenderCompactRow(entry, isExpandable: false)
                                 </div>
                             </div>
                         }
@@ -484,18 +484,6 @@
             && (entry.Kind == SessionActivityKind.AgentMessage || entry.Kind == SessionActivityKind.DebugMessage);
     }
 
-    private string? GetDetailToggleLabel(SessionActivityTimelineEntryModel entry)
-    {
-        if (!ShouldRenderDebugMetadata(entry))
-        {
-            return entry.DetailToggleLabel;
-        }
-
-        return entry.IsStructuredDetail
-            ? "View raw payload and debug metadata"
-            : "View full debug detail";
-    }
-
     private static bool IsDebugOnlyEntry(SessionActivityTimelineEntryModel entry)
     {
         return entry.Kind == SessionActivityKind.DebugMessage;
@@ -646,7 +634,7 @@
             : entry.Facts.FirstOrDefault(fact => string.Equals(fact.Label, "Method", StringComparison.Ordinal))?.Value;
     }
 
-    private RenderFragment RenderCompactRow(SessionActivityTimelineEntryModel entry) => @<div class="timeline-entry__row-content">
+    private RenderFragment RenderCompactRow(SessionActivityTimelineEntryModel entry, bool isExpandable) => @<div class="timeline-entry__row-content">
         <div class="timeline-entry__row-start">
             <StatusPill Text="@entry.KindLabel" Color="@entry.KindBadgeColor" />
             <span class="timeline-entry__row-title">@entry.Title</span>
@@ -665,6 +653,14 @@
         @if (!string.IsNullOrWhiteSpace(entry.CompactPreview))
         {
             <span class="timeline-entry__row-preview">@entry.CompactPreview</span>
+        }
+        @if (isExpandable)
+        {
+            <span class="timeline-entry__toggle-affordance" data-testid="session-detail-timeline-entry-toggle" aria-hidden="true">
+                <span class="timeline-entry__toggle-text timeline-entry__toggle-text--collapsed">Expand</span>
+                <span class="timeline-entry__toggle-text timeline-entry__toggle-text--expanded">Collapse</span>
+                <span class="timeline-entry__toggle-chevron"></span>
+            </span>
         }
     </div>;
 

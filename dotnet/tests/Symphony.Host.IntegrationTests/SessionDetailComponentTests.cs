@@ -168,6 +168,7 @@ public sealed class SessionDetailComponentTests : BunitContext
         Assert.Contains("data-testid=\"session-detail-summary-toggle\"", cut.Markup, StringComparison.Ordinal);
         Assert.Contains("data-testid=\"session-detail-metadata-toggle\"", cut.Markup, StringComparison.Ordinal);
         Assert.Contains("data-testid=\"session-detail-filters-toggle\"", cut.Markup, StringComparison.Ordinal);
+        Assert.Contains("data-testid=\"session-detail-timeline-entry-toggle\"", cut.Markup, StringComparison.Ordinal);
         Assert.Contains("Debug metadata", cut.Markup, StringComparison.Ordinal);
         Assert.Contains("Raw payload", cut.Markup, StringComparison.Ordinal);
         Assert.Contains("Prompt body", cut.Markup, StringComparison.Ordinal);

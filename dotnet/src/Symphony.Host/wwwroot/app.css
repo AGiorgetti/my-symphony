@@ -1157,6 +1157,7 @@ code {
 
 .timeline-entry__row-content {
     justify-content: space-between;
+    gap: 0.75rem;
 }
 
 .timeline-entry__row-start {
@@ -1204,6 +1205,40 @@ code {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+.timeline-entry__toggle-affordance {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    color: var(--color-on-surface-secondary);
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.timeline-entry__toggle-text--expanded,
+.timeline-entry details[open] .timeline-entry__toggle-text--collapsed {
+    display: none;
+}
+
+.timeline-entry details[open] .timeline-entry__toggle-text--expanded {
+    display: inline;
+}
+
+.timeline-entry__toggle-chevron {
+    width: 0.68rem;
+    height: 0.68rem;
+    border-right: 2px solid currentColor;
+    border-bottom: 2px solid currentColor;
+    transform: rotate(45deg) translateY(-0.08rem);
+    transition: transform 0.18s ease;
+}
+
+.timeline-entry details[open] .timeline-entry__toggle-chevron {
+    transform: rotate(-135deg) translateY(-0.02rem);
 }
 
 .timeline-entry__body {

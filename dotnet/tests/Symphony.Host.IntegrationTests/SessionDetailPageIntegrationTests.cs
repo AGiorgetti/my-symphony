@@ -166,7 +166,8 @@ public sealed class SessionDetailPageIntegrationTests
         Assert.Contains("Sent turn/start", html, StringComparison.Ordinal);
         Assert.Contains("Received turn/completed", html, StringComparison.Ordinal);
         Assert.Contains("Received item/agentMessage/delta", html, StringComparison.Ordinal);
-        Assert.Contains("View raw payload and debug metadata", html, StringComparison.Ordinal);
+        Assert.Contains("data-testid=\"session-detail-timeline-entry-toggle\"", html, StringComparison.Ordinal);
+        Assert.Contains("Expand", html, StringComparison.Ordinal);
         Assert.Contains("Debug metadata", html, StringComparison.Ordinal);
         Assert.Contains("Raw payload", html, StringComparison.Ordinal);
         Assert.Contains("Prompt body", html, StringComparison.Ordinal);
