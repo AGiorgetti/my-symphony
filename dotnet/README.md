@@ -343,8 +343,7 @@ surface only: if dashboard rendering fails, the orchestrator and JSON API contin
   and stderr/diagnostic lines for each session. A persistent left-side filter panel exposes one
   checkbox per observed debug transcript `method`, including `item/agentMessage/delta` when
   `Dashboard:TrackAgentMessageDeltas` is on. Session history now also retains token usage snapshots
-  for the life of the current application run, including estimated prompt/output totals, reported
-  usage totals from Codex payloads, the latest comparison status between those two sources, and
+  for the life of the current application run, using reported usage totals from Codex payloads and
   per-turn cost events that retain authoritative reported usage for completed turns. When present,
   those cost events include cached input and reasoning token breakdowns from the Codex usage payload.
 - When `Dashboard:EnableFakeDataMode` is on, the same dashboard, session list, and session detail

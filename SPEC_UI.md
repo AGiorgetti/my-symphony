@@ -233,8 +233,8 @@ The detail view should include:
 - timestamps relevant to the session lifecycle
 - a readable activity history
 - a separate details view for live session metadata such as tokens, turn count, session ID, and attempt number
-- retained token usage details for the full application-run lifetime of the session, including
-  estimated totals, reported totals, and the latest comparison status when both are available
+- retained token usage details for the full application-run lifetime of the session, using
+  reported totals from Codex usage payloads
 - session-history cost entries for completed turns or operations so an operator can identify the
   most expensive work, including cached-input and reasoning-token breakdowns when available
 - visible messages and updates from the agent
