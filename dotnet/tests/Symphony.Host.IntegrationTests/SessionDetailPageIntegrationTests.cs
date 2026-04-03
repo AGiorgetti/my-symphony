@@ -99,12 +99,16 @@ public sealed class SessionDetailPageIntegrationTests
         Assert.Contains("data-testid=\"session-detail-metadata-estimated-total-tokens\"", html, StringComparison.Ordinal);
         Assert.Contains("data-testid=\"session-detail-metadata-estimated-input-tokens\"", html, StringComparison.Ordinal);
         Assert.Contains("data-testid=\"session-detail-metadata-estimated-output-tokens\"", html, StringComparison.Ordinal);
+        Assert.Contains("data-testid=\"session-detail-metadata-reported-input-tokens\"", html, StringComparison.Ordinal);
+        Assert.Contains("data-testid=\"session-detail-metadata-reported-output-tokens\"", html, StringComparison.Ordinal);
         Assert.Contains("data-testid=\"session-detail-metadata-reported-total-tokens\"", html, StringComparison.Ordinal);
         Assert.Contains("data-testid=\"session-detail-metadata-cached-input-tokens\"", html, StringComparison.Ordinal);
         Assert.Contains("data-testid=\"session-detail-metadata-reasoning-tokens\"", html, StringComparison.Ordinal);
         Assert.Contains("data-testid=\"session-detail-metadata-comparison-status\"", html, StringComparison.Ordinal);
         Assert.Contains(">60<", html, StringComparison.Ordinal);
         Assert.Contains(">30<", html, StringComparison.Ordinal);
+        Assert.Contains(">64<", html, StringComparison.Ordinal);
+        Assert.Contains(">32<", html, StringComparison.Ordinal);
         Assert.Contains(">90<", html, StringComparison.Ordinal);
         Assert.Contains(">96<", html, StringComparison.Ordinal);
         Assert.Contains(">12<", html, StringComparison.Ordinal);
