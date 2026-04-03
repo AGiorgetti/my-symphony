@@ -164,7 +164,7 @@ public sealed class SessionDetailComponentTests : BunitContext
         Assert.Contains("Sent turn/start", cut.Markup, StringComparison.Ordinal);
         Assert.Contains("Received turn/completed", cut.Markup, StringComparison.Ordinal);
         Assert.Contains("Received item/agentMessage/delta", cut.Markup, StringComparison.Ordinal);
-        Assert.Contains("View raw payload and debug metadata", cut.Markup, StringComparison.Ordinal);
+        Assert.Contains("data-testid=\"session-detail-topdeck\"", cut.Markup, StringComparison.Ordinal);
         Assert.Contains("Debug metadata", cut.Markup, StringComparison.Ordinal);
         Assert.Contains("Raw payload", cut.Markup, StringComparison.Ordinal);
         Assert.Contains("Prompt body", cut.Markup, StringComparison.Ordinal);
@@ -418,7 +418,8 @@ public sealed class SessionDetailComponentTests : BunitContext
             Assert.Contains("Deployment target requires a manual approval step.", cut.Markup, StringComparison.Ordinal);
         });
 
-        await cut.InvokeAsync(() => cut.Find("button").Click());
+        var resolveButton = cut.FindAll("button").Single(button => button.TextContent.Contains("Resolve and resume", StringComparison.Ordinal));
+        await cut.InvokeAsync(() => resolveButton.Click());
 
         cut.WaitForAssertion(() =>
         {

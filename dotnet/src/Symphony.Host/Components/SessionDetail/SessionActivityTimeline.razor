@@ -1,49 +1,213 @@
-<div class="@GetTimelineShellClasses()" data-testid="session-detail-timeline">
-    @if (DebugModeEnabled)
-    {
-        <aside class="timeline-filter-panel" data-testid="session-detail-method-filter">
-            <p class="section-kicker">Filter</p>
-            <h3 class="timeline-filter-panel__title">Message methods</h3>
-            <p class="timeline-filter-panel__copy">
-                Toggle individual debug transcript methods without hiding lifecycle or outcome events.
-            </p>
+@using MudBlazor
 
-            @if (AvailableMethodFilters.Count == 0)
-            {
-                <div class="timeline-filter-panel__empty">
-                    <p class="empty-state__title">No method-tagged debug events yet</p>
-                    <p class="empty-state__copy">
-                        Start an agent run to populate method filters from the live transcript.
-                    </p>
-                </div>
-            }
-            else
-            {
-                <div class="timeline-filter-list" role="group" aria-label="Debug transcript method filters">
-                    @foreach (var filter in AvailableMethodFilters)
+<div class="session-detail-surface" data-testid="session-detail-timeline">
+    <div class="session-detail-topdeck" data-testid="session-detail-topdeck">
+        <MudPaper Class="@TopDeckCardClass" Outlined="true" Elevation="0" data-testid="session-detail-header">
+            <details class="session-topdeck-section" open data-testid="session-detail-summary-section">
+                <summary class="session-topdeck-section__summary" data-testid="session-detail-summary-summary">
+                    <div class="session-topdeck-section__heading">
+                        <p class="section-kicker">Session</p>
+                        <h2 class="session-topdeck-section__title">@HeaderModel.Identifier</h2>
+                    </div>
+                    <div class="session-topdeck-strip">
+                        <StatusPill Text="@HeaderModel.StatusText" Color="@(HeaderModel.Status is null ? HeaderModel.StatusColor : Color.Primary)" />
+                        <span class="session-topdeck-chip">@HeaderModel.StartedAt.ToUniversalTime():HH:mm:ss UTC</span>
+                        <span class="session-topdeck-chip">@SessionDetailDisplay.GetAttemptLabel(MetadataModel.Attempt, MetadataModel.IsAttemptKnown)</span>
+                        <span class="session-topdeck-chip">@FormatInt(MetadataModel.TurnCount) turns</span>
+                    </div>
+                </summary>
+                <div class="session-topdeck-section__body">
+                    <div class="detail-metrics-grid detail-metrics-grid--metadata">
+                        <div class="detail-metric-card" data-testid="session-detail-header-started">
+                            <p class="detail-metric-label">Started</p>
+                            <p class="detail-metric-value">@SessionDetailDisplay.FormatTimestamp(HeaderModel.StartedAt)</p>
+                        </div>
+                        <div class="detail-metric-card" data-testid="session-detail-header-ended">
+                            <p class="detail-metric-label">Ended</p>
+                            <p class="detail-metric-value">@(HeaderModel.EndedAt is null ? "Still running" : SessionDetailDisplay.FormatTimestamp(HeaderModel.EndedAt.Value))</p>
+                        </div>
+                    </div>
+                    @if (HeaderModel.IsActive)
                     {
-                        <label class="timeline-filter-option">
-                            <input type="checkbox"
-                                   class="timeline-filter-option__checkbox"
-                                   checked="@filter.IsEnabled"
-                                   data-testid="@($"session-detail-method-filter-{filter.Slug}")"
-                                   @onchange="@((ChangeEventArgs args) => SetMethodVisibility(filter.Method, IsChecked(args.Value)))" />
-                            <span class="timeline-filter-option__content">
-                                <span class="timeline-filter-option__label">@filter.Method</span>
-                                <span class="timeline-filter-option__count">@filter.Count</span>
-                            </span>
-                        </label>
+                        <div class="detail-active-indicator" data-testid="session-header-active-indicator">
+                            <MudProgressCircular Indeterminate="true" Size="Size.Small" Color="Color.Info" />
+                            <span>Session is active</span>
+                        </div>
+                    }
+                    <div class="session-topdeck-actions">
+                        @if (!string.IsNullOrWhiteSpace(HeaderModel.IssueUrl))
+                        {
+                            <MudButton Variant="Variant.Outlined"
+                                       Href="@HeaderModel.IssueUrl"
+                                       Class="detail-header__link"
+                                       data-testid="session-header-tracker-link">
+                                Open tracker issue
+                            </MudButton>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(ExportHref))
+                        {
+                            <MudButton Variant="Variant.Outlined"
+                                       Href="@ExportHref"
+                                       Class="detail-header__link"
+                                       data-testid="session-detail-export-link">
+                                Export JSON
+                            </MudButton>
+                        }
+                    </div>
+                </div>
+            </details>
+
+            <div data-testid="session-detail-metadata-panel">
+            <details class="session-topdeck-section" open data-testid="session-detail-metadata-section">
+                <summary class="session-topdeck-section__summary" data-testid="session-detail-metadata-summary">
+                    <div class="session-topdeck-section__heading">
+                        <p class="section-kicker">Details</p>
+                        <h2 class="session-topdeck-section__title">Session metadata</h2>
+                    </div>
+                    <div class="session-topdeck-strip">
+                        <span class="session-topdeck-chip" data-testid="session-detail-metadata-input-tokens">Rep In @FormatLong(GetReportedInputTokens())</span>
+                        <span class="session-topdeck-chip" data-testid="session-detail-metadata-cached-input-strip-tokens">Cached @FormatLong(GetReportedCachedInputTokens())</span>
+                        <span class="session-topdeck-chip" data-testid="session-detail-metadata-output-tokens">Rep Out @FormatLong(GetReportedOutputTokens())</span>
+                        <span class="session-topdeck-chip" data-testid="session-detail-metadata-reasoning-strip-tokens">Reason @FormatLong(GetReportedReasoningTokens())</span>
+                        <span class="session-topdeck-chip" data-testid="session-detail-metadata-total-tokens">Rep Total @FormatLong(GetReportedTotalTokens())</span>
+                    </div>
+                </summary>
+                <div class="session-topdeck-section__body" data-testid="session-detail-metadata">
+                    @if (!string.IsNullOrWhiteSpace(MetadataModel.AvailabilityMessage))
+                    {
+                        <div class="detail-note">
+                            @MetadataModel.AvailabilityMessage
+                        </div>
+                    }
+
+                    <div class="detail-metrics-grid detail-metrics-grid--metadata">
+                        <div class="detail-metric-card" data-testid="session-detail-metadata-session-id">
+                            <p class="detail-metric-label">Session ID</p>
+                            <p class="detail-metric-value detail-metric-value--break">@FormatText(MetadataModel.SessionId)</p>
+                        </div>
+                        <div class="detail-metric-card" data-testid="session-detail-metadata-orchestrator-session-id">
+                            <p class="detail-metric-label">Orchestrator Session ID</p>
+                            <p class="detail-metric-value detail-metric-value--break">@FormatText(MetadataModel.OrchestratorSessionId)</p>
+                        </div>
+                        @if (MetadataModel.TokenUsage is not null)
+                        {
+                            <div class="detail-metric-card" data-testid="session-detail-metadata-reported-input-tokens">
+                                <p class="detail-metric-label">Reported Input Tokens</p>
+                                <p class="detail-metric-value">@FormatLong(MetadataModel.TokenUsage.ReportedInputTokens)</p>
+                            </div>
+                            <div class="detail-metric-card" data-testid="session-detail-metadata-reported-output-tokens">
+                                <p class="detail-metric-label">Reported Output Tokens</p>
+                                <p class="detail-metric-value">@FormatLong(MetadataModel.TokenUsage.ReportedOutputTokens)</p>
+                            </div>
+                            <div class="detail-metric-card" data-testid="session-detail-metadata-cached-input-tokens">
+                                <p class="detail-metric-label">Cached Input Tokens</p>
+                                <p class="detail-metric-value">@FormatLong(MetadataModel.TokenUsage.ReportedCachedInputTokens)</p>
+                            </div>
+                            <div class="detail-metric-card" data-testid="session-detail-metadata-reasoning-tokens">
+                                <p class="detail-metric-label">Reasoning Tokens</p>
+                                <p class="detail-metric-value">@FormatLong(MetadataModel.TokenUsage.ReportedReasoningTokens)</p>
+                            </div>
+                            <div class="detail-metric-card" data-testid="session-detail-metadata-reported-total-tokens">
+                                <p class="detail-metric-label">Reported Total Tokens</p>
+                                <p class="detail-metric-value">@FormatLong(MetadataModel.TokenUsage.ReportedTotalTokens)</p>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </details>
+            </div>
+
+            <details class="session-topdeck-section" open data-testid="session-detail-filters-section">
+                <summary class="session-topdeck-section__summary" data-testid="session-detail-filters-summary">
+                    <div class="session-topdeck-section__heading">
+                        <p class="section-kicker">Filter</p>
+                        <h2 class="session-topdeck-section__title">Timeline filters</h2>
+                    </div>
+                    <div class="session-topdeck-strip">
+                        <span class="session-topdeck-chip">@EnabledKindCount/@KindFilters.Count kinds</span>
+                        <span class="session-topdeck-chip">@EnabledMethodCount/@MethodFilters.Count methods</span>
+                        <span class="session-topdeck-chip">Empty agent msgs @(HideEmptyAgentMessages ? "hidden" : "shown")</span>
+                    </div>
+                </summary>
+                <div class="session-topdeck-section__body" data-testid="session-detail-filter-panel">
+                    <div class="session-topdeck-actions">
+                        <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick="SelectAllFilters" data-testid="session-detail-filter-select-all">
+                            Select all
+                        </MudButton>
+                        <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick="ClearAllFilters" data-testid="session-detail-filter-clear-all">
+                            Clear all
+                        </MudButton>
+                    </div>
+
+                    <label class="timeline-filter-option timeline-filter-option--compact">
+                        <input type="checkbox"
+                               class="timeline-filter-option__checkbox"
+                               checked="@HideEmptyAgentMessages"
+                               data-testid="session-detail-hide-empty-agent-messages"
+                               @onchange="@((ChangeEventArgs args) => HideEmptyAgentMessages = IsChecked(args.Value))" />
+                        <span class="timeline-filter-option__content">
+                            <span class="timeline-filter-option__label">Hide empty agent messages</span>
+                        </span>
+                    </label>
+
+                    <div class="timeline-filter-group">
+                        <p class="detail-metric-label">Event kinds</p>
+                        <div class="timeline-filter-grid">
+                            @foreach (var filter in KindFilters)
+                            {
+                                <label class="timeline-filter-option timeline-filter-option--compact">
+                                    <input type="checkbox"
+                                           class="timeline-filter-option__checkbox"
+                                           checked="@filter.IsEnabled"
+                                           data-testid="@($"session-detail-kind-filter-{GetKindSlug(filter.Kind)}")"
+                                           @onchange="@((ChangeEventArgs args) => SetKindVisibility(filter.Kind, IsChecked(args.Value)))" />
+                                    <span class="timeline-filter-option__content">
+                                        <span class="timeline-filter-option__label">@filter.Label</span>
+                                        <span class="timeline-filter-option__count">@filter.Count</span>
+                                    </span>
+                                </label>
+                            }
+                        </div>
+                    </div>
+
+                    @if (DebugModeEnabled && MethodFilters.Count > 0)
+                    {
+                        <div class="timeline-filter-group" data-testid="session-detail-method-filter">
+                            <p class="detail-metric-label">Message methods</p>
+                            <div class="timeline-filter-grid">
+                                @foreach (var filter in MethodFilters)
+                                {
+                                    <label class="timeline-filter-option timeline-filter-option--compact">
+                                        <input type="checkbox"
+                                               class="timeline-filter-option__checkbox"
+                                               checked="@filter.IsEnabled"
+                                               data-testid="@($"session-detail-method-filter-{filter.Slug}")"
+                                               @onchange="@((ChangeEventArgs args) => SetMethodVisibility(filter.Method, IsChecked(args.Value)))" />
+                                        <span class="timeline-filter-option__content">
+                                            <span class="timeline-filter-option__label">@filter.Method</span>
+                                            <span class="timeline-filter-option__count">@filter.Count</span>
+                                        </span>
+                                    </label>
+                                }
+                            </div>
+                            @if (!TrackAgentMessageDeltas)
+                            {
+                                <p class="timeline-filter-panel__note">
+                                    Delta transcript capture is disabled, so <code>item/agentMessage/delta</code> may be absent from this list.
+                                </p>
+                            }
+                        </div>
                     }
                 </div>
-            }
+            </details>
+        </MudPaper>
+    </div>
 
-            @if (!TrackAgentMessageDeltas)
-            {
-                <p class="timeline-filter-panel__note">
-                    Delta transcript capture is disabled, so <code>item/agentMessage/delta</code> may be absent from this list.
-                </p>
-            }
-        </aside>
+    @if (StickyDeckFooter is not null)
+    {
+        <div class="session-detail-deck-footer">
+            @StickyDeckFooter
+        </div>
     }
 
     <MudPaper Class="@TimelineCardClass" Outlined="true" Elevation="0">
@@ -51,7 +215,7 @@
             <p class="section-kicker">Timeline</p>
             <h2 class="section-title section-title--panel">Session activity</h2>
             <p class="section-copy">
-                Lifecycle milestones, agent messages, warnings, outcomes, and debug transcript events in chronological order.
+                Compact, filterable session history with full details available on demand.
             </p>
         </div>
 
@@ -86,129 +250,35 @@
         {
             <div class="empty-state">
                 <p class="empty-state__title">@GetEmptyStateTitle()</p>
-                <p class="empty-state__copy">
-                    @GetEmptyStateCopy()
-                </p>
+                <p class="empty-state__copy">@GetEmptyStateCopy()</p>
             </div>
         }
         else
         {
-            <ol class="timeline-list">
+            <ol class="timeline-list timeline-list--compact">
                 @foreach (var entry in VisibleEntries)
                 {
                     <li class="timeline-item">
                         <span class="@GetTimelineDotClasses(entry)"></span>
-                        <div class="@GetEntryContainerClasses(entry)" data-testid="session-detail-timeline-entry">
-                            <div class="timeline-entry__head">
-                                <div class="timeline-entry__meta">
-                                    <StatusPill Text="@entry.KindLabel" Color="@entry.KindBadgeColor" />
-                                    @if (entry.HasTokenUsage)
-                                    {
-                                        <div data-testid="session-detail-timeline-entry-token-indicator">
-                                            <StatusPill Text="@($"Tokens: {entry.TokenSourceLabel}")" Color="Color.Info" />
-                                        </div>
-                                    }
-                                    @if (entry.Facts.Count > 0)
-                                    {
-                                        <div class="fact-list">
-                                            @foreach (var fact in entry.Facts)
-                                            {
-                                                <span class="fact-pill">
-                                                    <span class="fact-pill__label">@fact.Label:</span>
-                                                    <span>@fact.Value</span>
-                                                </span>
-                                            }
-                                        </div>
-                                    }
+                        @if (ShouldRenderExpandableDetail(entry))
+                        {
+                            <details class="@GetEntryContainerClasses(entry)" data-testid="session-detail-timeline-detail">
+                                <summary class="timeline-entry__row" title="@GetDetailToggleLabel(entry)">
+                                    @RenderCompactRow(entry)
+                                </summary>
+                                <div class="timeline-entry__body" data-testid="session-detail-timeline-entry">
+                                    @RenderExpandedBody(entry)
                                 </div>
-
-                                <div class="timeline-entry__time">
-                                    @entry.TimestampLabel
+                            </details>
+                        }
+                        else
+                        {
+                            <div class="@GetEntryContainerClasses(entry)" data-testid="session-detail-timeline-entry">
+                                <div class="timeline-entry__row">
+                                    @RenderCompactRow(entry)
                                 </div>
                             </div>
-
-                            <div class="timeline-entry__body">
-                                <h3 class="timeline-entry__title">@entry.Title</h3>
-
-                                @if (!string.IsNullOrWhiteSpace(entry.Summary))
-                                {
-                                    <p class="timeline-entry__summary">
-                                        @entry.Summary
-                                    </p>
-                                }
-
-                                @if (!string.IsNullOrWhiteSpace(entry.Detail))
-                                {
-                                    @if (ShouldRenderExpandableDetail(entry))
-                                    {
-                                        <details class="@GetDetailClasses(entry)"
-                                                 data-testid="session-detail-timeline-detail">
-                                            <summary class="timeline-entry__toggle">
-                                                @GetDetailToggleLabel(entry)
-                                            </summary>
-
-                                            @if (ShouldRenderDebugMetadata(entry))
-                                            {
-                                                <div class="timeline-entry__detail-body">
-                                                    <p class="detail-metric-label">Debug metadata</p>
-                                                    <div class="fact-list">
-                                                        <span class="fact-pill">
-                                                            <span class="fact-pill__label">Source:</span>
-                                                            <span>@entry.KindLabel</span>
-                                                        </span>
-                                                        <span class="fact-pill">
-                                                            <span class="fact-pill__label">Timestamp:</span>
-                                                            <span>@entry.TimestampLabel</span>
-                                                        </span>
-                                                        <span class="fact-pill">
-                                                            <span class="fact-pill__label">Event:</span>
-                                                            <span>@entry.Title</span>
-                                                        </span>
-                                                    </div>
-                                                </div>
-                                            }
-
-                                            @if (entry.IsStructuredDetail)
-                                            {
-                                                @if (entry.Facts.Count > 0)
-                                                {
-                                                    <div class="timeline-entry__detail-body">
-                                                        <p class="detail-metric-label">Highlights</p>
-                                                        <div class="fact-list">
-                                                            @foreach (var fact in entry.Facts)
-                                                            {
-                                                                <span class="fact-pill">
-                                                                    <span class="fact-pill__label">@fact.Label:</span>
-                                                                    <span>@fact.Value</span>
-                                                                </span>
-                                                            }
-                                                        </div>
-                                                    </div>
-                                                }
-
-                                                <p class="detail-metric-label">@(ShouldRenderDebugMetadata(entry) ? "Raw payload" : "Detail")</p>
-                                                <pre class="timeline-pre">@entry.Detail</pre>
-                                            }
-                                            else
-                                            {
-                                                <p class="detail-metric-label">@(ShouldRenderDebugMetadata(entry) ? "Debug detail" : "Detail")</p>
-                                                <p class="timeline-text">@entry.Detail</p>
-                                            }
-                                        </details>
-                                    }
-                                    else if (ShouldRenderInlineDetail(entry))
-                                    {
-                                        <p class="timeline-text">@entry.Detail</p>
-                                    }
-                                    else
-                                    {
-                                        <p class="timeline-entry__summary timeline-entry__summary--muted">
-                                            Enable dashboard debug mode to inspect the raw agent payload for this event.
-                                        </p>
-                                    }
-                                }
-                            </div>
-                        </div>
+                        }
                     </li>
                 }
             </ol>
@@ -217,7 +287,10 @@
 </div>
 
 @code {
+    private const string TopDeckCardClass = "page-card page-card--tight session-topdeck-card";
     private const string TimelineCardClass = "page-card page-card--tight";
+    private readonly Dictionary<SessionActivityKind, bool> _kindVisibility = Enum.GetValues<SessionActivityKind>()
+        .ToDictionary(kind => kind, _ => true);
     private readonly Dictionary<string, bool> _methodVisibility = new(StringComparer.OrdinalIgnoreCase);
 
     [Parameter]
@@ -225,15 +298,89 @@
     public required SessionActivityTimelineModel Timeline { get; set; }
 
     [Parameter]
+    public SessionHeaderDisplayModel? Header { get; set; }
+
+    [Parameter]
+    public SessionMetadataPanelModel? Metadata { get; set; }
+
+    [Parameter]
+    public string? ExportHref { get; set; }
+
+    [Parameter]
     public bool DebugModeEnabled { get; set; }
 
     [Parameter]
     public bool TrackAgentMessageDeltas { get; set; }
 
+    [Parameter]
+    public RenderFragment? StickyDeckFooter { get; set; }
+
+    private bool HideEmptyAgentMessages { get; set; } = true;
+
+    private SessionHeaderDisplayModel HeaderModel =>
+        Header ?? new SessionHeaderDisplayModel(
+            "Session",
+            IssueUrl: null,
+            IsActive: false,
+            StatusText: "Unavailable",
+            Status: null,
+            StatusColor: Color.Default,
+            StartedAt: DateTimeOffset.UnixEpoch,
+            EndedAt: null);
+
+    private SessionMetadataPanelModel MetadataModel =>
+        Metadata ?? new SessionMetadataPanelModel(
+            InputTokens: null,
+            OutputTokens: null,
+            TotalTokens: null,
+            TurnCount: null,
+            SessionId: null,
+            OrchestratorSessionId: null,
+            Attempt: null,
+            IsAttemptKnown: false,
+            AvailabilityMessage: null,
+            TokenUsage: null);
+
     protected override void OnParametersSet()
     {
+        SyncKindVisibility();
         SyncMethodVisibility();
     }
+
+    private IReadOnlyList<SessionActivityTimelineEntryModel> VisibleEntries =>
+        Timeline.Entries.Where(entry => !ShouldHideEntry(entry)).ToArray();
+
+    private IReadOnlyList<KindFilterOption> KindFilters =>
+        Enum.GetValues<SessionActivityKind>()
+            .Select(
+                kind => new KindFilterOption(
+                    kind,
+                    SessionDetailDisplay.GetKindLabel(kind),
+                    Timeline.Entries.Count(entry => entry.Kind == kind),
+                    _kindVisibility.TryGetValue(kind, out var isEnabled) && isEnabled))
+            .ToArray();
+
+    private IReadOnlyList<MessageMethodFilterOption> MethodFilters => GetAvailableMethodFilters();
+
+    private int EnabledKindCount => KindFilters.Count(filter => filter.IsEnabled);
+
+    private int EnabledMethodCount => MethodFilters.Count(filter => filter.IsEnabled);
+
+    private static string FormatLong(long? value) => value?.ToString("N0") ?? "Unavailable";
+
+    private static string FormatInt(int? value) => value?.ToString() ?? "Unavailable";
+
+    private static string FormatText(string? value) => string.IsNullOrWhiteSpace(value) ? "Unavailable" : value;
+
+    private long? GetReportedInputTokens() => MetadataModel.TokenUsage?.ReportedInputTokens ?? MetadataModel.InputTokens;
+
+    private long? GetReportedCachedInputTokens() => MetadataModel.TokenUsage?.ReportedCachedInputTokens;
+
+    private long? GetReportedOutputTokens() => MetadataModel.TokenUsage?.ReportedOutputTokens ?? MetadataModel.OutputTokens;
+
+    private long? GetReportedReasoningTokens() => MetadataModel.TokenUsage?.ReportedReasoningTokens;
+
+    private long? GetReportedTotalTokens() => MetadataModel.TokenUsage?.ReportedTotalTokens ?? MetadataModel.TotalTokens;
 
     private static string GetEntryContainerClasses(SessionActivityTimelineEntryModel entry)
     {
@@ -263,13 +410,28 @@
         };
     }
 
-    private IReadOnlyList<SessionActivityTimelineEntryModel> VisibleEntries =>
-        DebugModeEnabled
-            ? Timeline.Entries.Where(entry => !ShouldHideEntry(entry)).ToArray()
-            : Timeline.Entries.Where(entry => !IsDebugOnlyEntry(entry)).ToArray();
+    private bool ShouldHideEntry(SessionActivityTimelineEntryModel entry)
+    {
+        if (!DebugModeEnabled && IsDebugOnlyEntry(entry))
+        {
+            return true;
+        }
 
-    private IReadOnlyList<MessageMethodFilterOption> AvailableMethodFilters =>
-        GetAvailableMethodFilters();
+        if (_kindVisibility.TryGetValue(entry.Kind, out var kindEnabled) && !kindEnabled)
+        {
+            return true;
+        }
+
+        if (HideEmptyAgentMessages && entry.IsEmptyAgentMessage)
+        {
+            return true;
+        }
+
+        var methodTag = GetEntryMethodTag(entry);
+        return !string.IsNullOrWhiteSpace(methodTag)
+            && _methodVisibility.TryGetValue(methodTag, out var isEnabled)
+            && !isEnabled;
+    }
 
     private bool ShouldRenderExpandableDetail(SessionActivityTimelineEntryModel entry)
     {
@@ -307,13 +469,6 @@
             && (entry.Kind == SessionActivityKind.AgentMessage || entry.Kind == SessionActivityKind.DebugMessage);
     }
 
-    private string GetDetailClasses(SessionActivityTimelineEntryModel entry)
-    {
-        return ShouldRenderDebugMetadata(entry)
-            ? "timeline-entry__detail timeline-entry__detail--debug"
-            : "timeline-entry__detail";
-    }
-
     private string? GetDetailToggleLabel(SessionActivityTimelineEntryModel entry)
     {
         if (!ShouldRenderDebugMetadata(entry))
@@ -331,72 +486,34 @@
         return entry.Kind == SessionActivityKind.DebugMessage;
     }
 
-    private bool ShouldHideEntry(SessionActivityTimelineEntryModel entry)
-    {
-        return TryGetMethod(entry, out var method)
-            && _methodVisibility.TryGetValue(method, out var isEnabled)
-            && !isEnabled;
-    }
-
-    private static bool TryGetMethod(SessionActivityTimelineEntryModel entry, out string method)
-    {
-        method = string.Empty;
-
-        if (entry.Kind != SessionActivityKind.DebugMessage)
-        {
-            return false;
-        }
-
-        var fact = entry.Facts.FirstOrDefault(candidate => string.Equals(candidate.Label, "Method", StringComparison.Ordinal));
-        if (fact is null || string.IsNullOrWhiteSpace(fact.Value))
-        {
-            return false;
-        }
-
-        method = fact.Value.Trim();
-        return true;
-    }
-
     private IReadOnlyList<MessageMethodFilterOption> GetAvailableMethodFilters()
     {
-        var counts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-        var displayNames = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        var orderedMethods = new List<string>();
-
-        foreach (var entry in Timeline.Entries)
-        {
-            if (!TryGetMethod(entry, out var method))
-            {
-                continue;
-            }
-
-            if (!counts.TryAdd(method, 1))
-            {
-                counts[method]++;
-                continue;
-            }
-
-            orderedMethods.Add(method);
-            displayNames[method] = method;
-        }
-
-        return orderedMethods
+        return Timeline.Entries
+            .Select(entry => GetEntryMethodTag(entry))
+            .OfType<string>()
+            .GroupBy(method => method, StringComparer.OrdinalIgnoreCase)
             .Select(
-                method => new MessageMethodFilterOption(
-                    displayNames[method],
-                    GetMethodSlug(method),
-                    counts[method],
-                    _methodVisibility.TryGetValue(method, out var isEnabled) ? isEnabled : true))
+                group => new MessageMethodFilterOption(
+                    group.Key,
+                    GetMethodSlug(group.Key),
+                    group.Count(),
+                    _methodVisibility.TryGetValue(group.Key, out var isEnabled) ? isEnabled : true))
+            .OrderBy(option => option.Method, StringComparer.OrdinalIgnoreCase)
             .ToArray();
+    }
+
+    private void SyncKindVisibility()
+    {
+        foreach (var kind in Enum.GetValues<SessionActivityKind>())
+        {
+            _kindVisibility.TryAdd(kind, true);
+        }
     }
 
     private void SyncMethodVisibility()
     {
         var availableMethods = Timeline.Entries
-            .Select(
-                entry => TryGetMethod(entry, out var method)
-                    ? method
-                    : null)
+            .Select(entry => GetEntryMethodTag(entry))
             .OfType<string>()
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
@@ -418,6 +535,37 @@
         _methodVisibility[method] = isEnabled;
     }
 
+    private void SetKindVisibility(SessionActivityKind kind, bool isEnabled)
+    {
+        _kindVisibility[kind] = isEnabled;
+    }
+
+    private void SelectAllFilters()
+    {
+        foreach (var kind in Enum.GetValues<SessionActivityKind>())
+        {
+            _kindVisibility[kind] = true;
+        }
+
+        foreach (var method in _methodVisibility.Keys.ToArray())
+        {
+            _methodVisibility[method] = true;
+        }
+    }
+
+    private void ClearAllFilters()
+    {
+        foreach (var kind in Enum.GetValues<SessionActivityKind>())
+        {
+            _kindVisibility[kind] = false;
+        }
+
+        foreach (var method in _methodVisibility.Keys.ToArray())
+        {
+            _methodVisibility[method] = false;
+        }
+    }
+
     private static bool IsChecked(object? value)
     {
         return value switch
@@ -428,25 +576,25 @@
         };
     }
 
-    private string GetTimelineShellClasses()
-    {
-        return DebugModeEnabled
-            ? "session-detail-timeline-shell session-detail-timeline-shell--with-filters"
-            : "session-detail-timeline-shell";
-    }
-
     private string GetEmptyStateTitle()
     {
-        return DebugModeEnabled && AvailableMethodFilters.Count > 0
+        return HasActiveFilters()
             ? "No session activity matches the active filters"
             : "No session activity recorded";
     }
 
     private string GetEmptyStateCopy()
     {
-        return DebugModeEnabled && AvailableMethodFilters.Count > 0
-            ? "Adjust the method filter checkboxes to bring hidden transcript events back into view."
+        return HasActiveFilters()
+            ? "Adjust the sticky filter deck to bring hidden session events back into view."
             : "The session exists, but no visible timeline entries are available yet.";
+    }
+
+    private bool HasActiveFilters()
+    {
+        return EnabledKindCount != KindFilters.Count
+            || EnabledMethodCount != MethodFilters.Count
+            || HideEmptyAgentMessages;
     }
 
     private static string GetMethodSlug(string method)
@@ -471,9 +619,113 @@
         return builder.ToString().Trim('-');
     }
 
+    private static string GetKindSlug(SessionActivityKind kind)
+    {
+        return kind.ToString().Replace('_', '-').ToLowerInvariant();
+    }
+
+    private static string? GetEntryMethodTag(SessionActivityTimelineEntryModel entry)
+    {
+        return !string.IsNullOrWhiteSpace(entry.MethodTag)
+            ? entry.MethodTag
+            : entry.Facts.FirstOrDefault(fact => string.Equals(fact.Label, "Method", StringComparison.Ordinal))?.Value;
+    }
+
+    private RenderFragment RenderCompactRow(SessionActivityTimelineEntryModel entry) => @<div class="timeline-entry__row-content">
+        <div class="timeline-entry__row-start">
+            <StatusPill Text="@entry.KindLabel" Color="@entry.KindBadgeColor" />
+            <span class="timeline-entry__row-title">@entry.Title</span>
+            <span class="timeline-entry__row-time">@entry.CompactTimestampLabel</span>
+            @if (!string.IsNullOrWhiteSpace(GetEntryMethodTag(entry)))
+            {
+                <span class="timeline-entry__inline-pill">@GetEntryMethodTag(entry)</span>
+            }
+            @if (entry.HasTokenUsage)
+            {
+                <span data-testid="session-detail-timeline-entry-token-indicator" class="timeline-entry__inline-pill timeline-entry__inline-pill--token">
+                    Tokens: @entry.TokenSourceLabel
+                </span>
+            }
+        </div>
+        @if (!string.IsNullOrWhiteSpace(entry.CompactPreview))
+        {
+            <span class="timeline-entry__row-preview">@entry.CompactPreview</span>
+        }
+    </div>;
+
+    private RenderFragment RenderExpandedBody(SessionActivityTimelineEntryModel entry) => @<div>
+        @if (!string.IsNullOrWhiteSpace(entry.Summary))
+        {
+            <p class="timeline-entry__summary">@entry.Summary</p>
+        }
+
+        @if (ShouldRenderDebugMetadata(entry))
+        {
+            <div class="timeline-entry__detail-body">
+                <p class="detail-metric-label">Debug metadata</p>
+                <div class="fact-list">
+                    <span class="fact-pill">
+                        <span class="fact-pill__label">Source:</span>
+                        <span>@entry.KindLabel</span>
+                    </span>
+                    <span class="fact-pill">
+                        <span class="fact-pill__label">Timestamp:</span>
+                        <span>@entry.TimestampLabel</span>
+                    </span>
+                    <span class="fact-pill">
+                        <span class="fact-pill__label">Event:</span>
+                        <span>@entry.Title</span>
+                    </span>
+                </div>
+            </div>
+        }
+
+        @if (entry.Facts.Count > 0)
+        {
+            <div class="timeline-entry__detail-body">
+                <p class="detail-metric-label">Highlights</p>
+                <div class="fact-list">
+                    @foreach (var fact in entry.Facts)
+                    {
+                        <span class="fact-pill">
+                            <span class="fact-pill__label">@fact.Label:</span>
+                            <span>@fact.Value</span>
+                        </span>
+                    }
+                </div>
+            </div>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(entry.Detail))
+        {
+            @if (entry.IsStructuredDetail)
+            {
+                <p class="detail-metric-label">Raw payload</p>
+                <pre class="timeline-pre">@entry.Detail</pre>
+            }
+            else if (ShouldRenderInlineDetail(entry))
+            {
+                <p class="detail-metric-label">Detail</p>
+                <p class="timeline-text">@entry.Detail</p>
+            }
+            else
+            {
+                <p class="timeline-entry__summary timeline-entry__summary--muted">
+                    Enable dashboard debug mode to inspect the raw agent payload for this event.
+                </p>
+            }
+        }
+    </div>;
+
     private sealed record MessageMethodFilterOption(
         string Method,
         string Slug,
+        int Count,
+        bool IsEnabled);
+
+    private sealed record KindFilterOption(
+        SessionActivityKind Kind,
+        string Label,
         int Count,
         bool IsEnabled);
 }

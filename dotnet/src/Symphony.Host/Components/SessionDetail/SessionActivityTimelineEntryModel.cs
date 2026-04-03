@@ -18,8 +18,12 @@ public sealed record SessionActivityTimelineEntryModel(
     bool HasExpandableDetail,
     bool IsStructuredDetail,
     Color Color,
+    bool IsEmptyAgentMessage = false,
     bool HasTokenUsage = false,
-    string? TokenSourceLabel = null);
+    string? TokenSourceLabel = null,
+    string CompactTimestampLabel = "",
+    string? CompactPreview = null,
+    string? MethodTag = null);
 
 public sealed record SessionActivityFactModel(
     string Label,
