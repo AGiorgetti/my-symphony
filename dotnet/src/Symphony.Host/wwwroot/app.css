@@ -791,22 +791,24 @@ code {
     gap: 1rem;
 }
 
-.session-detail-metadata-row {
+.session-detail-topdeck {
     position: sticky;
     top: 5.75rem;
     z-index: 15;
 }
 
-.session-metadata-panel {
+.session-topdeck-card {
     padding: 1rem 1.25rem;
     backdrop-filter: blur(20px);
 }
 
-.session-metadata-panel__details[open] .session-metadata-panel__summary {
-    padding-bottom: 0.85rem;
+.session-topdeck-section + .session-topdeck-section {
+    border-top: 1px solid color-mix(in oklab, var(--shell-border) 82%, transparent);
+    margin-top: 0.85rem;
+    padding-top: 0.85rem;
 }
 
-.session-metadata-panel__summary {
+.session-topdeck-section__summary {
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
@@ -816,22 +818,56 @@ code {
     list-style: none;
 }
 
-.session-metadata-panel__summary::-webkit-details-marker {
+.session-topdeck-section__summary::-webkit-details-marker {
     display: none;
 }
 
-.session-metadata-panel__heading {
+.session-topdeck-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    color: var(--color-on-surface-secondary);
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.session-topdeck-toggle__text--expanded,
+.session-topdeck-section[open] .session-topdeck-toggle__text--collapsed {
+    display: none;
+}
+
+.session-topdeck-section[open] .session-topdeck-toggle__text--expanded {
+    display: inline;
+}
+
+.session-topdeck-toggle__chevron {
+    width: 0.7rem;
+    height: 0.7rem;
+    border-right: 2px solid currentColor;
+    border-bottom: 2px solid currentColor;
+    transform: rotate(45deg) translateY(-0.08rem);
+    transition: transform 0.18s ease;
+}
+
+.session-topdeck-section[open] .session-topdeck-toggle__chevron {
+    transform: rotate(-135deg) translateY(-0.02rem);
+}
+
+.session-topdeck-section__heading {
     min-width: 0;
 }
 
-.session-metadata-panel__title {
+.session-topdeck-section__title {
     margin: 0.35rem 0 0;
     color: var(--color-on-surface-primary);
     font-size: 1rem;
     font-weight: 700;
 }
 
-.session-metadata-strip {
+.session-topdeck-strip {
     display: flex;
     flex: 1 1 32rem;
     flex-wrap: wrap;
@@ -839,7 +875,7 @@ code {
     justify-content: flex-end;
 }
 
-.session-metadata-chip {
+.session-topdeck-chip {
     display: inline-flex;
     align-items: center;
     gap: 0.5rem;
@@ -850,26 +886,23 @@ code {
     min-width: fit-content;
 }
 
-.session-metadata-chip__label {
-    color: var(--color-primary-DEFAULT);
-    font-size: 0.72rem;
-    font-weight: 700;
-    letter-spacing: 0.16em;
-    text-transform: uppercase;
-}
-
-.session-metadata-chip__value {
-    color: var(--color-on-surface-primary);
-    font-size: 0.86rem;
-    font-weight: 700;
-}
-
-.session-metadata-panel__body {
+.session-topdeck-section__body {
     display: flex;
     flex-direction: column;
     gap: 0.85rem;
-    border-top: 1px solid color-mix(in oklab, var(--shell-border) 82%, transparent);
     padding-top: 0.9rem;
+}
+
+.session-topdeck-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+}
+
+.session-detail-deck-footer {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
 }
 
 .detail-header__link.mud-button-root {
@@ -938,32 +971,12 @@ code {
     line-height: 1.7;
 }
 
-.session-detail-timeline-shell {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    gap: 1rem;
-    min-width: 0;
-}
-
-.timeline-filter-panel {
+.session-detail-surface {
     display: flex;
     flex-direction: column;
-    gap: 0.9rem;
-    border: 1px solid color-mix(in oklab, var(--shell-info) 28%, transparent);
-    border-radius: var(--shell-radius-lg);
-    background: color-mix(in oklab, var(--shell-info) 8%, var(--color-surface-base));
-    padding: 1rem;
-    min-width: 0;
+    gap: 1rem;
 }
 
-.timeline-filter-panel__title {
-    margin: 0;
-    color: var(--color-on-surface-primary);
-    font-size: 1.02rem;
-    font-weight: 700;
-}
-
-.timeline-filter-panel__copy,
 .timeline-filter-panel__note {
     margin: 0;
     color: var(--color-on-surface-secondary);
@@ -971,16 +984,15 @@ code {
     line-height: 1.65;
 }
 
-.timeline-filter-panel__empty {
-    border: 1px dashed color-mix(in oklab, var(--shell-border) 86%, transparent);
-    border-radius: 1rem;
-    background: color-mix(in oklab, var(--color-surface-base) 74%, transparent);
-    padding: 1rem;
-}
-
-.timeline-filter-list {
+.timeline-filter-group {
     display: flex;
     flex-direction: column;
+    gap: 0.65rem;
+}
+
+.timeline-filter-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
     gap: 0.65rem;
 }
 
@@ -993,6 +1005,10 @@ code {
     background: color-mix(in oklab, var(--color-surface-base) 70%, transparent);
     padding: 0.75rem 0.85rem;
     cursor: pointer;
+}
+
+.timeline-filter-option--compact {
+    padding: 0.55rem 0.7rem;
 }
 
 .timeline-filter-option__checkbox {
@@ -1079,14 +1095,23 @@ code {
     background: #94a3b8;
 }
 
+.timeline-list--compact {
+    padding-left: 1.2rem;
+}
+
+.timeline-item + .timeline-item {
+    margin-top: 0.7rem;
+}
+
+.timeline-dot {
+    top: 0.95rem;
+}
+
 .timeline-entry {
-    display: flex;
-    flex-direction: column;
-    gap: 0.85rem;
     border: 1px solid var(--shell-border);
     border-radius: var(--shell-radius-lg);
     background: color-mix(in oklab, var(--color-surface-base) 62%, transparent);
-    padding: 1.1rem 1.2rem;
+    padding: 0.85rem 1rem;
 }
 
 .timeline-entry--default {
@@ -1113,32 +1138,114 @@ code {
     background: color-mix(in oklab, var(--shell-success) 6%, var(--color-surface-base));
 }
 
-.timeline-entry__meta {
+.timeline-entry__row {
+    cursor: pointer;
+    list-style: none;
+}
+
+.timeline-entry__row::-webkit-details-marker {
+    display: none;
+}
+
+.timeline-entry__row-content,
+.timeline-entry__row-start {
     display: flex;
     align-items: center;
     flex-wrap: wrap;
     gap: 0.5rem;
 }
 
-.timeline-entry__time {
+.timeline-entry__row-content {
+    justify-content: space-between;
+    gap: 0.75rem;
+}
+
+.timeline-entry__row-start {
+    min-width: 0;
+    flex: 1 1 24rem;
+}
+
+.timeline-entry__row-title {
+    color: var(--color-on-surface-primary);
+    font-size: 0.95rem;
+    font-weight: 700;
+}
+
+.timeline-entry__row-time {
     color: var(--color-on-surface-secondary);
-    font-size: 0.72rem;
+    font-size: 0.74rem;
     font-weight: 700;
     letter-spacing: 0.16em;
     text-transform: uppercase;
+}
+
+.timeline-entry__inline-pill {
+    display: inline-flex;
+    align-items: center;
+    border: 1px solid color-mix(in oklab, var(--shell-border) 80%, transparent);
+    border-radius: 999px;
+    padding: 0.25rem 0.55rem;
+    color: var(--color-on-surface-secondary);
+    font-size: 0.72rem;
+    font-weight: 700;
+}
+
+.timeline-entry__inline-pill--token {
+    border-color: color-mix(in oklab, var(--shell-info) 40%, transparent);
+    color: var(--color-on-surface-primary);
+}
+
+.timeline-entry__row-preview {
+    min-width: 0;
+    flex: 1 1 18rem;
+    color: var(--color-on-surface-secondary);
+    font-size: 0.88rem;
+    font-weight: 600;
+    line-height: 1.5;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.timeline-entry__toggle-affordance {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    color: var(--color-on-surface-secondary);
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.timeline-entry__toggle-text--expanded,
+.timeline-entry details[open] .timeline-entry__toggle-text--collapsed {
+    display: none;
+}
+
+.timeline-entry details[open] .timeline-entry__toggle-text--expanded {
+    display: inline;
+}
+
+.timeline-entry__toggle-chevron {
+    width: 0.68rem;
+    height: 0.68rem;
+    border-right: 2px solid currentColor;
+    border-bottom: 2px solid currentColor;
+    transform: rotate(45deg) translateY(-0.08rem);
+    transition: transform 0.18s ease;
+}
+
+.timeline-entry details[open] .timeline-entry__toggle-chevron {
+    transform: rotate(-135deg) translateY(-0.02rem);
 }
 
 .timeline-entry__body {
     display: flex;
     flex-direction: column;
     gap: 0.55rem;
-}
-
-.timeline-entry__title {
-    margin: 0;
-    color: var(--color-on-surface-primary);
-    font-size: 1.08rem;
-    font-weight: 700;
+    margin-top: 0.8rem;
 }
 
 .timeline-entry__summary {

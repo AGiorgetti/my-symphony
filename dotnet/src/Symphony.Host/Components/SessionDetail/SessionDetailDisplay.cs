@@ -14,6 +14,11 @@ internal static class SessionDetailDisplay
         return timestamp.ToUniversalTime().ToString("yyyy-MM-dd HH:mm:ss 'UTC'", CultureInfo.InvariantCulture);
     }
 
+    internal static string FormatCompactTimestamp(DateTimeOffset timestamp)
+    {
+        return timestamp.ToUniversalTime().ToString("HH:mm:ss 'UTC'", CultureInfo.InvariantCulture);
+    }
+
     internal static Color GetFallbackStatusColor(string statusText, bool isActive)
     {
         if (isActive)
@@ -119,6 +124,12 @@ internal static class SessionDetailDisplay
         var displayTitle = HumanizeTitle(entry.Title);
         var hasVisibleTokenUsage = HasVisibleEntryTokenUsage(entry.TokenUsage);
         var facts = MergeFacts(detailPresentation.Facts, entry.TokenUsage);
+        var methodTag = TryGetMethodTag(facts);
+        var compactPreview = BuildCompactPreview(detailPresentation.Summary, detailPresentation.DetailPreview, entry.Detail);
+        var isEmptyAgentMessage = entry.Kind == SessionActivityKind.AgentMessage
+            && string.IsNullOrWhiteSpace(compactPreview)
+            && string.IsNullOrWhiteSpace(detailPresentation.Detail)
+            && facts.Count == 0;
 
         return new SessionActivityTimelineEntryModel(
             entry.Kind,
@@ -135,8 +146,12 @@ internal static class SessionDetailDisplay
             detailPresentation.HasExpandableDetail,
             detailPresentation.IsStructuredDetail,
             GetTimelineColor(entry),
+            isEmptyAgentMessage,
             hasVisibleTokenUsage,
-            GetTokenSourceLabel(entry.TokenUsage));
+            GetTokenSourceLabel(entry.TokenUsage),
+            FormatCompactTimestamp(entry.Timestamp),
+            compactPreview,
+            methodTag);
     }
 
     internal static int? TryParseTurnCount(string? sessionId)
@@ -196,6 +211,27 @@ internal static class SessionDetailDisplay
         }
 
         return string.Join(' ', parts);
+    }
+
+    private static string? TryGetMethodTag(IReadOnlyList<SessionActivityFactModel> facts)
+    {
+        return facts.FirstOrDefault(candidate => string.Equals(candidate.Label, "Method", StringComparison.Ordinal))?.Value;
+    }
+
+    private static string? BuildCompactPreview(string? summary, string? detailPreview, string? rawDetail)
+    {
+        var candidate = !string.IsNullOrWhiteSpace(summary)
+            ? summary
+            : !string.IsNullOrWhiteSpace(detailPreview)
+                ? detailPreview
+                : NormalizeDetail(rawDetail);
+
+        if (string.IsNullOrWhiteSpace(candidate))
+        {
+            return null;
+        }
+
+        return TruncateText(FirstMeaningfulLine(candidate), 84);
     }
 
     private static ActivityDetailPresentation BuildDetailPresentation(string? detail)

@@ -12,16 +12,6 @@
 @inject ISnackbar Snackbar
 
 <main class="page-shell page-stack">
-    <div data-testid="session-detail-breadcrumb">
-        <nav class="page-breadcrumb">
-            <a href="@DashboardPageDataService.BuildLink("/", _mode)" class="page-breadcrumb__link">Home</a>
-            <span>/</span>
-            <a href="@DashboardPageDataService.BuildLink("/sessions", _mode)" class="page-breadcrumb__link">Sessions</a>
-            <span>/</span>
-            <span class="page-breadcrumb__current">@_requestedIdentifier</span>
-        </nav>
-    </div>
-
     @if (_isLoading)
     {
         <MudPaper Class="@ShellCardClass" Outlined="true" Elevation="0" data-testid="session-detail-skeleton">
@@ -47,30 +37,24 @@
             </MudAlert>
         }
 
-        <SessionHeaderCard Session="_header" />
-        <MudButton Variant="Variant.Outlined"
-                   Href="@DashboardPageDataService.BuildExportSessionLink(_requestedIdentifier)"
-                   Class="detail-header__link"
-                   data-testid="session-detail-export-link">
-            Export JSON
-        </MudButton>
-
-        @if (_blockedIssue is not null && _pendingFollowUpAction is not null)
-        {
-            <SessionFollowUpActionPanel BlockedIssue="_blockedIssue"
-                                       PendingAction="_pendingFollowUpAction"
-                                       IsResolving="_isResolvingFollowUpAction"
-                                       ResolveRequested="ResolveFollowUpActionAsync" />
-        }
-
         <div class="session-detail-flow">
-            <div class="session-detail-metadata-row" data-testid="session-detail-metadata-panel">
-                <SessionMetadataPanel Metadata="_metadata" />
-            </div>
             <div data-testid="session-detail-activity-panel">
-                <SessionActivityTimeline Timeline="_timeline"
+                <SessionActivityTimeline Header="_header"
+                                         Metadata="_metadata"
+                                         Timeline="_timeline"
+                                         ExportHref="@DashboardPageDataService.BuildExportSessionLink(_requestedIdentifier)"
                                          DebugModeEnabled="@DashboardUiOptions.Value.DebugMode"
-                                         TrackAgentMessageDeltas="@DashboardUiOptions.Value.TrackAgentMessageDeltas" />
+                                         TrackAgentMessageDeltas="@DashboardUiOptions.Value.TrackAgentMessageDeltas">
+                    <StickyDeckFooter>
+                        @if (_blockedIssue is not null && _pendingFollowUpAction is not null)
+                        {
+                            <SessionFollowUpActionPanel BlockedIssue="_blockedIssue"
+                                                       PendingAction="_pendingFollowUpAction"
+                                                       IsResolving="_isResolvingFollowUpAction"
+                                                       ResolveRequested="ResolveFollowUpActionAsync" />
+                        }
+                    </StickyDeckFooter>
+                </SessionActivityTimeline>
             </div>
         </div>
     }
